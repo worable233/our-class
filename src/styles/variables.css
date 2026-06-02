@@ -1,0 +1,30 @@
+:root {
+  /* Trae-inspired design system (adapted for OurClass purple) */
+  --ground: #0a0b0d;
+  --surface-1: #121314;
+  --surface-2: #18191b;
+  --surface-3: #222326;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #f5f9fe;
+  --text-secondary: #a6aab5;
+  --text-muted: #787d87;
+  --accent: #5E6AD2;
+  --accent-glow: rgba(94, 106, 210, 0.15);
+  --accent-text: #A78BFA;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 80px;
+  --nav-height: 64px;
+  --max-width: 1200px;
+}

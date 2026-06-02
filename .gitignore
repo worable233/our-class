@@ -1,0 +1,57 @@
+# ─── Dependencies ───
+node_modules/
+server/node_modules/
+
+# ─── Build Output ───
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# ─── Environment & Config ───
+.env
+.env.local
+.env.*.local
+*.local
+
+# ─── Dot files / folders ───
+.claude/
+.idea/
+.vscode/
+.vite/
+.vuepress/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# ─── Editor ───
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ─── Logs ───
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Database ───
+server/data.db
+server/data.db-*
+server/*.db
+server/*.db-*
+
+# ─── Testing ───
+coverage/
+.nyc_output/
+__screenshots__/
+cypress/videos/
+cypress/screenshots/
+
+# ─── Misc ───
+.eslintcache
+*.tsbuildinfo
