@@ -59,11 +59,13 @@ withDefaults(defineProps<{
 </template>
 
 <style scoped>
-/* Default: auto (follow system) */
+/* Default: auto (follow data-theme or system) */
 .logo-auto .logo-light-group { display: none; }
+.logo-auto .logo-dark-group { display: block; }
+html:not(.dark) .logo-auto .logo-dark-group { display: none; }
+html:not(.dark) .logo-auto .logo-light-group { display: block; }
 @media (prefers-color-scheme: light) {
-  .logo-auto .logo-dark-group { display: none; }
-  .logo-auto .logo-light-group { display: block; }
+  html:not(.dark) .logo-auto .logo-light-group { display: block; }
 }
 /* Explicit light */
 .logo-light .logo-dark-group { display: none; }

@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { getDb } from '../db/init.js'
 import { config } from '../config/index.js'
-import { AuthError } from '../lib/errors.js'
+import { AuthError, ForbiddenError } from '../lib/errors.js'
 
 export interface JwtPayload {
   id: number
@@ -18,6 +18,7 @@ declare global {
         display_name: string
         role: 'teacher' | 'student'
         class: string
+        permissions: string[]
       }
     }
   }
@@ -25,6 +26,15 @@ declare global {
 
 export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, config.jwtSecret, { expiresIn: '7d' })
+}
+
+export function requirePermission(code: string) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user?.permissions?.includes(code)) {
+      throw new ForbiddenError('权限不足')
+    }
+    next()
+  }
 }
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
@@ -38,10 +48,18 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const db = getDb()
     const user = db.prepare(
       'SELECT id, username, display_name, role, class FROM users WHERE id = ?',
-    ).get(payload.id) as Express.Request['user']
+    ).get(payload.id) as Omit<Express.Request['user'], 'permissions'>
 
     if (!user) throw new AuthError()
-    req.user = user
+
+    const permRows = db.prepare(`
+      SELECT DISTINCT gp.permission_code
+      FROM group_permissions gp
+      JOIN users u ON u.group_id = gp.group_id
+      WHERE u.id = ?
+    `).all(payload.id) as { permission_code: string }[]
+
+    req.user = { ...user, permissions: permRows.map(r => r.permission_code) }
     next()
   } catch (err) {
     if (err instanceof AuthError) throw err

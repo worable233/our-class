@@ -1,0 +1,1 @@
+ALTER TABLE api_keys ADD COLUMN api_url TEXT DEFAULT '';

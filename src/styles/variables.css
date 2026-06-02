@@ -1,17 +1,17 @@
 :root {
-  /* Trae-inspired design system (adapted for OurClass purple) */
-  --ground: #0a0b0d;
-  --surface-1: #121314;
-  --surface-2: #18191b;
-  --surface-3: #222326;
-  --hairline: rgba(255, 255, 255, 0.06);
-  --hairline-strong: rgba(255, 255, 255, 0.12);
-  --text-primary: #f5f9fe;
-  --text-secondary: #a6aab5;
-  --text-muted: #787d87;
+  /* Light mode (default) */
+  --ground: #f8f9fa;
+  --surface-1: #ffffff;
+  --surface-2: #f1f3f5;
+  --surface-3: #e9ecef;
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.14);
+  --text-primary: #1a1b1e;
+  --text-secondary: #5c5f66;
+  --text-muted: #9a9da5;
   --accent: #5E6AD2;
-  --accent-glow: rgba(94, 106, 210, 0.15);
-  --accent-text: #A78BFA;
+  --accent-glow: rgba(94, 106, 210, 0.1);
+  --accent-text: #5E6AD2;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -27,4 +27,28 @@
   --space-4xl: 80px;
   --nav-height: 64px;
   --max-width: 1200px;
+}
+
+html.dark {
+  --ground: #0a0b0d;
+  --surface-1: #121314;
+  --surface-2: #18191b;
+  --surface-3: #222326;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #f5f9fe;
+  --text-secondary: #a6aab5;
+  --text-muted: #787d87;
+  --accent: #5E6AD2;
+  --accent-glow: rgba(94, 106, 210, 0.15);
+  --accent-text: #A78BFA;
+}
+
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  background: var(--ground);
+  color: var(--text-primary);
 }

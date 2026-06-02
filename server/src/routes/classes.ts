@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { getDb } from '../db/init.js'
+import { requirePermission } from '../middleware/auth.js'
 
 const router = Router()
 
 // GET /api/classes
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', requirePermission('classes.read'), (_req: Request, res: Response) => {
   const db = getDb()
   const classes = db.prepare(
     `SELECT DISTINCT class FROM users WHERE role = 'student' AND class != '' ORDER BY class`

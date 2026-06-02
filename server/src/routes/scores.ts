@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
 import { validate } from '../middleware/validate.js'
+import { requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
 
@@ -20,7 +21,7 @@ const updateScoreSchema = z.object({
 })
 
 // GET /api/scores?student_id=xxx&course=xxx
-router.get('/', (req: Request, res: Response) => {
+router.get('/', requirePermission('scores.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, course } = req.query
   let sql = `SELECT s.*, u.display_name as student_name FROM scores s JOIN users u ON s.student_id = u.id WHERE 1=1`
@@ -41,7 +42,7 @@ router.get('/', (req: Request, res: Response) => {
 })
 
 // GET /api/scores/rankings?course=xxx&exam=xxx
-router.get('/rankings', (req: Request, res: Response) => {
+router.get('/rankings', requirePermission('scores.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { course, exam_name } = req.query
   let sql = `
@@ -68,7 +69,7 @@ router.get('/rankings', (req: Request, res: Response) => {
 })
 
 // POST /api/scores
-router.post('/', validate(createScoreSchema), (req: Request, res: Response) => {
+router.post('/', requirePermission('scores.write'), validate(createScoreSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, course, exam_name, score, date } = req.body
   const result = db.prepare(
@@ -78,7 +79,7 @@ router.post('/', validate(createScoreSchema), (req: Request, res: Response) => {
 })
 
 // PUT /api/scores/:id
-router.put('/:id', validate(updateScoreSchema), (req: Request, res: Response) => {
+router.put('/:id', requirePermission('scores.write'), validate(updateScoreSchema), (req: Request, res: Response) => {
   const db = getDb()
   const existing = db.prepare('SELECT id FROM scores WHERE id = ?').get(req.params.id)
   if (!existing) throw new NotFoundError('成绩记录不存在')
@@ -88,7 +89,7 @@ router.put('/:id', validate(updateScoreSchema), (req: Request, res: Response) =>
 })
 
 // DELETE /api/scores/:id
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('scores.delete'), (req: Request, res: Response) => {
   const db = getDb()
   const existing = db.prepare('SELECT id FROM scores WHERE id = ?').get(req.params.id)
   if (!existing) throw new NotFoundError('成绩记录不存在')

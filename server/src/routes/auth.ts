@@ -60,4 +60,9 @@ router.get('/me', authMiddleware, (req: Request, res: Response) => {
   ok(res, req.user!)
 })
 
+// GET /api/auth/permissions — get current user's permissions
+router.get('/permissions', authMiddleware, (req: Request, res: Response) => {
+  ok(res, req.user!.permissions)
+})
+
 export default router

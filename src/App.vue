@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { zhCN, darkTheme } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
-import { NConfigProvider } from 'naive-ui'
+import { NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
+import { useTheme } from '@/composables/useTheme'
 
-const themeOverrides: GlobalThemeOverrides = {
+const { isDark } = useTheme()
+const theme = computed(() => (isDark.value ? darkTheme : null))
+
+const darkOverrides: GlobalThemeOverrides = {
   common: {
     fontFamily: "'Inter', -apple-system, sans-serif",
     fontFamilyMono: "'JetBrains Mono', 'Fira Code', monospace",
@@ -31,16 +36,24 @@ const themeOverrides: GlobalThemeOverrides = {
     railColor: 'rgba(255, 255, 255, 0.08)',
   },
 }
+
+const themeOverrides = computed(() => (isDark.value ? darkOverrides : null))
 </script>
 
 <template>
-  <NConfigProvider :theme="darkTheme" :theme-overrides="themeOverrides" :locale="zhCN">
-    <router-view />
+  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides" :locale="zhCN">
+    <NDialogProvider>
+      <NMessageProvider>
+        <router-view />
+      </NMessageProvider>
+    </NDialogProvider>
   </NConfigProvider>
 </template>
 
 <style>
 @import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
 
 @font-face {
   font-family: 'Orbix';

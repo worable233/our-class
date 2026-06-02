@@ -7,13 +7,12 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: () => import('@/components/HomePage.vue'),
+      component: () => import('@/views/ChatPage.vue'),
     },
     {
-      path: '/chat',
+      path: '/chat/:encodedId',
       name: 'chat',
-      component: () => import('@/views/Chat.vue'),
-      meta: { requiresAuth: true, role: 'teacher' },
+      component: () => import('@/views/ChatPage.vue'),
     },
     {
       path: '/login',
@@ -40,6 +39,16 @@ const router = createRouter({
           path: 'students',
           name: 'teacher-students',
           component: () => import('@/views/teacher/StudentManage.vue'),
+        },
+        {
+          path: 'roles',
+          name: 'teacher-roles',
+          component: () => import('@/views/teacher/RoleManage.vue'),
+        },
+        {
+          path: 'settings',
+          name: 'teacher-settings',
+          component: () => import('@/views/teacher/SettingsPage.vue'),
         },
         {
           path: 'posts',

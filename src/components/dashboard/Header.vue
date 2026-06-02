@@ -3,9 +3,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { NLayoutHeader, NButton, NText, NTag } from 'naive-ui'
+import { Sun, Moon } from '@lucide/vue'
+import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
 const router = useRouter()
+const { isDark, toggle: toggleTheme } = useTheme()
 
 const pageTitle = computed(() => {
   const path = router.currentRoute.value.path
@@ -61,6 +64,10 @@ function handleLogout() {
         </n-text>
         <n-tag size="small">{{ auth.isTeacher ? '教师' : '学生' }}</n-tag>
       </div>
+      <n-button quaternary circle size="small" @click="toggleTheme" :title="isDark ? '切换浅色模式' : '切换深色模式'">
+        <Sun v-if="isDark" :size="16" />
+        <Moon v-else :size="16" />
+      </n-button>
       <n-button quaternary circle size="small" @click="handleLogout" title="退出登录">
         <svg
           width="16"

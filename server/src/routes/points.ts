@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
+import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { ValidationError } from '../lib/errors.js'
@@ -16,7 +17,7 @@ const createPointSchema = z.object({
 })
 
 // GET /api/points?student_id=xxx&class=xxx
-router.get('/', (req: Request, res: Response) => {
+router.get('/', requirePermission('points.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, class: className } = req.query
   let sql = `
@@ -41,7 +42,7 @@ router.get('/', (req: Request, res: Response) => {
 })
 
 // GET /api/points/summary?class=xxx
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', requirePermission('points.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
   let sql = `
@@ -64,7 +65,7 @@ router.get('/summary', (req: Request, res: Response) => {
 })
 
 // POST /api/points
-router.post('/', validate(createPointSchema), (req: Request, res: Response) => {
+router.post('/', requirePermission('points.write'), validate(createPointSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, reason, type, amount, date } = req.body
   const result = db.prepare(

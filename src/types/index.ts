@@ -104,3 +104,17 @@ export interface Comment {
   content: string
   created_at: string
 }
+
+export interface PermissionDef {
+  code: string
+  label: string
+  category: string
+}
+
+export interface PermissionGroup {
+  id: number
+  name: string
+  description: string
+  permissions: string[]
+  created_at?: string
+}

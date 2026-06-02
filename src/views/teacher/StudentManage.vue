@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { ref, h, onMounted } from 'vue'
+import { Plus } from '@lucide/vue'
 import { api } from '@/api/client'
-import type { Student } from '@/types'
+import type { Student, PermissionGroup } from '@/types'
+import { useDialog } from 'naive-ui'
 import { NButton, NCard, NDataTable, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty } from 'naive-ui'
 
+const dialog = useDialog()
 const students = ref<Student[]>([])
+const roleGroups = ref<{ id: number; name: string }[]>([])
 const loading = ref(true)
+const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ display_name: '', class: '高三(2)班', username: '' })
+const form = ref({ display_name: '', class: '高三(2)班', username: '', password: '123456', group_id: null as number | null })
 
 const columns = [
   {
@@ -46,38 +51,65 @@ async function load() {
   loading.value = false
 }
 
+async function loadGroups() {
+  const groups = await api.get<PermissionGroup[]>('/roles/groups')
+  roleGroups.value = groups.map(g => ({ id: g.id, name: g.name }))
+}
+
 function openNew() {
   editing.value = null
-  form.value = { display_name: '', class: '高三(2)班', username: '' }
+  form.value = { display_name: '', class: '高三(2)班', username: '', password: '123456', group_id: null }
   showModal.value = true
 }
 
 function openEdit(s: Student) {
   editing.value = s
-  form.value = { display_name: s.display_name, class: s.class, username: s.username }
+  form.value = { display_name: s.display_name, class: s.class, username: s.username, password: '' }
   showModal.value = true
 }
 
 async function save() {
-  if (editing.value) {
-    await api.put(`/students/${editing.value.id}`, {
-      display_name: form.value.display_name,
-      class: form.value.class,
-    })
-  } else {
-    await api.post('/students', form.value)
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.put(`/students/${editing.value.id}`, {
+        display_name: form.value.display_name,
+        class: form.value.class,
+        username: form.value.username,
+      })
+    } else {
+      await api.post('/students', {
+        display_name: form.value.display_name,
+        class: form.value.class,
+        username: form.value.username,
+        password: form.value.password,
+        group_id: form.value.group_id,
+      })
+    }
+    showModal.value = false
+    await load()
+  } finally {
+    saving.value = false
   }
-  showModal.value = false
-  await load()
 }
 
 async function remove(id: number) {
-  if (!confirm('确定删除该学生及其所有相关记录？')) return
-  await api.delete(`/students/${id}`)
-  await load()
+  dialog.warning({
+    title: '确认删除',
+    content: '确定删除该学生及其所有相关记录（积分、成绩、作业提交、帖子等）？此操作不可撤销。',
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await api.delete(`/students/${id}`)
+      await load()
+    },
+  })
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadGroups()
+})
 </script>
 
 <template>
@@ -88,7 +120,7 @@ onMounted(load)
         <p class="page-subtitle">管理班级学生信息</p>
       </div>
       <n-button type="primary" @click="openNew">
-        <font-awesome-icon :icon="['fas', 'plus']" /> 添加学生
+        <Plus :size="16" /> 添加学生
       </n-button>
     </div>
 
@@ -112,8 +144,19 @@ onMounted(load)
         <n-form-item label="姓名" path="display_name">
           <n-input v-model:value="form.display_name" placeholder="学生姓名" />
         </n-form-item>
-        <n-form-item v-if="!editing" label="登录用户名">
-          <n-input v-model:value="form.username" placeholder="可选" />
+        <n-form-item label="登录用户名">
+          <n-input v-model:value="form.username" :placeholder="editing ? '修改用户名' : '可选，默认使用姓名拼音'" />
+        </n-form-item>
+        <n-form-item v-if="!editing" label="登录密码">
+          <n-input v-model:value="form.password" placeholder="默认 123456" />
+        </n-form-item>
+        <n-form-item label="权限组">
+          <n-select
+            v-model:value="form.group_id"
+            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择权限组"
+            clearable
+          />
         </n-form-item>
         <n-form-item label="班级" path="class">
           <n-input v-model:value="form.class" placeholder="班级" />
@@ -122,7 +165,7 @@ onMounted(load)
       <template #footer>
         <n-space justify="end">
           <n-button @click="showModal = false">取消</n-button>
-          <n-button type="primary" @click="save" :disabled="!form.display_name">保存</n-button>
+          <n-button type="primary" @click="save" :disabled="!form.display_name" :loading="saving">保存</n-button>
         </n-space>
       </template>
     </n-modal>

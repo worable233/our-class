@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
 import { validate } from '../middleware/validate.js'
+import { requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError } from '../lib/errors.js'
 
@@ -20,7 +21,7 @@ const createCommentSchema = z.object({
 })
 
 // GET /api/posts
-router.get('/', (req: Request, res: Response) => {
+router.get('/', requirePermission('posts.read'), (req: Request, res: Response) => {
   const db = getDb()
   const userId = req.user?.id ?? 0
   const posts = db
@@ -37,7 +38,7 @@ router.get('/', (req: Request, res: Response) => {
 })
 
 // GET /api/posts/:id
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', requirePermission('posts.read'), (req: Request, res: Response) => {
   const db = getDb()
   const post = db
     .prepare(
@@ -61,7 +62,7 @@ router.get('/:id', (req: Request, res: Response) => {
 })
 
 // POST /api/posts
-router.post('/', validate(createPostSchema), (req: Request, res: Response) => {
+router.post('/', requirePermission('posts.write'), validate(createPostSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { title, content, author_id, tags } = req.body
   const result = db
@@ -71,7 +72,7 @@ router.post('/', validate(createPostSchema), (req: Request, res: Response) => {
 })
 
 // POST /api/posts/:id/like
-router.post('/:id/like', (req: Request, res: Response) => {
+router.post('/:id/like', requirePermission('posts.read'), (req: Request, res: Response) => {
   const db = getDb()
   const userId = req.user?.id
   if (!userId) {
@@ -99,7 +100,7 @@ router.post('/:id/like', (req: Request, res: Response) => {
 })
 
 // DELETE /api/posts/:id
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('posts.delete'), (req: Request, res: Response) => {
   const db = getDb()
   db.prepare('DELETE FROM post_likes WHERE post_id = ?').run(req.params.id)
   db.prepare('DELETE FROM comments WHERE post_id = ?').run(req.params.id)
@@ -108,14 +109,14 @@ router.delete('/:id', (req: Request, res: Response) => {
 })
 
 // DELETE /api/posts/comments/:id
-router.delete('/comments/:id', (req: Request, res: Response) => {
+router.delete('/comments/:id', requirePermission('posts.delete'), (req: Request, res: Response) => {
   const db = getDb()
   db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.id)
   ok(res, { success: true })
 })
 
 // POST /api/posts/:id/comments
-router.post('/:id/comments', validate(createCommentSchema), (req: Request, res: Response) => {
+router.post('/:id/comments', requirePermission('posts.comment'), validate(createCommentSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { author_id, content } = req.body
   const result = db

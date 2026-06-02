@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
 import { validate } from '../middleware/validate.js'
+import { requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
 
@@ -63,7 +64,7 @@ interface SubmissionRow {
 // GET /api/assignments
 // ---------------------------------------------------------------------------
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', requirePermission('assignments.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id } = req.query
 
@@ -97,7 +98,7 @@ router.get('/', (req: Request, res: Response) => {
 // POST /api/assignments
 // ---------------------------------------------------------------------------
 
-router.post('/', validate(createSchema), (req: Request, res: Response) => {
+router.post('/', requirePermission('assignments.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { title, description, due_date, course, created_by } = req.body
   const result = db
@@ -112,7 +113,7 @@ router.post('/', validate(createSchema), (req: Request, res: Response) => {
 // GET /api/assignments/:id/submissions
 // ---------------------------------------------------------------------------
 
-router.get('/:id/submissions', (req: Request, res: Response) => {
+router.get('/:id/submissions', requirePermission('assignments.read'), (req: Request, res: Response) => {
   const db = getDb()
   const subs = db
     .prepare(
@@ -130,7 +131,7 @@ router.get('/:id/submissions', (req: Request, res: Response) => {
 // POST /api/assignments/:id/submit
 // ---------------------------------------------------------------------------
 
-router.post('/:id/submit', validate(submitSchema), (req: Request, res: Response) => {
+router.post('/:id/submit', requirePermission('assignments.submit'), validate(submitSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, content } = req.body
   const existing = db
@@ -157,6 +158,7 @@ router.post('/:id/submit', validate(submitSchema), (req: Request, res: Response)
 
 router.put(
   '/submissions/:id/grade',
+  requirePermission('assignments.grade'),
   validate(gradeSchema),
   (req: Request, res: Response) => {
     const db = getDb()

@@ -16,10 +16,56 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     runMigrations(db)
+    seedPermissionGroups(db)
     seedUsers(db)
     seedPointsAndPosts(db)
   }
   return db
+}
+
+function seedPermissionGroups(db: Database.Database) {
+  const count = db.prepare('SELECT COUNT(*) as c FROM permission_groups').get() as { c: number }
+  if (count.c > 0) return
+
+  // Default teacher group — all permissions
+  const teacherGroup = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?, ?)')
+    .run('教师', '默认教师权限组，拥有全部权限')
+
+  // Default student group — basic permissions
+  const studentGroup = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?, ?)')
+    .run('学生', '默认学生权限组，拥有基础权限')
+
+  const allPermissions = [
+    'students.read', 'students.write', 'students.delete',
+    'points.read', 'points.write',
+    'scores.read', 'scores.write', 'scores.delete',
+    'assignments.read', 'assignments.write', 'assignments.submit', 'assignments.grade',
+    'posts.read', 'posts.write', 'posts.delete', 'posts.comment',
+    'chat.access', 'chat.config',
+    'roles.manage',
+    'classes.read',
+  ]
+
+  const studentPermissions = [
+    'points.read',
+    'scores.read',
+    'assignments.read', 'assignments.submit',
+    'posts.read', 'posts.write', 'posts.comment',
+    'chat.access',
+    'classes.read',
+  ]
+
+  const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')
+  for (const perm of allPermissions) {
+    insert.run(teacherGroup.lastInsertRowid, perm)
+  }
+  for (const perm of studentPermissions) {
+    insert.run(studentGroup.lastInsertRowid, perm)
+  }
+
+  // Backfill existing users with appropriate group
+  db.prepare("UPDATE users SET group_id = ? WHERE role = 'teacher' AND group_id IS NULL").run(teacherGroup.lastInsertRowid)
+  db.prepare("UPDATE users SET group_id = ? WHERE role = 'student' AND group_id IS NULL").run(studentGroup.lastInsertRowid)
 }
 
 function seedUsers(db: Database.Database) {
@@ -27,18 +73,23 @@ function seedUsers(db: Database.Database) {
   if (count.c > 0) return
 
   const insertUser = db.prepare(
-    'INSERT INTO users (username, display_name, role, class, password) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO users (username, display_name, role, class, password, group_id) VALUES (?, ?, ?, ?, ?, ?)',
   )
-  insertUser.run('teacher1', '张老师', 'teacher', '', '123456')
-  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456')
-  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456')
-  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456')
-  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456')
-  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456')
-  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456')
-  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456')
-  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456')
-  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456')
+
+  // Find the teacher and student group IDs
+  const tGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '教师'").get() as { id: number }
+  const sGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as { id: number }
+
+  insertUser.run('teacher1', '张老师', 'teacher', '', '123456', tGroup.id)
+  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id)
 }
 
 function seedPointsAndPosts(db: Database.Database) {
