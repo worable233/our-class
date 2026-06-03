@@ -261,29 +261,51 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'web_search': {
       const query = input.query as string
       if (!query?.trim()) return JSON.stringify({ error: '请输入搜索关键词' })
+      // Try configured search API first, fall back to DuckDuckGo
+      const searchCfg = db.prepare('SELECT search_api_url, search_api_key FROM api_keys WHERE user_id=? AND is_active=1').get(userId) as any
+      if (searchCfg?.search_api_url && searchCfg?.search_api_key) {
+        try {
+          const base = searchApiUrl.replace(/\/+$/, '')
+          const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${searchApiKey}` },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini-search-preview',
+              max_tokens: 1024,
+              messages: [{ role: 'user', content: query }],
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json() as any
+            const text = data?.choices?.[0]?.message?.content
+            if (text) return JSON.stringify({ query, results: [text] })
+          }
+        } catch {}
+      }
+      // Fallback: DuckDuckGo
       try {
         const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`)
-        if (!res.ok) return JSON.stringify({ error: '搜索服务暂不可用' })
-        const data = await res.json() as any
-        const results: string[] = []
-        if (data.AbstractText) results.push(`摘要: ${data.AbstractText}`)
-        if (data.AbstractURL) results.push(`来源: ${data.AbstractURL}`)
-        if (data.RelatedTopics?.length) {
-          for (const topic of data.RelatedTopics.slice(0, 8)) {
-            const text = topic.Text || topic.Result
-            if (text) results.push(`- ${text}`)
-            if (topic.Topics) {
-              for (const sub of topic.Topics.slice(0, 3)) {
-                if (sub.Text) results.push(`  - ${sub.Text}`)
+        if (res.ok) {
+          const data = await res.json() as any
+          const results: string[] = []
+          if (data.AbstractText) results.push(`摘要: ${data.AbstractText}`)
+          if (data.AbstractURL) results.push(`来源: ${data.AbstractURL}`)
+          if (data.RelatedTopics?.length) {
+            for (const topic of data.RelatedTopics.slice(0, 8)) {
+              const text = topic.Text || topic.Result
+              if (text) results.push(`- ${text}`)
+              if (topic.Topics) {
+                for (const sub of topic.Topics.slice(0, 3)) {
+                  if (sub.Text) results.push(`  - ${sub.Text}`)
+                }
               }
             }
           }
+          if (results.length > 0) return JSON.stringify({ query, results })
         }
-        if (results.length === 0) return JSON.stringify({ error: '未找到相关结果' })
-        return JSON.stringify({ query, results })
-      } catch {
-        return JSON.stringify({ error: '搜索请求失败' })
-      }
+      } catch {}
+      return JSON.stringify({ error: '搜索不可用，请在 AI 配置中设置搜索 API（支持 OpenAI 格式的联网搜索）' })
     }
 
     default:
@@ -741,6 +763,8 @@ const saveConfigSchema = z.object({
   api_url: z.string().optional(),
   model: z.string().optional(),
   provider: z.enum(['anthropic', 'openai']).optional(),
+  search_api_url: z.string().optional(),
+  search_api_key: z.string().optional(),
 })
 
 const createConversationSchema = z.object({
@@ -877,6 +901,8 @@ router.get('/config', authMiddleware, (req: Request, res: Response) => {
     has_key: !!keyRecord.api_key,
     api_url: keyRecord.api_url || '',
     model: keyRecord.model,
+    search_api_url: keyRecord.search_api_url || '',
+    has_search_key: !!keyRecord.search_api_key,
     created_at: keyRecord.created_at,
   })
 })
@@ -887,7 +913,7 @@ router.post(
   validate(saveConfigSchema),
   (req: Request, res: Response) => {
     const db = getDb()
-    const { api_key, api_url, model, provider: explicitProvider } = req.body
+    const { api_key, api_url, model, provider: explicitProvider, search_api_url, search_api_key } = req.body
     const provider = explicitProvider || detectProvider(api_url || '', model || '')
     const userId = req.user!.id
 
@@ -897,8 +923,8 @@ router.post(
 
     db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId)
     db.prepare(
-      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model) VALUES (?, ?, ?, ?, ?)',
-    ).run(userId, provider, finalKey, api_url || '', model || '')
+      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
 
     ok(res, { message: 'API 配置已保存', provider })
   },
