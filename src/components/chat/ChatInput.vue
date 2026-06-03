@@ -1,17 +1,38 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ArrowUp } from '@lucide/vue'
+import { ref, nextTick } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { ArrowUp, Square } from '@lucide/vue'
 
-const emit = defineEmits<{ send: [content: string]; stop: [] }>()
-const props = defineProps<{ loading?: boolean }>()
+const emit = defineEmits<{ send: [content: string]; stop: []; login: [] }>()
+const props = defineProps<{ loading?: boolean; disabled?: boolean }>()
+const auth = useAuthStore()
 const input = ref('')
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+function autoResize() {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+}
 
 function handleSend() {
   if (props.loading) { emit('stop'); return }
+  if (props.disabled) return
+  if (!auth.isLoggedIn) { emit('login'); return }
   const c = input.value.trim()
   if (!c) return
   emit('send', c)
   input.value = ''
+  nextTick(() => {
+    if (textareaRef.value) {
+      textareaRef.value.style.height = 'auto'
+    }
+  })
+}
+
+function onInput() {
+  autoResize()
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -26,11 +47,13 @@ function onKeydown(e: KeyboardEvent) {
   <div class="input-section">
     <div class="input-wrapper">
       <textarea
+        ref="textareaRef"
         v-model="input"
         rows="1"
         placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-        :disabled="loading"
+        :disabled="loading || disabled"
         class="input-area"
+        @input="onInput"
         @keydown="onKeydown"
       />
       <button
@@ -39,7 +62,8 @@ function onKeydown(e: KeyboardEvent) {
         :disabled="!input.trim() && !loading"
         @click="handleSend"
       >
-        <ArrowUp :size="18" />
+        <ArrowUp v-if="!loading" :size="18" />
+        <Square v-else :size="14" :fill="'currentColor'" />
       </button>
     </div>
     <p class="hint">AI 生成内容仅供参考，请核实重要信息</p>
@@ -48,24 +72,28 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .input-section {
-  padding: 0 16px 20px 16px;
+  padding: 0 16px 8px 16px;
   background: var(--ground);
 }
 
 .input-wrapper {
-  max-width: 800px;
+  max-width: 768px;
   margin: 0 auto;
   display: flex;
   align-items: flex-end;
   gap: 6px;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 8px 8px 8px 16px;
-  transition: border-color .15s;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input-wrapper:hover {
+  border-color: var(--hairline-strong);
 }
 .input-wrapper:focus-within {
-  border-color: #3964fe;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .input-area {
@@ -87,31 +115,50 @@ function onKeydown(e: KeyboardEvent) {
 
 .send-btn {
   width: 32px; height: 32px;
-  border-radius: 50%;
+  border-radius: 8px;
   border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all .15s;
+  transition: all .12s;
   background: var(--surface-3);
   color: var(--text-muted);
 }
+.send-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.send-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
 .send-btn.on {
-  background: #3964fe;
+  background: var(--accent);
   color: #fff;
 }
-.send-btn.on:hover {
-  filter: brightness(1.1);
+.send-btn.on:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+.send-btn.on:active:not(:disabled) {
+  filter: brightness(0.9);
+  transform: scale(0.92);
 }
 .send-btn.stop {
-  background: #ef4444;
-  color: #fff;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.send-btn.stop:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.send-btn.stop:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .hint {
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
-  margin-top: 10px;
+  margin-top: 6px;
+  margin-bottom: 0;
 }
 </style>

@@ -43,7 +43,13 @@ interface MessageRow {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `你是 OurClass 班级管理系统的 AI 助手。可以调用工具获取真实数据。
+const SYSTEM_PROMPT = `你是 OurClass 班级管理系统的 AI 助手，负责帮老师/学生处理班级事务。可以调用工具获取真实数据。
+
+## 对话风格
+- 像朋友一样自然聊天，不要像机器人一样列功能清单
+- 对方问什么答什么，不用主动介绍自己能做什么
+- 如果对方打招呼（你好、嗨等），正常回应就好，不用报家门
+- 语气自然、简洁、有温度
 
 ## 铁律
 - 工具返回什么数据就说什么，绝不编造任何数据
@@ -53,13 +59,18 @@ const SYSTEM_PROMPT = `你是 OurClass 班级管理系统的 AI 助手。可以�
 - 不要用"某某、某某等"省略，工具返回了几个人就说几个人
 
 ## 工具
-### list_students — 查学生，class(可选)
-### get_student_points — 查积分，student_name(必填)
-### add_points — 加减分，student_name(必填), amount(必填), reason(必填)。先确认再操作
-### get_score_rankings — 查排名，course(可选), exam_name(可选)
-### list_assignments — 查作业，course(可选)
-### get_submissions — 查提交，assignment_id(必填)
-### get_class_list — 查班级`
+### list_students — 查学生（可按班级筛选，留空查全部）
+### get_student_points — 查某个学生的积分，student_name(必填)
+### add_points — 加减分（仅教师可用），student_name(必填), amount(必填，正数加分负数扣分), reason(必填)
+### get_score_rankings — 查成绩排名，course(可选), exam_name(可选)
+### list_assignments — 查作业列表，course(可选)
+### get_submissions — 查某个作业的提交和批改情况，assignment_id(必填)
+### get_class_list — 查所有班级
+### get_my_info — 查当前登录用户自己的信息
+### web_search — 联网搜索知识点、新闻、概念等公开资料（query必填）
+
+## 注意
+- 不确定当前用户身份时先调 get_my_info`
 
 // Bot detection
 const lastMsgTime = new Map<number, number>()
@@ -141,21 +152,35 @@ const TOOLS: ToolDef[] = [
     description: '查询所有班级',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_my_info',
+    description: '查询当前登录用户自己的信息（姓名、角色、班级）',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'web_search',
+    description: '搜索互联网上的公开知识和资料。当用户问你不确定的知识、新闻、概念等需要联网获取信息时使用。',
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: '搜索关键词' } },
+      required: ['query'],
+    },
+  },
 ]
 
 // ── Tool execution ────────────────────────────────────────────────────────
 
-function executeTool(name: string, input: Record<string, unknown>, userId: number): string {
+async function executeTool(name: string, input: Record<string, unknown>, userId: number, userRole: string): Promise<string> {
   const db = getDb()
 
   switch (name) {
     case 'list_students': {
       const cls = input.class as string | undefined
       const rows = cls
-        ? db.prepare("SELECT id, display_name, class FROM users WHERE role='student' AND class=? ORDER BY id").all(cls)
-        : db.prepare("SELECT id, display_name, class FROM users WHERE role='student' ORDER BY id").all()
+        ? db.prepare("SELECT id, display_name, class FROM users WHERE role='student' AND class=? ORDER BY id LIMIT 50").all(cls)
+        : db.prepare("SELECT id, display_name, class FROM users WHERE role='student' ORDER BY id LIMIT 50").all()
       if (rows.length === 0) return JSON.stringify({ error: '暂无学生数据' })
-      return JSON.stringify(rows)
+      return JSON.stringify({ total: rows.length, students: rows })
     }
 
     case 'get_student_points': {
@@ -175,10 +200,13 @@ function executeTool(name: string, input: Record<string, unknown>, userId: numbe
     }
 
     case 'add_points': {
-      // Find student
+      // Only teachers can modify points
+      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以加减分' })
       const student = db.prepare("SELECT id FROM users WHERE display_name=? AND role='student'").get(input.student_name as string) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${input.student_name}」` })
       const amount = input.amount as number
+      // Sanity cap: ±100 per operation
+      if (Math.abs(amount) > 100) return JSON.stringify({ error: '单次加减分不能超过 100' })
       const type = amount >= 0 ? 'add' : 'deduct'
       const absAmt = Math.abs(amount)
       db.prepare('INSERT INTO point_records (student_id, reason, type, amount, created_by, date) VALUES (?,?,?,?,?,?)')
@@ -194,7 +222,7 @@ function executeTool(name: string, input: Record<string, unknown>, userId: numbe
       const params: any[] = []
       if (course) { sql += ' AND s.course=?'; params.push(course) }
       if (exam) { sql += ' AND s.exam_name=?'; params.push(exam) }
-      sql += ' ORDER BY s.score DESC LIMIT 10'
+      sql += ' ORDER BY s.score DESC LIMIT 50'
       const rows = db.prepare(sql).all(...params) as any[]
       if (rows.length === 0) return JSON.stringify({ error: '暂无成绩数据' })
       return JSON.stringify(rows.map((r: any, i: number) => ({ rank: i + 1, name: r.student_name, class: r.class, score: r.score, exam: r.exam_name, course: r.course })))
@@ -203,24 +231,59 @@ function executeTool(name: string, input: Record<string, unknown>, userId: numbe
     case 'list_assignments': {
       const course = input.course as string | undefined
       const rows = course
-        ? db.prepare('SELECT id, title, course, due_date FROM assignments WHERE course=? ORDER BY due_date').all(course)
-        : db.prepare('SELECT id, title, course, due_date FROM assignments ORDER BY due_date').all()
+        ? db.prepare('SELECT id, title, course, due_date FROM assignments WHERE course=? ORDER BY due_date LIMIT 50').all(course)
+        : db.prepare('SELECT id, title, course, due_date FROM assignments ORDER BY due_date LIMIT 50').all()
       if (rows.length === 0) return JSON.stringify({ error: '暂无作业' })
-      return JSON.stringify(rows)
+      return JSON.stringify({ total: rows.length, assignments: rows })
     }
 
     case 'get_submissions': {
       const aid = input.assignment_id as number
       const rows = db.prepare(`
-        SELECT s.id, u.display_name as student_name, u.class, s.status, s.score, s.feedback
-        FROM submissions s JOIN users u ON s.student_id = u.id WHERE s.assignment_id=? ORDER BY s.id
+        SELECT u.display_name as student_name, u.class, s.status, s.score
+        FROM submissions s JOIN users u ON s.student_id = u.id WHERE s.assignment_id=? ORDER BY s.id LIMIT 100
       `).all(aid)
-      return JSON.stringify(rows)
+      if (rows.length === 0) return JSON.stringify({ error: '暂无提交记录' })
+      return JSON.stringify({ total: rows.length, submissions: rows })
     }
 
     case 'get_class_list': {
       const rows = db.prepare("SELECT DISTINCT class FROM users WHERE role='student' AND class!='' ORDER BY class").all()
       return JSON.stringify(rows.map((r: any) => r.class))
+    }
+
+    case 'get_my_info': {
+      const user = db.prepare("SELECT id, username, display_name, role, class, avatar FROM users WHERE id=?").get(userId) as any
+      if (!user) return JSON.stringify({ error: '用户不存在' })
+      return JSON.stringify(user)
+    }
+
+    case 'web_search': {
+      const query = input.query as string
+      if (!query?.trim()) return JSON.stringify({ error: '请输入搜索关键词' })
+      try {
+        const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`)
+        if (!res.ok) return JSON.stringify({ error: '搜索服务暂不可用' })
+        const data = await res.json() as any
+        const results: string[] = []
+        if (data.AbstractText) results.push(`摘要: ${data.AbstractText}`)
+        if (data.AbstractURL) results.push(`来源: ${data.AbstractURL}`)
+        if (data.RelatedTopics?.length) {
+          for (const topic of data.RelatedTopics.slice(0, 8)) {
+            const text = topic.Text || topic.Result
+            if (text) results.push(`- ${text}`)
+            if (topic.Topics) {
+              for (const sub of topic.Topics.slice(0, 3)) {
+                if (sub.Text) results.push(`  - ${sub.Text}`)
+              }
+            }
+          }
+        }
+        if (results.length === 0) return JSON.stringify({ error: '未找到相关结果' })
+        return JSON.stringify({ query, results })
+      } catch {
+        return JSON.stringify({ error: '搜索请求失败' })
+      }
     }
 
     default:
@@ -248,7 +311,7 @@ function buildCard(name: string, input: Record<string, unknown>, result: string)
     }
 
     case 'list_students': {
-      const rows = data as any[]
+      const rows = data?.students as any[]
       if (!Array.isArray(rows) || rows.length === 0) return null
       return {
         type: 'student_list',
@@ -278,7 +341,7 @@ function buildCard(name: string, input: Record<string, unknown>, result: string)
     }
 
     case 'list_assignments': {
-      const rows = data as any[]
+      const rows = data?.assignments as any[]
       if (!Array.isArray(rows) || rows.length === 0) return null
       return {
         type: 'assignment_list',
@@ -289,7 +352,7 @@ function buildCard(name: string, input: Record<string, unknown>, result: string)
     }
 
     case 'get_submissions': {
-      const rows = data as any[]
+      const rows = data?.submissions as any[]
       if (!Array.isArray(rows) || rows.length === 0) return null
       const graded = rows.filter((r: any) => r.status === 'graded').length
       return {
@@ -326,7 +389,8 @@ function buildCard(name: string, input: Record<string, unknown>, result: string)
 
 async function agentLoopAnthropic(
   anthropic: any, model: string, messages: any[],
-  res: Response, convId: number, db: any, newContent: string, userId: number,
+  res: Response, convId: number, db: any, newContent: string, userId: number, userRole: string,
+  isContinue = false,
 ) {
   const loopMessages = [...messages]
   let fullResponse = ''
@@ -344,7 +408,9 @@ async function agentLoopAnthropic(
         })),
       })
     } catch (e: any) {
-      res.write(`data: ${JSON.stringify({ type: 'error', content: '请求失败: ' + (e.message || '') })}\n\n`)
+      const errMsg = '请求失败: ' + (e.message || '')
+      res.write(`data: ${JSON.stringify({ type: 'error', content: errMsg })}\n\n`)
+      fullResponse = errMsg
       break
     }
 
@@ -409,7 +475,11 @@ async function agentLoopAnthropic(
         const label = toolLabel(tc.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.name, label })}\n\n`)
 
-        const result = executeTool(tc.name, parsed, userId)
+        const result = await executeTool(tc.name, parsed, userId, userRole)
+
+        // Save tool message (label + result) so it persists after refresh
+        db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+          .run(convId, 'tool', JSON.stringify({ label, result: result.slice(0, 500) }), 0)
 
         res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.name, summary: result.slice(0, 500) })}\n\n`)
 
@@ -434,11 +504,15 @@ async function agentLoopAnthropic(
     }
   }
 
-  // Save
-  db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-    .run(convId, 'user', newContent, totalInput || 0)
-  db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-    .run(convId, 'assistant', fullResponse || '(已处理)', totalOutput || 0)
+  // Save assistant response
+  if (isContinue) {
+    // Append to the last assistant message instead of creating a new one
+    const last = db.prepare("SELECT id FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").get(convId) as any
+    if (last) db.prepare('UPDATE messages SET content = content || ? WHERE id = ?').run(fullResponse, last.id)
+  } else {
+    db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+      .run(convId, 'assistant', fullResponse || '(已处理)', totalOutput || 0)
+  }
   db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(convId)
 
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
@@ -458,7 +532,8 @@ async function agentLoopAnthropic(
 async function agentLoopOpenAI(
   apiUrl: string, apiKey: string, model: string,
   contextHistory: MessageRow[], newContent: string,
-  res: Response, convId: number, db: any, userId: number,
+  res: Response, convId: number, db: any, userId: number, userRole: string,
+  isContinue = false,
 ) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
   const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
@@ -468,9 +543,11 @@ async function agentLoopOpenAI(
     function: { name: t.name, description: t.description, parameters: t.input_schema },
   }))
 
+  // Filter out tool messages — they're UI decorations, not valid API message format
+  const filteredHistory = contextHistory.filter(m => m.role !== 'tool')
   const loopMessages: any[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    ...contextHistory.map(m => ({ role: m.role, content: m.content })),
+    ...filteredHistory.map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: newContent },
   ]
 
@@ -488,7 +565,9 @@ async function agentLoopOpenAI(
       data = await response.json()
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`)
     } catch (e: any) {
-      res.write(`data: ${JSON.stringify({ type: 'error', content: '请求失败: ' + (e.message || '') })}\n\n`)
+      const errMsg = '请求失败: ' + (e.message || '')
+      res.write(`data: ${JSON.stringify({ type: 'error', content: errMsg })}\n\n`)
+      fullResponse = errMsg
       break
     }
 
@@ -515,7 +594,13 @@ async function agentLoopOpenAI(
         const label = toolLabel(tc.function.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.function.name, label })}\n\n`)
 
-        const result = executeTool(tc.function.name, parsed, userId)
+        const result = await executeTool(tc.function.name, parsed, userId, userRole)
+
+
+        // Save tool message (label + result) to DB
+        db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+          .run(convId, 'tool', JSON.stringify({ label, result: result.slice(0, 500) }), 0)
+
         res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.function.name, summary: result.slice(0, 500) })}\n\n`)
 
         const card = buildCard(tc.function.name, parsed, result)
@@ -538,10 +623,13 @@ async function agentLoopOpenAI(
     }
   }
 
-  db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-    .run(convId, 'user', newContent, totalTokens || 0)
-  db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-    .run(convId, 'assistant', fullResponse || '(已处理)', totalTokens || 0)
+  if (isContinue) {
+    const last = db.prepare("SELECT id FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").get(convId) as any
+    if (last) db.prepare('UPDATE messages SET content = content || ? WHERE id = ?').run(fullResponse, last.id)
+  } else {
+    db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+      .run(convId, 'assistant', fullResponse || '(已处理)', totalTokens || 0)
+  }
   db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(convId)
 
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
@@ -577,9 +665,11 @@ function buildMessages(history: MessageRow[], newContent: string) {
     role: 'system',
     content: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
   })
-  for (let i = 0; i < history.length; i++) {
-    const msg: any = { role: history[i].role, content: [{ type: 'text', text: history[i].content }] }
-    if (i < history.length - 2) msg.content[0].cache_control = { type: 'ephemeral' }
+  // Filter out tool messages — they're display-only, not valid Anthropic-format
+  const filtered = history.filter(m => m.role !== 'tool')
+  for (let i = 0; i < filtered.length; i++) {
+    const msg: any = { role: filtered[i].role, content: [{ type: 'text', text: filtered[i].content }] }
+    if (i < filtered.length - 2) msg.content[0].cache_control = { type: 'ephemeral' }
     messages.push(msg)
   }
   messages.push({ role: 'user', content: [{ type: 'text', text: newContent }] })
@@ -647,9 +737,10 @@ function detectProvider(apiUrl: string, model: string): 'anthropic' | 'openai' {
 // ── Validation Schemas ───────────────────────────────────────────────────
 
 const saveConfigSchema = z.object({
-  api_key: z.string().min(1, '请输入 API Key'),
+  api_key: z.string().optional(),
   api_url: z.string().optional(),
   model: z.string().optional(),
+  provider: z.enum(['anthropic', 'openai']).optional(),
 })
 
 const createConversationSchema = z.object({
@@ -657,7 +748,8 @@ const createConversationSchema = z.object({
 })
 
 const chatMessageSchema = z.object({
-  message: z.string().min(1, '请输入消息'),
+  message: z.string().optional(),
+  continue: z.boolean().optional(),
 })
 
 // ── OpenAI-compatible API helpers ────────────────────────────────────────
@@ -769,7 +861,7 @@ async function streamOpenAI(
 
 // ── Routes ───────────────────────────────────────────────────────────────
 
-router.get('/config', requirePermission('chat.access'), (req: Request, res: Response) => {
+router.get('/config', authMiddleware, (req: Request, res: Response) => {
   const db = getDb()
   const keyRecord = db
     .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
@@ -795,12 +887,13 @@ router.post(
   validate(saveConfigSchema),
   (req: Request, res: Response) => {
     const db = getDb()
-    const { api_key, api_url, model } = req.body
-    const provider = detectProvider(api_url || '', model || '')
+    const { api_key, api_url, model, provider: explicitProvider } = req.body
+    const provider = explicitProvider || detectProvider(api_url || '', model || '')
     const userId = req.user!.id
 
     const existing = db.prepare('SELECT * FROM api_keys WHERE user_id = ?').get(userId) as ApiKeyRow | undefined
     const finalKey = api_key || existing?.api_key || ''
+    if (!finalKey) return fail(res, 400, 'NO_API_KEY', '请先输入 API Key')
 
     db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId)
     db.prepare(
@@ -811,7 +904,7 @@ router.post(
   },
 )
 
-router.get('/conversations', requirePermission('chat.access'), (req: Request, res: Response) => {
+router.get('/conversations', authMiddleware, (req: Request, res: Response) => {
   const db = getDb()
   const conversations = db
     .prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC')
@@ -821,7 +914,7 @@ router.get('/conversations', requirePermission('chat.access'), (req: Request, re
 
 router.post(
   '/conversations',
-  requirePermission('chat.access'),
+  authMiddleware,
   validate(createConversationSchema),
   (req: Request, res: Response) => {
     const db = getDb()
@@ -836,7 +929,7 @@ router.post(
   },
 )
 
-router.get('/conversations/:id', requirePermission('chat.access'), (req: Request, res: Response) => {
+router.get('/conversations/:id', authMiddleware, (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   if (isNaN(convId)) return fail(res, 400, 'VALIDATION_ERROR', '无效的对话 ID')
@@ -852,7 +945,7 @@ router.get('/conversations/:id', requirePermission('chat.access'), (req: Request
   ok(res, { conversation, messages })
 })
 
-router.delete('/conversations/:id', requirePermission('chat.access'), (req: Request, res: Response) => {
+router.delete('/conversations/:id', authMiddleware, (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   if (isNaN(convId)) return fail(res, 400, 'VALIDATION_ERROR', '无效的对话 ID')
@@ -868,7 +961,7 @@ router.delete('/conversations/:id', requirePermission('chat.access'), (req: Requ
 
 router.post(
   '/conversations/:id/chat',
-  requirePermission('chat.access'),
+  authMiddleware,
   validate(chatMessageSchema),
   async (req: Request, res: Response) => {
     const db = getDb()
@@ -916,7 +1009,10 @@ router.post(
     // 4. Context window: only keep last N exchanges
     const contextHistory = history.slice(-CONTEXT_WINDOW * 2)
 
-    const newContent = req.body.message
+    const isContinue = req.body.continue === true
+    const newContent = isContinue
+      ? '请继续，直接从刚才中断的地方继续，不要重复已经写过的内容，不要做开场白，不要问候，直接从中断的句子或段落续写。'
+      : (req.body.message || '')
     const provider = keyRecord.provider || 'anthropic'
     const model = keyRecord.model || 'claude-sonnet-4-20250514'
     const apiUrl = keyRecord.api_url || ''
@@ -926,9 +1022,15 @@ router.post(
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
+    // Save user message FIRST (skip for continue — AI instruction only, no visible message)
+    if (!isContinue) {
+      db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+        .run(convId, 'user', newContent, 0)
+    }
+
     try {
       if (provider === 'openai') {
-        await agentLoopOpenAI(apiUrl, keyRecord.api_key, model, contextHistory, newContent, res, convId, db, req.user!.id)
+        await agentLoopOpenAI(apiUrl, keyRecord.api_key, model, contextHistory, newContent, res, convId, db, req.user!.id, req.user!.role, isContinue)
         res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
         res.end()
       } else {
@@ -938,7 +1040,7 @@ router.post(
           apiKey: keyRecord.api_key,
           ...(apiUrl ? { baseURL: apiUrl } : {}),
         })
-        await agentLoopAnthropic(anthropic, model, messages, res, convId, db, newContent, req.user!.id)
+        await agentLoopAnthropic(anthropic, model, messages, res, convId, db, newContent, req.user!.id, req.user!.role, isContinue)
       }
     } catch (err: any) {
       res.write(`data: ${JSON.stringify({ type: 'error', content: err.message || '请求失败' })}\n\n`)
@@ -947,7 +1049,7 @@ router.post(
   },
 )
 
-router.put('/conversations/:id/title', requirePermission('chat.access'), (req: Request, res: Response) => {
+router.put('/conversations/:id/title', authMiddleware, (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   const { title } = req.body

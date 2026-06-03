@@ -15,11 +15,6 @@ const router = createRouter({
       component: () => import('@/views/ChatPage.vue'),
     },
     {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/views/Login.vue'),
-    },
-    {
       path: '/teacher',
       component: () => import('@/layouts/DashboardLayout.vue'),
       meta: { role: 'teacher' },
@@ -97,10 +92,10 @@ router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
   auth.loadFromStorage()
 
-  const publicPages = ['/', '/login']
+  const publicPages = ['/']
   if (publicPages.includes(to.path)) { next(); return }
   if (!auth.isLoggedIn) {
-    next('/login'); return
+    next('/'); return
   }
 
   const requiredRole = to.meta.role as string | undefined

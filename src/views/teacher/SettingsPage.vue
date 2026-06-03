@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
 import {
-  NButton, NInput, NAlert, NSpace, NSpin,
+  NButton, NInput, NAlert, NSpace, NSpin, NSelect,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 
@@ -11,6 +11,7 @@ const message = useMessage()
 const apiUrl = ref('')
 const apiKey = ref('')
 const model = ref('')
+const provider = ref('anthropic')
 const hasKey = ref(false)
 const saving = ref(false)
 const testing = ref(false)
@@ -19,24 +20,26 @@ const loaded = ref(false)
 
 async function load() {
   try {
-    const config = await api.get<{ has_key: boolean; api_url: string; model: string } | null>('/chat/config')
+    const config = await api.get<{ has_key: boolean; api_url: string; model: string; provider: string } | null>('/chat/config')
     if (config) {
       hasKey.value = !!config.has_key
       apiUrl.value = config.api_url || ''
       model.value = config.model || ''
+      provider.value = config.provider || 'anthropic'
     }
   } catch {}
   loaded.value = true
 }
 
 async function save() {
-  if (!apiKey.value.trim()) return
+  if (!apiKey.value.trim() && !hasKey.value) return
   saving.value = true
   try {
     await api.post('/chat/config', {
-      api_key: apiKey.value.trim(),
+      ...(apiKey.value.trim() ? { api_key: apiKey.value.trim() } : {}),
       api_url: apiUrl.value.trim(),
       model: model.value,
+      provider: provider.value,
     })
     message.success('已保存')
   } catch (e: any) {
@@ -51,9 +54,10 @@ async function test() {
   testResult.value = null
   try {
     await api.post('/chat/config', {
-      api_key: apiKey.value.trim(),
+      ...(apiKey.value.trim() ? { api_key: apiKey.value.trim() } : {}),
       api_url: apiUrl.value.trim(),
       model: model.value,
+      provider: provider.value,
     })
     const res = await api.post<{ success: boolean; model: string; latency_ms: number; input_tokens: number }>('/chat/test', {})
     testResult.value = {
@@ -84,6 +88,18 @@ onMounted(load)
 
     <n-spin :show="!loaded">
       <div style="max-width: 480px; display: flex; flex-direction: column; gap: 16px">
+        <!-- Provider -->
+        <div>
+          <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">接口格式</div>
+          <n-select
+            v-model:value="provider"
+            :options="[
+              { label: 'Anthropic（Claude）', value: 'anthropic' },
+              { label: 'OpenAI 兼容（DeepSeek / GPT）', value: 'openai' },
+            ]"
+          />
+        </div>
+
         <!-- Model -->
         <div>
           <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">模型</div>
