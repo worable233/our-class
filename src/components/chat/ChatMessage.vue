@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Search, Check, ChevronDown, Copy, CheckCheck } from '@lucide/vue'
+import { useSearchPanel } from '@/composables/useSearchPanel'
+const { open: openSearchPanel, results: searchPanelResults, favicons: spFavicons } = useSearchPanel()
+
+function showSearch() {
+  openSearchPanel(searchPanelResults.value)
+}
+
+function safeHost2(url: string): string {
+  try { return new URL(url).hostname } catch { return '' }
+}
 import ToolCard from './ToolCard.vue'
 import { marked } from 'marked'
 
@@ -12,6 +22,8 @@ const copied = ref(false)
 const isUser = computed(() => props.role === 'user')
 const isTool = computed(() => props.role === 'tool')
 const isCard = computed(() => props.role === 'card')
+const isSearchTool = computed(() => isTool.value && (props.content || '').includes('web_search'))
+const hasSearchResults = computed(() => isSearchTool.value && searchPanelResults.value.length > 0)
 
 function stripMd(text: string): string {
   return text
@@ -40,6 +52,9 @@ function render(text: string): string {
   if (!text) return ''
 
   let html = marked.parse(text) as string
+
+  // Replace citation markers [1] [2] etc with styled spans
+  html = html.replace(/\[(\d+)\]/g, '<span class="cite">$1</span>')
 
   html = html.replace(
     /<pre><code class="language-(\w*)">([\s\S]*?)<\/code><\/pre>/g,
@@ -77,13 +92,17 @@ function handleTableExport(e: MouseEvent) {
 </script>
 
 <template>
-  <!-- Tool message — inline pill (DeepSeek-inspired) -->
+  <!-- Tool message — inline pill -->
   <div v-if="isTool" class="tool-line">
     <div class="tool-pill" :class="{ running: toolStatus === 'running' }">
       <Search v-if="toolStatus === 'running'" :size="12" class="tp-icon spin" />
       <Check v-else :size="12" class="tp-icon" />
       <span class="tp-text">{{ content }}</span>
-      <button v-if="toolResult" class="tp-chevron" :class="{ open: toolExpanded }" @click.stop="toolExpanded = !toolExpanded">
+      <span v-if="isSearchTool && spFavicons.some(f => f)" class="tp-icons">
+        <img v-for="(f, i) in spFavicons.filter(f => f).slice(0, 4)" :key="i" :src="f" width="14" height="14" class="tp-favicon" />
+      </span>
+      <button v-if="isSearchTool && hasSearchResults" class="tp-expand" @click.stop="showSearch()">查看</button>
+      <button v-if="!isSearchTool && toolResult" class="tp-chevron" :class="{ open: toolExpanded }" @click.stop="toolExpanded = !toolExpanded">
         <ChevronDown :size="12" />
       </button>
     </div>
@@ -114,7 +133,7 @@ function handleTableExport(e: MouseEvent) {
 </template>
 
 <style scoped>
-.msg-wrapper { max-width: 820px; margin: 0 auto; width: 100%; }
+.msg-wrapper { max-width: 820px; margin: 0 auto; width: 100%; overflow: hidden; }
 .msg-wrapper.user-wrap { display: flex; justify-content: flex-end; }
 .msg-wrapper.bot-wrap:hover .copy-area { opacity: 1; }
 
@@ -177,6 +196,16 @@ function handleTableExport(e: MouseEvent) {
   transition: all .15s;
 }
 .tp-chevron:hover { background: var(--surface-2); color: var(--text-secondary); }
+
+.tp-icons { display: flex; gap: 1px; align-items: center; margin-left: 2px; }
+.tp-favicon { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; object-fit: contain; }
+.tp-expand {
+  flex-shrink: 0;
+  background: none; border: none;
+  color: var(--accent-text); font-size: 11px; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px; margin-left: 2px;
+}
+.tp-expand:hover { background: rgba(128,128,128,.1); }
 .tp-chevron.open { transform: rotate(180deg); }
 
 .tool-result-body {
@@ -205,6 +234,12 @@ function handleTableExport(e: MouseEvent) {
   font-size: 14px;
   line-height: 1.75;
   color: var(--text-primary);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.text :deep(*) {
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .text-user {
@@ -468,5 +503,15 @@ function handleTableExport(e: MouseEvent) {
   height: auto;
   border-radius: 6px;
 }
+
+/* ── Citation badges ── */
+.text-bot :deep(.cite) {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface-3); color: var(--text-muted);
+  font-size: 10px; font-weight: 600; cursor: pointer;
+  vertical-align: middle; margin: 0 2px;
+}
+.text-bot :deep(.cite:hover) { background: var(--hairline-strong); color: var(--text-primary); }
 </style>
 

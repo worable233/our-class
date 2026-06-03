@@ -8,6 +8,23 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import { Star, BarChart3, FileText, MessageSquare } from '@lucide/vue'
+import SearchPanel from '@/components/chat/SearchPanel.vue'
+import { useSearchPanel } from '@/composables/useSearchPanel'
+const { setResults: setSearchResults } = useSearchPanel()
+
+function loadSearchResults(rawMessages: any[]) {
+  for (const m of rawMessages) {
+    if (m.role === 'tool') {
+      try {
+        const p = JSON.parse(m.content)
+        if (p.label?.includes('web_search') && p.result) {
+          const r = JSON.parse(p.result)
+          if (Array.isArray(r)) { setSearchResults(r); return }
+        }
+      } catch {}
+    }
+  }
+}
 
 const props = withDefaults(defineProps<{ encodedId?: string; sidebarOpen?: boolean }>(), { sidebarOpen: true })
 const emit = defineEmits<{ login: []; closeSidebar: [] }>()
@@ -88,6 +105,7 @@ onMounted(async () => {
       if (res?.messages) {
         messages.value = res.messages.map(mapMsg)
         terminated.value = res.messages.length >= 100
+        loadSearchResults(res.messages)
       }
     }
   } catch {}
@@ -114,6 +132,7 @@ async function selectConversation(id: number) {
     if (res?.messages) {
       messages.value = res.messages.map(mapMsg)
       terminated.value = res.messages.length >= 100
+      loadSearchResults(res.messages)
     }
   } catch {}
 }
@@ -259,6 +278,10 @@ async function sendMessage(content: string) {
             if (currentConvId.value === convId) {
               messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
             }
+          } else if (data.type === 'search_results') {
+            if (currentConvId.value === convId && Array.isArray(data.results)) {
+              setSearchResults(data.results)
+            }
           } else if (data.type === 'error') {
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
@@ -302,6 +325,7 @@ async function sendMessage(content: string) {
 }
 
 defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() } })
+
 
 function stopStream() {
   cleanup()
@@ -449,7 +473,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
       />
     </template>
     <template #main>
-      <div ref="threadRef" class="flex-1 overflow-y-auto" style="background: var(--ground)">
+      <div ref="threadRef" class="flex-1 overflow-y-auto" style="background: var(--ground)" >
         <div class="chat-scroll-inner">
         <!-- Welcome empty state -->
         <div v-if="!currentConvId && messages.length === 0 && !streaming" class="welcome">
@@ -485,6 +509,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
       <ChatInput :loading="streaming" :disabled="terminated" @send="sendMessage" @stop="stopStream" @login="emit('login')" />
     </template>
   </ChatLayout>
+  <SearchPanel />
 </template>
 
 <style>
@@ -580,4 +605,5 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   border-color: var(--accent);
   background: var(--accent-glow);
 }
+
 </style>
