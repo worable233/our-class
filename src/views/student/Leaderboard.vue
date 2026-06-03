@@ -353,3 +353,9 @@ const rowProps = (row: any) => {
     </n-spin>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+</style>

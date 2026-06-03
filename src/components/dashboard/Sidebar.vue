@@ -21,7 +21,6 @@ const menuItems = computed(() => {
       { icon: Star, label: '积分管理', path: '/teacher/points' },
       { icon: List, label: '作业管理', path: '/teacher/assignments' },
       { icon: Users, label: '学生管理', path: '/teacher/students' },
-      { icon: MessageSquare, label: '班级圈', path: '/teacher/posts' },
       { icon: Shield, label: '权限管理', path: '/teacher/roles' },
       { icon: Settings, label: '站点设置', expandable: true, children: [
         { icon: Bot, label: 'AI 配置', path: '/teacher/settings' },
@@ -32,7 +31,6 @@ const menuItems = computed(() => {
     { icon: Star, label: '我的积分', path: '/student/points' },
     { icon: Trophy, label: '积分排行', path: '/student/leaderboard' },
     { icon: List, label: '作业查询', path: '/student/assignments' },
-    { icon: MessageSquare, label: '班级圈', path: '/student/posts' },
     { icon: User, label: '个人主页', path: '/student/profile' },
   ]
 })
@@ -398,5 +396,11 @@ function go(path: string) {
 .sidebar-user-role {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .sidebar-root {
+    box-shadow: 4px 0 20px rgba(0,0,0,.2);
+  }
 }
 </style>

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import jwt from 'jsonwebtoken'
 import Anthropic from '@anthropic-ai/sdk'
 import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
@@ -505,12 +506,6 @@ async function agentLoopAnthropic(
 
         res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.name, summary: result.slice(0, 500) })}\n\n`)
 
-        // Build and send rich card if applicable
-        const card = buildCard(tc.name, parsed, result)
-        if (card) {
-          res.write(`data: ${JSON.stringify({ type: 'tool_card', card })}\n\n`)
-        }
-
         loopMessages.push({
           role: 'user',
           content: [{ type: 'tool_result', tool_use_id: tc.id, content: result }],
@@ -558,7 +553,10 @@ async function agentLoopOpenAI(
   isContinue = false,
 ) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
-  const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+  const hasVersion = /\/v\d+$/.test(base)
+  const url = hasVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+  const isZhipu = apiUrl.includes('bigmodel')
+  const authKey = isZhipu ? zhipuAuth(apiKey) : apiKey
 
   const tools = TOOLS.map(t => ({
     type: 'function',
@@ -581,11 +579,11 @@ async function agentLoopOpenAI(
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authKey}` },
         body: JSON.stringify({ model, max_tokens: 4096, messages: loopMessages, tools }),
       })
       data = await response.json()
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`)
+      if (!response.ok) throw new Error((typeof data?.error === 'string' ? data.error : data?.error?.message) || `HTTP ${response.status}`)
     } catch (e: any) {
       const errMsg = '请求失败: ' + (e.message || '')
       res.write(`data: ${JSON.stringify({ type: 'error', content: errMsg })}\n\n`)
@@ -624,9 +622,6 @@ async function agentLoopOpenAI(
           .run(convId, 'tool', JSON.stringify({ label, result: result.slice(0, 500) }), 0)
 
         res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.function.name, summary: result.slice(0, 500) })}\n\n`)
-
-        const card = buildCard(tc.function.name, parsed, result)
-        if (card) res.write(`data: ${JSON.stringify({ type: 'tool_card', card })}\n\n`)
 
         loopMessages.push({
           role: 'tool',
@@ -747,12 +742,24 @@ async function generateTitle(
   }
 }
 
+function zhipuAuth(apiKey: string): string {
+  if (!apiKey.includes('.')) return apiKey  // already a JWT or plain key
+  const [id, secret] = apiKey.split('.')
+  const payload = { api_key: id, exp: Math.floor(Date.now() / 1000) + 3600, timestamp: Date.now() }
+  const token = jwt.sign(payload, secret, { algorithm: 'HS256', header: { alg: 'HS256', sign_type: 'SIGN' } })
+  return token
+}
+
 function detectProvider(apiUrl: string, model: string): 'anthropic' | 'openai' {
   if (apiUrl) {
     const lower = apiUrl.toLowerCase()
-    if (lower.includes('openai.com') || lower.includes('deepseek')) return 'openai'
+    // OpenAI-compatible APIs
+    if (lower.includes('openai.com') || lower.includes('deepseek') || lower.includes('bigmodel') || lower.includes('zhipu')) return 'openai'
+    // URLs with /v1/ /v4/ path patterns are typically OpenAI-compatible
+    if (/\/v\d+\//.test(lower)) return 'openai'
   }
-  if (model.toLowerCase().startsWith('gpt-') || model.toLowerCase().includes('deepseek')) return 'openai'
+  const m = model.toLowerCase()
+  if (m.startsWith('gpt-') || m.includes('deepseek') || m.includes('glm')) return 'openai'
   return 'anthropic'
 }
 
@@ -780,7 +787,9 @@ const chatMessageSchema = z.object({
 
 async function testOpenAI(apiUrl: string, apiKey: string, model: string) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
-  const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+  const hasVersion = /\/v\d+$/.test(base)
+  const url = hasVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+  const authKey = apiUrl.includes('bigmodel') ? zhipuAuth(apiKey) : apiKey
 
   const start = Date.now()
   const res = await fetch(url, {
@@ -798,7 +807,7 @@ async function testOpenAI(apiUrl: string, apiKey: string, model: string) {
 
   const data = await res.json()
   if (!res.ok) {
-    const err: any = new Error(data?.error?.message || `HTTP ${res.status}`)
+    const err: any = new Error((typeof data?.error === 'string' ? data.error : data?.error?.message) || `HTTP ${res.status}`)
     err.status = res.status
     throw err
   }
@@ -818,7 +827,8 @@ async function streamOpenAI(
   res: Response,
 ) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
-  const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+  const hasVersion = /\/v\d+$/.test(base)
+  const url = hasVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -839,7 +849,7 @@ async function streamOpenAI(
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    throw new Error(data?.error?.message || `HTTP ${response.status}`)
+    throw new Error((typeof data?.error === 'string' ? data.error : data?.error?.message) || `HTTP ${response.status}`)
   }
 
   const reader = response.body?.getReader()

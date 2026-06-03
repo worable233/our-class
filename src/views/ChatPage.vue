@@ -10,16 +10,17 @@ const router = useRouter()
 const auth = useAuthStore()
 const sidebarOpen = ref(true)
 const showLogin = ref(false)
+const chatRef = ref<InstanceType<typeof ChatView> | null>(null)
 
-function newSearch() { router.push('/') }
 function toggleHistory() { sidebarOpen.value = !sidebarOpen.value }
+function toggleSearch() { chatRef.value?.toggleSearch() }
 </script>
 
 <template>
   <div class="h-screen flex flex-col bg-[#f8f9fa] dark:bg-[#0a0b0d] transition-colors">
-    <HomeHeader :sidebar-open="sidebarOpen" @search="newSearch" @history="toggleHistory" />
+    <HomeHeader :sidebar-open="sidebarOpen" @history="toggleHistory" @search="toggleSearch" />
     <div class="flex-1 min-h-0 flex">
-      <ChatView :sidebar-open="sidebarOpen" @login="showLogin = true" />
+      <ChatView ref="chatRef" :sidebar-open="sidebarOpen" @login="showLogin = true" @close-sidebar="sidebarOpen = false" />
     </div>
     <LoginModal v-model:show="showLogin" />
   </div>

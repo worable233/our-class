@@ -181,3 +181,11 @@ onMounted(load)
     </n-modal>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .page-header .n-button { width: 100%; }
+  :deep(.n-modal) { width: 90vw !important; max-width: 480px; }
+}
+</style>

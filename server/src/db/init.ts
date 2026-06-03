@@ -18,7 +18,7 @@ export function getDb(): Database.Database {
     runMigrations(db)
     seedPermissionGroups(db)
     seedUsers(db)
-    seedPointsAndPosts(db)
+    seedPoints(db)
   }
   return db
 }
@@ -40,7 +40,6 @@ function seedPermissionGroups(db: Database.Database) {
     'points.read', 'points.write',
     'scores.read', 'scores.write', 'scores.delete',
     'assignments.read', 'assignments.write', 'assignments.submit', 'assignments.grade',
-    'posts.read', 'posts.write', 'posts.delete', 'posts.comment',
     'chat.access', 'chat.config',
     'roles.manage',
     'classes.read',
@@ -50,7 +49,6 @@ function seedPermissionGroups(db: Database.Database) {
     'points.read',
     'scores.read',
     'assignments.read', 'assignments.submit',
-    'posts.read', 'posts.write', 'posts.comment',
     'chat.access',
     'classes.read',
   ]
@@ -92,7 +90,7 @@ function seedUsers(db: Database.Database) {
   insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id)
 }
 
-function seedPointsAndPosts(db: Database.Database) {
+function seedPoints(db: Database.Database) {
   const count = db.prepare('SELECT COUNT(*) as c FROM point_records').get() as { c: number }
   if (count.c > 0) return
 
@@ -153,24 +151,6 @@ function seedPointsAndPosts(db: Database.Database) {
   ]
   for (const row of pointData) insertPoint.run(...row)
 
-  // Seed posts
-  const insertPost = db.prepare(
-    'INSERT INTO posts (title, content, author_id, tags) VALUES (?, ?, ?, ?)',
-  )
-  insertPost.run('数学难题求助', '请问这道导数题怎么解？f(x)=x³-3x²+2 在区间[-1,2]上的最值问题。', 2, '数学,作业求助')
-  insertPost.run('分享一个英语学习技巧', '我发现每天背20个单词，坚持一个月效果很明显，跟大家分享！', 3, '英语,学习经验')
-  insertPost.run('关于物理实验的讨论', '今天的自由落体实验大家做的结果怎么样？我的数据好像有点偏差。', 6, '物理,实验')
-  insertPost.run('周末一起打球？', '这周六下午有没有人一起去操场打篮球？', 8, '休闲,运动')
-  insertPost.run('求助一道物理题', '关于牛顿第二定律的应用题，有没有同学会做的？', 5, '物理,作业求助')
-
-  // Seed comments
-  const insertComment = db.prepare(
-    'INSERT INTO comments (post_id, author_id, content) VALUES (?, ?, ?)',
-  )
-  insertComment.run(1, 3, "先求导 f'(x)=3x²-6x=3x(x-2)，令其等于0得x=0或x=2...")
-  insertComment.run(1, 1, '张明同学，建议先把导数求出来，然后列表分析单调性。')
-  insertComment.run(3, 2, '我的数据也不太对，可能是测量误差。')
-  insertComment.run(4, 9, '我也去！几点在哪里集合？')
 }
 
 console.log('✅ Database initialized at:', DB_PATH)

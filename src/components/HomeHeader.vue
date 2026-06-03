@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const props = defineProps<{ sidebarOpen?: boolean }>()
-const emit = defineEmits<{ search: []; history: [] }>()
+const emit = defineEmits<{ history: []; search: [] }>()
 </script>
 
 <template>
@@ -53,4 +53,8 @@ const emit = defineEmits<{ search: []; history: [] }>()
 .capsule-btn:hover { color: var(--text-primary); background: var(--surface-2); }
 
 .capsule-divider { width: 1px; height: 16px; background: var(--hairline); }
+
+@media (max-width: 768px) {
+  .capsule-left { z-index: 102; }
+}
 </style>

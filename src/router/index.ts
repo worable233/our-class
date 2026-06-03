@@ -45,11 +45,6 @@ const router = createRouter({
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),
         },
-        {
-          path: 'posts',
-          name: 'teacher-posts',
-          component: () => import('@/views/teacher/TeacherPosts.vue'),
-        },
       ],
     },
     {
@@ -72,11 +67,6 @@ const router = createRouter({
           path: 'assignments',
           name: 'student-assignments',
           component: () => import('@/views/student/AssignmentQuery.vue'),
-        },
-        {
-          path: 'posts',
-          name: 'student-posts',
-          component: () => import('@/views/student/SocialPosts.vue'),
         },
         {
           path: 'profile',

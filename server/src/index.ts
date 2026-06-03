@@ -14,7 +14,6 @@ import studentRoutes from './routes/students.js'
 import scoreRoutes from './routes/scores.js'
 import assignmentRoutes from './routes/assignments.js'
 import pointRoutes from './routes/points.js'
-import postRoutes from './routes/posts.js'
 import chatRoutes from './routes/chat.js'
 import roleRoutes from './routes/roles.js'
 
@@ -51,7 +50,6 @@ app.use('/api/students', authMiddleware, studentRoutes)
 app.use('/api/scores', authMiddleware, scoreRoutes)
 app.use('/api/assignments', authMiddleware, assignmentRoutes)
 app.use('/api/points', authMiddleware, pointRoutes)
-app.use('/api/posts', authMiddleware, postRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/roles', authMiddleware, roleRoutes)
 

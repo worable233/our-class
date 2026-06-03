@@ -627,4 +627,9 @@ onMounted(async () => {
 .result-fade-leave-active { transition: all 400ms var(--ease-out); }
 .result-fade-enter-from,
 .result-fade-leave-to { opacity: 0; transform: translateY(10px) scale(0.95); }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .page-header .n-button { width: 100%; }
+}
 </style>

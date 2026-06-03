@@ -180,3 +180,9 @@ onMounted(load)
     </n-spin>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .settings-card { padding: 16px; }
+}
+</style>

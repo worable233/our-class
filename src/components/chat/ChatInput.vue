@@ -161,4 +161,9 @@ function onKeydown(e: KeyboardEvent) {
   margin-top: 6px;
   margin-bottom: 0;
 }
+
+@media (max-width: 768px) {
+  .input-section { padding: 0 8px 8px 8px; }
+  .input-wrapper { max-width: 100%; }
+}
 </style>

@@ -10,7 +10,7 @@ import ChatInput from '@/components/chat/ChatInput.vue'
 import { Star, BarChart3, FileText, MessageSquare } from '@lucide/vue'
 
 const props = withDefaults(defineProps<{ encodedId?: string; sidebarOpen?: boolean }>(), { sidebarOpen: true })
-const emit = defineEmits<{ login: [] }>()
+const emit = defineEmits<{ login: []; closeSidebar: [] }>()
 
 const router = useRouter()
 const route = useRoute()
@@ -301,6 +301,8 @@ async function sendMessage(content: string) {
   sending = false
 }
 
+defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() } })
+
 function stopStream() {
   cleanup()
   stoppedByUser.value = true
@@ -418,9 +420,16 @@ async function continueGeneration() {
 
 // ── scroll ───────────────────────────────────────────────────────────────
 const threadRef = ref<HTMLElement | null>(null)
+function isNearBottom(): boolean {
+  if (!threadRef.value) return true
+  const el = threadRef.value
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80
+}
 function scrollToBottom() {
   nextTick(() => {
-    if (threadRef.value) threadRef.value.scrollTop = threadRef.value.scrollHeight
+    if (threadRef.value && isNearBottom()) {
+      threadRef.value.scrollTop = threadRef.value.scrollHeight
+    }
   })
 }
 watch(() => messages.value.length, scrollToBottom)
@@ -428,13 +437,14 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 </script>
 
 <template>
-  <ChatLayout :sidebar-open="props.sidebarOpen">
+  <ChatLayout :sidebar-open="props.sidebarOpen" @close-sidebar="emit('closeSidebar')">
     <template #sidebar>
       <ChatSidebar
         ref="sidebarRef"
         :selected-id="currentConvId"
         @select="selectConversation"
         @new="newConversation"
+        @close-sidebar="emit('closeSidebar')"
         @login="emit('login')"
       />
     </template>
@@ -449,7 +459,6 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             <button class="welcome-btn" @click="welcomeAction('积分管理', '查询我的积分概况')"><Star :size="14" />积分管理</button>
             <button class="welcome-btn" @click="welcomeAction('成绩分析', '查询最近的成绩排名')"><BarChart3 :size="14" />成绩分析</button>
             <button class="welcome-btn" @click="welcomeAction('作业管理', '查询最近的作业')"><FileText :size="14" />作业管理</button>
-            <button class="welcome-btn" @click="welcomeAction('班级圈', '查看班级圈最新动态')"><MessageSquare :size="14" />班级圈</button>
           </div>
         </div>
 
@@ -484,7 +493,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .chat-scroll-inner {
   max-width: 768px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0;
 }
 
 .welcome {
@@ -533,12 +542,6 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   border-color: var(--accent);
   background: var(--accent-glow);
   color: var(--accent-text);
-}
-
-.msg-group + .msg-group {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--hairline);
 }
 
 .terminated-banner {

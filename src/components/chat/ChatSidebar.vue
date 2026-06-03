@@ -3,14 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
-import { Plus, MessageSquare, Trash2, Search, Sun, Moon } from '@lucide/vue'
+import { Plus, MessageSquare, Trash2, Search, Sun, Moon, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ selectedId?: number | null }>()
 const router = useRouter()
 const auth = useAuthStore()
-const emit = defineEmits<{ select: [id: number]; new: []; login: [] }>()
+const emit = defineEmits<{ select: [id: number]; new: []; login: []; closeSidebar: [] }>()
 const { isDark, toggle: toggleTheme } = useTheme()
 
 function handleUserClick() {
@@ -27,11 +27,40 @@ const conversations = ref<Conversation[]>([])
 const editingId = ref<number | null>(null)
 const editTitle = ref('')
 const searchQuery = ref('')
+const searchActive = ref(false)
+
+function toggleSearch() { searchActive.value = !searchActive.value; if (!searchActive.value) searchQuery.value = '' }
 const filtered = computed(() => {
   if (!searchQuery.value) return conversations.value
   const q = searchQuery.value.toLowerCase()
   return conversations.value.filter(c => c.title.toLowerCase().includes(q))
 })
+
+function dateLabel(d: string): string {
+  const conv = new Date(d)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today.getTime() - 86400000)
+  const convDay = new Date(conv.getFullYear(), conv.getMonth(), conv.getDate())
+  const days = ['周日','周一','周二','周三','周四','周五','周六']
+  if (convDay.getTime() === today.getTime()) return '今天'
+  if (convDay.getTime() === yesterday.getTime()) return '昨天'
+  if (convDay.getTime() > today.getTime() - 7 * 86400000) return days[convDay.getDay()]
+  return `${convDay.getMonth() + 1}月${convDay.getDate()}日`
+}
+
+const grouped = computed(() => {
+  const list = searchQuery.value ? filtered.value : conversations.value
+  const groups: { label: string; items: Conversation[] }[] = []
+  let last = ''
+  for (const c of list) {
+    const l = dateLabel(c.updated_at)
+    if (l !== last) { groups.push({ label: l, items: [] }); last = l }
+    groups[groups.length - 1].items.push(c)
+  }
+  return groups
+})
+
 const loading = ref(true)
 
 async function load() {
@@ -45,6 +74,7 @@ async function load() {
 function select(id: number) {
   if (props.selectedId === id) return
   emit('select', id)
+  if (window.innerWidth <= 768) emit('closeSidebar')
   router.push('/chat/' + btoa(String(id)))
 }
 
@@ -70,7 +100,7 @@ async function remove(id: number) {
 }
 
 onMounted(load)
-defineExpose({ load })
+defineExpose({ load, toggleSearch })
 </script>
 
 <template>
@@ -83,32 +113,40 @@ defineExpose({ load })
       </div>
     </div>
 
-    <button class="new-btn" @click="emit('new')">
+    <div v-if="searchActive" class="search-bar">
+      <Search :size="14" class="search-bar-icon" />
+      <input ref="searchInputRef" v-model="searchQuery" placeholder="搜索对话..." class="search-bar-input" />
+      <button class="search-bar-close" @click="toggleSearch()" title="关闭搜索">
+        <X :size="14" />
+      </button>
+    </div>
+    <button v-else class="new-btn" @click="emit('new')">
       <Plus :size="15" stroke-width="2.5" /> 新对话
     </button>
 
-    <div class="section-label" v-if="!loading">对话列表</div>
-
     <div class="list">
-      <div
-        v-for="c in filtered"
-        :key="c.id"
-        class="item"
-        :class="{ active: props.selectedId === c.id }"
-        @click="select(c.id)"
-      >
-        <input
-          v-if="editingId === c.id"
-          v-model="editTitle"
-          class="edit-input"
-          @click.stop
-          @keydown.enter="saveEdit(c.id)"
-          @keydown.escape="cancelEdit"
-          @blur="saveEdit(c.id)"
-        />
-        <span v-else class="item-text" @dblclick.stop="startEdit(c)">{{ c.title }}</span>
-        <span class="item-del" @click.stop="remove(c.id)"><Trash2 :size="13" /></span>
-      </div>
+      <template v-for="group in grouped" :key="group.label">
+        <div class="section-label">{{ group.label }}</div>
+        <div
+          v-for="c in group.items"
+          :key="c.id"
+          class="item"
+          :class="{ active: props.selectedId === c.id }"
+          @click="select(c.id)"
+        >
+          <input
+            v-if="editingId === c.id"
+            v-model="editTitle"
+            class="edit-input"
+            @click.stop
+            @keydown.enter="saveEdit(c.id)"
+            @keydown.escape="cancelEdit"
+            @blur="saveEdit(c.id)"
+          />
+          <span v-else class="item-text" @dblclick.stop="startEdit(c)">{{ c.title }}</span>
+          <span class="item-del" @click.stop="remove(c.id)"><Trash2 :size="13" /></span>
+        </div>
+      </template>
       <div v-if="!loading && !conversations.length" class="empty">暂无对话</div>
     </div>
 
@@ -172,22 +210,54 @@ defineExpose({ load })
 }
 
 /* ── New chat button ────────────────── */
+.search-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 12px 12px;
+  padding: 0 4px 0 14px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--ground);
+  border: 1px solid var(--hairline);
+  transition: border-color .15s, box-shadow .15s;
+}
+.search-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.search-bar-icon { flex-shrink: 0; color: var(--text-muted); }
+.search-bar-input {
+  flex: 1; min-width: 0; height: 100%;
+  border: none; outline: none; background: transparent;
+  font-size: 13px; color: var(--text-primary);
+  font-family: inherit;
+}
+.search-bar-input::placeholder { color: var(--text-muted); }
+.search-bar-close {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.search-bar-close:hover { background: var(--surface-2); color: var(--text-primary); }
+
 .new-btn {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  margin: 0 16px 16px;
-  padding: 8px 0;
-  border-radius: 6px;
-  font-size: 13px; font-weight: 600;
-  color: #fff;
-  background: var(--accent);
-  border: none;
+  margin: 8px 12px 12px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 14px; font-weight: 500;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
   cursor: pointer;
-  transition: all .12s;
+  transition: background .15s;
   font-family: inherit;
-  user-select: none;
 }
-.new-btn:hover { filter: brightness(1.12); }
-.new-btn:active { filter: brightness(0.88); transform: scale(0.97); }
+.new-btn:hover { background: var(--surface-3); }
 
 /* ── Section label ──────────────────── */
 .section-label {
@@ -195,7 +265,8 @@ defineExpose({ load })
   font-size: 10px; font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 16px 8px;
+  padding: 8px 16px 6px;
+  line-height: 1;
   user-select: none;
   position: sticky; top: 0;
   background: var(--surface-1);

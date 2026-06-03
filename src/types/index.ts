@@ -81,30 +81,6 @@ export interface PointSummary {
   total_points: number
 }
 
-export interface Post {
-  id: number
-  title: string
-  content: string
-  author_id: number
-  author_name?: string
-  author_role?: string
-  tags: string
-  likes: number
-  comment_count?: number
-  created_at: string
-  comments?: Comment[]
-}
-
-export interface Comment {
-  id: number
-  post_id: number
-  author_id: number
-  author_name?: string
-  author_role?: string
-  content: string
-  created_at: string
-}
-
 export interface PermissionDef {
   code: string
   label: string
