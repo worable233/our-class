@@ -170,53 +170,43 @@ function go(path: string) {
   display: flex;
   align-items: center;
   height: 40px;
-  padding: 4px 12px;
+  padding: 4px 8px;
   border-radius: 6px;
+  gap: 0;
+  transition: background .2s;
 }
+.sidebar-logo-inner :deep(svg) { display: block; margin-top: 2px; }
 
 .sidebar-logo.collapsed .sidebar-logo-inner {
   padding: 4px;
 }
 
-/* ── Logo text swap animation ── */
-
 .logo-text-area {
-  height: 22px;
-  overflow: hidden;
-  margin-left: 10px;
+  height: 22px; overflow: hidden; margin-left: 10px;
 }
 
 .text-swap-item {
   grid-column: 1; grid-row: 1;
-  font-family: var(--font-orbix);
-  white-space: nowrap;
-  opacity: 0;
-  transform: translateY(8px);
+  font-family: var(--font-orbix); white-space: nowrap;
+  opacity: 0; transform: translateY(8px);
   transition: opacity .5s cubic-bezier(.4,0,.2,1),
               transform .5s cubic-bezier(.4,0,.2,1);
 }
 
 .text-swap-item.active {
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--accent);
-  letter-spacing: -0.03em;
-  opacity: 1;
-  transform: translateY(0);
+  font-weight: 600; font-size: 20px;
+  color: var(--accent); letter-spacing: -0.03em;
+  opacity: 1; transform: translateY(0);
 }
 
 .sidebar-logo:not(.collapsed):hover .text-swap-item.active {
-  opacity: 0;
-  transform: translateY(-8px);
+  opacity: 0; transform: translateY(-8px);
 }
 
 .sidebar-logo:not(.collapsed):hover .text-swap-item:not(.active) {
-  font-weight: 500;
-  font-size: 15px;
-  color: var(--accent-text);
-  letter-spacing: -0.01em;
-  opacity: 1;
-  transform: translateY(0);
+  font-weight: 500; font-size: 15px;
+  color: var(--accent-text); letter-spacing: -0.01em;
+  opacity: 1; transform: translateY(0);
 }
 
 /* ── Nav ──────────────────────────────── */

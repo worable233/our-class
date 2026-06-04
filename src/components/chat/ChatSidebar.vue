@@ -208,10 +208,7 @@ defineExpose({ load, toggleSearch })
   transition: background 0.2s;
   cursor: pointer;
 }
-.sidebar-logo :deep(svg) {
-  display: block;
-  margin-top: -2px;
-}
+.sidebar-logo :deep(svg) { display: block; margin-top: 2px; }
 .sidebar-logo:hover { background: transparent; }
 
 .sidebar-logo-text {
@@ -223,7 +220,7 @@ defineExpose({ load, toggleSearch })
   margin-left: 4px;
 }
 
-/* ── New chat button ────────────────── */
+/* ── Search / New button ───────────── */
 .search-bar {
   display: flex; align-items: center; gap: 8px;
   margin: 8px 12px 12px;
