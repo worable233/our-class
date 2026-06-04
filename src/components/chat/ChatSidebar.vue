@@ -42,7 +42,7 @@ const filtered = computed(() => {
 })
 
 function dateLabel(d: string): string {
-  const conv = new Date(d)
+  const conv = new Date(d.replace(' ', 'T') + 'Z')
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterday = new Date(today.getTime() - 86400000)

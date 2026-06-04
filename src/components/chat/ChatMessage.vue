@@ -17,7 +17,7 @@ import { marked } from 'marked'
 
 marked.use({ breaks: true, gfm: true })
 
-const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string }>()
+const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string; _morphing?: boolean }>()
 const toolExpanded = ref(false)
 const copied = ref(false)
 const isUser = computed(() => props.role === 'user')
@@ -114,7 +114,7 @@ function handleTableExport(e: MouseEvent) {
   </div>
 
   <!-- Rich card -->
-  <div v-else-if="isCard && card" class="msg card-msg">
+  <div v-else-if="isCard && card" class="msg card-msg" :class="{ 'card-morphing': _morphing }">
     <ToolCard :card="card" />
   </div>
 
@@ -232,6 +232,7 @@ function handleTableExport(e: MouseEvent) {
   padding: 0;
 }
 .card-msg { max-width: 600px; }
+.card-morphing { opacity: 0; }
 
 .body { min-width: 0; max-width: 90%; position: relative; }
 

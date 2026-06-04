@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import RandomPickCard from './RandomPickCard.vue'
+
 const props = defineProps<{ card: Record<string, unknown> }>()
 </script>
 
 <template>
-  <div class="card">
+  <!-- Random pick: render directly without wrapper -->
+  <RandomPickCard v-if="card.type === 'random_pick'" :card="(card as any)" />
+
+  <!-- All other card types: with wrapper -->
+  <div v-else class="card">
     <div class="card-head">
       <h4 class="card-title">{{ card.title }}</h4>
       <span v-if="card.subtitle" class="card-sub">{{ card.subtitle }}</span>

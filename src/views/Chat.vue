@@ -9,6 +9,7 @@ import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import { Star, BarChart3, FileText, MessageSquare } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
+import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
 const { setResults: setSearchResults } = useSearchPanel()
 
@@ -56,6 +57,19 @@ const streaming = ref(false)
 const hasConfig = ref(false)
 const terminated = ref(false)
 const stoppedByUser = ref(false)
+
+// Pending random pick modal — shown during live tool execution, not persisted
+interface PendingPickCard {
+  type: 'random_pick'
+  title: string
+  subtitle: string
+  candidates: string[]
+  result: string[]
+  count: number
+  note?: string | null
+}
+const pendingPickCard = ref<PendingPickCard | null>(null)
+
 let abortCtrl: AbortController | null = null
 let streamTimer = 0
 let loadSeq = 0   // prevent stale async loads
@@ -96,16 +110,38 @@ onMounted(async () => {
       currentConvId.value = id
       function mapMsg(m: any) {
         if (m.role === 'tool') {
-          // Try to parse stored JSON { label, result }, fall back to plain string
-          try { const p = JSON.parse(m.content); return { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result } }
+          try {
+            const p = JSON.parse(m.content)
+            const result: any = { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result }
+            if (p.card) (result as any).card = p.card
+            return result
+          }
           catch { return { role: m.role, content: m.content, toolStatus: 'done' as const } }
+        }
+        // Persisted card messages (saved alongside tool messages)
+        if (m.role === 'card') {
+          try {
+            const p = JSON.parse(m.content)
+            return { role: 'card', card: p }
+          } catch { return { role: m.role, content: m.content } }
         }
         return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
       }
       if (res?.messages) {
-        messages.value = res.messages.map(mapMsg)
-        terminated.value = res.messages.length >= 100
-        loadSearchResults(res.messages)
+        const raw = res.messages
+        const flat: any[] = []
+        for (const m of raw) {
+          const msg = mapMsg(m)
+          flat.push(msg)
+          // If a tool message has embedded card data, emit a card message after the tool pill
+          if (m.role === 'tool' && msg.card) {
+            flat.push({ role: 'card', card: msg.card })
+            delete msg.card
+          }
+        }
+        messages.value = flat
+        terminated.value = raw.length >= 100
+        loadSearchResults(raw)
       }
     }
   } catch {}
@@ -113,6 +149,7 @@ onMounted(async () => {
 
 async function selectConversation(id: number) {
   cleanup()
+  pendingPickCard.value = null
   currentConvId.value = id
   messages.value = []
   terminated.value = false
@@ -124,21 +161,43 @@ async function selectConversation(id: number) {
     if (loadSeq !== seq) return  // stale
     function mapMsg(m: any) {
       if (m.role === 'tool') {
-        try { const p = JSON.parse(m.content); return { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result } }
+        try {
+          const p = JSON.parse(m.content)
+          const result: any = { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result }
+          if (p.card) (result as any).card = p.card
+          return result
+        }
         catch { return { role: m.role, content: m.content, toolStatus: 'done' as const } }
+      }
+      if (m.role === 'card') {
+        try {
+          const p = JSON.parse(m.content)
+          return { role: 'card', card: p }
+        } catch { return { role: m.role, content: m.content } }
       }
       return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
     }
     if (res?.messages) {
-      messages.value = res.messages.map(mapMsg)
-      terminated.value = res.messages.length >= 100
-      loadSearchResults(res.messages)
+      const raw = res.messages
+      const flat: any[] = []
+      for (const m of raw) {
+        const msg = mapMsg(m)
+        flat.push(msg)
+        if (m.role === 'tool' && msg.card) {
+          flat.push({ role: 'card', card: msg.card })
+          delete msg.card
+        }
+      }
+      messages.value = flat
+      terminated.value = raw.length >= 100
+      loadSearchResults(raw)
     }
   } catch {}
 }
 
 function newConversation() {
   cleanup()
+  pendingPickCard.value = null
   currentConvId.value = null
   messages.value = []
   terminated.value = false
@@ -154,10 +213,79 @@ function welcomeAction(_label: string, prompt: string) {
   sendMessage(prompt)
 }
 
+// ── Random pick modal callbacks ──
+function onPickModalSkip() {
+  if (!pendingPickCard.value) return
+  const card = pendingPickCard.value
+  messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card } as any)
+  pendingPickCard.value = null
+}
+
+function onPickModalDone(_cardData: PendingPickCard) {
+  if (!pendingPickCard.value) return
+  const card = pendingPickCard.value
+  const cardIndex = messages.value.length - 1
+
+  // Clone modal results NOW while modal is still in DOM
+  const allModalResults = document.querySelectorAll('.rp-modal-results')
+  const modalResults = allModalResults[allModalResults.length - 1] as HTMLElement | null
+  const sourceRect = modalResults?.getBoundingClientRect() ?? null
+
+  // Create flying clone BEFORE hiding modal
+  let clone: HTMLElement | null = null
+  if (sourceRect && modalResults) {
+    clone = modalResults.cloneNode(true) as HTMLElement
+    clone.style.cssText = `position:fixed;left:${sourceRect.left}px;top:${sourceRect.top}px;width:${sourceRect.width}px;z-index:1001;pointer-events:none;`
+    document.body.appendChild(clone)
+  }
+
+  // Insert compact card inline (hidden initially)
+  messages.value.splice(cardIndex, 0, { role: 'card' as any, card, _morphing: true } as any)
+
+  // Hide modal AFTER cloning
+  pendingPickCard.value = null
+
+  nextTick(() => {
+    if (!clone || !sourceRect) {
+      messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
+      if (clone) clone.remove()
+      return
+    }
+
+    const cardMsgs = document.querySelectorAll('.card-msg')
+    const lastCard = cardMsgs[cardMsgs.length - 1]
+    const targetEl = lastCard?.querySelector('.rp-results') as HTMLElement | null
+    const targetRect = targetEl?.getBoundingClientRect() ?? null
+
+    if (!targetRect) {
+      messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
+      clone.remove()
+      return
+    }
+
+    const dx = targetRect.left - sourceRect.left
+    const dy = targetRect.top - sourceRect.top
+    const scaleX = targetRect.width / (sourceRect.width || 1)
+
+    clone.animate([
+      { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
+      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, 1)`, opacity: 0.5 }
+    ], {
+      duration: 400,
+      easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+      fill: 'forwards'
+    }).onfinish = () => {
+      clone!.remove()
+      messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
+    }
+  })
+}
+
 let sending = false
 
 async function sendMessage(content: string) {
   if (streaming.value || sending || terminated.value) return
+  pendingPickCard.value = null  // Dismiss any pending pick modal
   sending = true
 
   // Lazy create conversation on first message
@@ -276,7 +404,12 @@ async function sendMessage(content: string) {
             }
           } else if (data.type === 'tool_card') {
             if (currentConvId.value === convId) {
-              messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+              if (data.card?.type === 'random_pick') {
+                // Show modal instead of inline card during live streaming
+                pendingPickCard.value = data.card as PendingPickCard
+              } else {
+                messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+              }
             }
           } else if (data.type === 'search_results') {
             if (currentConvId.value === convId && Array.isArray(data.results)) {
@@ -409,7 +542,11 @@ async function continueGeneration() {
               }
             }
           } else if (data.type === 'tool_card') {
-            messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+            if (data.card?.type === 'random_pick') {
+              pendingPickCard.value = data.card as PendingPickCard
+            } else {
+              messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+            }
           } else if (data.type === 'error') {
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
@@ -499,6 +636,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             :tool-status="m.toolStatus"
             :tool-result="m.toolResult"
             :card="m.card"
+            :_morphing="(m as any)._morphing"
           />
         </div>
         </div>
@@ -515,6 +653,15 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
       </div>
     </template>
   </ChatLayout>
+
+  <!-- Random pick modal overlay (teleported to body) -->
+  <RandomPickModal
+    v-if="pendingPickCard"
+    :card="pendingPickCard"
+    :visible="!!pendingPickCard"
+    @skip="onPickModalSkip"
+    @done="onPickModalDone"
+  />
 </template>
 
 <style>
