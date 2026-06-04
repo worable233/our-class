@@ -23,8 +23,7 @@ export function useSearchPanel() {
     results.value = data
     loadFavicons()
   }
-  function open(data?: { title: string; url: string; snippet: string }[]) {
-    if (data) { results.value = data; loadFavicons() }
+  function open() {
     show.value = true
   }
   function close() { show.value = false }

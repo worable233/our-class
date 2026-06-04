@@ -8,9 +8,10 @@ function safeHost(url: string): string {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="show && results.length" class="sp-overlay" @click="close()" />
-    <div class="sp-panel" :class="{ open: show && results.length }">
+  <!-- Overlay (visible only on mobile when open) -->
+  <div class="sp-overlay" :class="{ open: show && results.length }" @click="close()" />
+  <div class="sp-panel" :class="{ open: show && results.length }">
+    <div class="sp-panel-inner">
       <div class="sp-header">
         <h3 class="sp-title">搜索结果</h3>
         <span class="sp-count">{{ results.length }} 条</span>
@@ -30,22 +31,54 @@ function safeHost(url: string): string {
         </a>
       </div>
     </div>
-  </Teleport>
+  </div>
 </template>
 
 <style scoped>
-.sp-overlay { display: none; }
-
-.sp-panel {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 200;
-  width: 420px; max-width: 90vw;
-  background: var(--surface-1);
-  border-left: 1px solid var(--hairline);
-  transform: translateX(100%);
-  transition: transform .3s cubic-bezier(0,0,0,1);
-  display: flex; flex-direction: column;
+/* ── Overlay: backdrop blur + fade (mobile only) ── */
+@media (min-width: 769px) {
+  .sp-overlay { display: none; }
 }
-.sp-panel.open { transform: translateX(0); }
+@media (max-width: 768px) {
+  .sp-overlay {
+    position: fixed; inset: 0; z-index: 199;
+    background: rgba(0,0,0,.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .28s cubic-bezier(0,0,0,1);
+  }
+  .sp-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Desktop: inline sidebar with slide animation */
+.sp-panel {
+  width: 0;
+  flex-shrink: 0;
+  background: var(--surface-1);
+  border-left: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: width .28s cubic-bezier(0,0,0,1);
+}
+.sp-panel.open {
+  width: 340px;
+  border-left: 1px solid var(--hairline);
+  transition: width .28s cubic-bezier(0,0,0,1),
+              border-left .28s cubic-bezier(0,0,0,1);
+}
+.sp-panel-inner {
+  width: 340px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
 
 .sp-header {
   display: flex; align-items: center; gap: 8px;
@@ -63,14 +96,15 @@ function safeHost(url: string): string {
 }
 .sp-close:hover { background: var(--surface-2); color: var(--text-primary); }
 
-.sp-list { flex: 1; overflow-y: auto; padding: 4px 16px 24px; }
+.sp-list { flex: 1; overflow-y: auto; padding: 2px; }
 
 .sp-item {
-  display: block; padding: 16px 8px; text-decoration: none;
-  border-bottom: 1px solid var(--hairline); transition: background .12s;
-  border-radius: 8px; margin-bottom: 2px;
+  display: block; padding: 12px 8px; text-decoration: none;
+  border-radius: 8px;
+  margin-bottom: 2px;
+  transition: background .12s;
 }
-.sp-item:last-child { border-bottom: none; }
+.sp-item:last-child { margin-bottom: 0; }
 .sp-item:hover { background: var(--surface-2); }
 
 .sp-item-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
@@ -96,7 +130,17 @@ function safeHost(url: string): string {
 }
 
 @media (max-width: 768px) {
-  .sp-overlay { display: block; position: fixed; inset: 0; z-index: 199; background: rgba(0,0,0,.3); }
-  .sp-panel { width: 88vw; }
+  .sp-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 200;
+    width: 88vw !important;
+    overflow: visible !important;
+    border-left: none !important;
+    transform: translateX(100%);
+    transition: transform .3s cubic-bezier(0,0,0,1);
+    /* Prevent desktop width transition from interfering */
+    transition-property: transform;
+  }
+  .sp-panel.open { transform: translateX(0); border-left: 1px solid var(--hairline) !important; }
+  .sp-panel-inner { width: 100%; }
 }
 </style>

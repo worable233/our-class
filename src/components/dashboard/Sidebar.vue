@@ -53,7 +53,7 @@ function go(path: string) {
     <!-- Logo -->
     <div class="sidebar-logo" :class="{ collapsed }" @click="router.push('/')">
       <div class="sidebar-logo-inner">
-        <Logo :size="32" :theme="isDark ? 'dark' : 'light'" class="shrink-0" />
+        <Logo :size="28" :theme="isDark ? 'dark' : 'light'" class="shrink-0" />
         <div v-show="!collapsed" class="logo-text-area grid">
           <span class="text-swap-item active">OurClass</span>
           <span class="text-swap-item">返回首页</span>
@@ -172,14 +172,13 @@ function go(path: string) {
   height: 40px;
   padding: 4px 12px;
   border-radius: 6px;
-  transition: background 0.2s var(--ease-out);
 }
 
 .sidebar-logo.collapsed .sidebar-logo-inner {
   padding: 4px;
 }
 
-/* ── Logo text swap animation ──────────── */
+/* ── Logo text swap animation ── */
 
 .logo-text-area {
   height: 22px;
@@ -189,7 +188,7 @@ function go(path: string) {
 
 .text-swap-item {
   grid-column: 1; grid-row: 1;
-  font-family: 'Inter Tight', sans-serif;
+  font-family: var(--font-orbix);
   white-space: nowrap;
   opacity: 0;
   transform: translateY(8px);
@@ -198,10 +197,10 @@ function go(path: string) {
 }
 
 .text-swap-item.active {
-  font-weight: 700;
-  font-size: 17px;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  font-size: 20px;
+  color: var(--accent);
+  letter-spacing: -0.03em;
   opacity: 1;
   transform: translateY(0);
 }
@@ -212,7 +211,7 @@ function go(path: string) {
 }
 
 .sidebar-logo:not(.collapsed):hover .text-swap-item:not(.active) {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 15px;
   color: var(--accent-text);
   letter-spacing: -0.01em;

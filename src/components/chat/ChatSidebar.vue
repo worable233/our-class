@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
-import { Plus, MessageSquare, Trash2, Search, Sun, Moon, X } from '@lucide/vue'
+import { Plus, MessageSquare, Trash2, Search, Sun, Moon, LogOut, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -19,6 +19,11 @@ function handleUserClick() {
   } else {
     emit('login')
   }
+}
+
+function handleLogout() {
+  auth.logout()
+  router.push('/')
 }
 
 interface Conversation { id: number; title: string; model: string; updated_at: string }
@@ -167,6 +172,9 @@ defineExpose({ load, toggleSearch })
           </template>
         </div>
       </div>
+      <button class="theme-btn" title="退出登录" @click="handleLogout">
+        <LogOut :size="15" />
+      </button>
       <button class="theme-btn" @click="toggleTheme" :title="isDark ? '浅色模式' : '深色模式'">
         <Sun v-if="isDark" :size="15" />
         <Moon v-else :size="15" />
@@ -187,26 +195,32 @@ defineExpose({ load, toggleSearch })
 
 /* ── Logo ─────────────────────────────── */
 .sidebar-head {
-  padding: 14px 16px;
+  padding: 14px 16px 14px 6px;
   overflow: hidden;
 }
 
 .sidebar-logo {
   display: flex; align-items: center;
+  gap: 0;
   height: 40px;
   padding: 4px 12px;
   border-radius: 6px;
   transition: background 0.2s;
   cursor: pointer;
 }
+.sidebar-logo :deep(svg) {
+  display: block;
+  margin-top: -2px;
+}
 .sidebar-logo:hover { background: transparent; }
 
 .sidebar-logo-text {
-  font-family: 'Inter Tight', sans-serif;
-  font-weight: 700; font-size: 15px;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  margin-left: 10px;
+  font-family: var(--font-orbix);
+  font-weight: 600; font-size: 18px;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.03em;
+  margin-left: 4px;
 }
 
 /* ── New chat button ────────────────── */

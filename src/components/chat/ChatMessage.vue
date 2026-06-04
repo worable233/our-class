@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Search, Check, ChevronDown, Copy, CheckCheck } from '@lucide/vue'
+import { Loader2, Check, ChevronDown, Copy, CheckCheck } from '@lucide/vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
+import * as XLSX from 'xlsx'
 const { open: openSearchPanel, results: searchPanelResults, favicons: spFavicons } = useSearchPanel()
 
 function showSearch() {
-  openSearchPanel(searchPanelResults.value)
+  openSearchPanel()
 }
 
 function safeHost2(url: string): string {
@@ -16,7 +17,7 @@ import { marked } from 'marked'
 
 marked.use({ breaks: true, gfm: true })
 
-const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string }>()
+const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string }>()
 const toolExpanded = ref(false)
 const copied = ref(false)
 const isUser = computed(() => props.role === 'user')
@@ -80,14 +81,17 @@ function handleTableExport(e: MouseEvent) {
   if (!wrapper) return
   const table = wrapper.querySelector('table')
   if (!table) return
-  // Export as Excel HTML format
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>${table.outerHTML}</body></html>`
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = 'table.xls'
-  a.click()
-  URL.revokeObjectURL(a.href)
+  // Export as .xlsx
+  const data: string[][] = []
+  const rows = table.querySelectorAll('tr')
+  for (const row of rows) {
+    const cells = row.querySelectorAll('th, td')
+    data.push(Array.from(cells).map(c => c.textContent?.trim() || ''))
+  }
+  const ws = XLSX.utils.aoa_to_sheet(data)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  XLSX.writeFile(wb, 'exported-table.xlsx')
 }
 </script>
 
@@ -95,7 +99,7 @@ function handleTableExport(e: MouseEvent) {
   <!-- Tool message — inline pill -->
   <div v-if="isTool" class="tool-line">
     <div class="tool-pill" :class="{ running: toolStatus === 'running' }">
-      <Search v-if="toolStatus === 'running'" :size="12" class="tp-icon spin" />
+      <Loader2 v-if="toolStatus === 'running'" :size="12" class="tp-icon spin" />
       <Check v-else :size="12" class="tp-icon" />
       <span class="tp-text">{{ content }}</span>
       <span v-if="isSearchTool && spFavicons.some(f => f)" class="tp-icons">
@@ -123,7 +127,7 @@ function handleTableExport(e: MouseEvent) {
         <div v-else class="text text-user" v-html="render(content)" />
       </div>
     </div>
-    <div v-if="!isUser && content" class="copy-area">
+    <div v-if="!isUser && content && !streaming && !noCopy" class="copy-area">
       <button class="copy-btn" :class="{ done: copied }" @click.stop="doCopy">
         <Copy v-if="!copied" :size="14" />
         <CheckCheck v-else :size="14" />
@@ -169,7 +173,13 @@ function handleTableExport(e: MouseEvent) {
   font-size: 11.5px;
   color: var(--text-muted);
   background: transparent;
-  max-width: 70%;
+  max-width: min(400px, 60%);
+}
+.tp-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 .tool-pill.running {
   color: var(--text-muted);
@@ -177,11 +187,6 @@ function handleTableExport(e: MouseEvent) {
 .tp-icon { flex-shrink: 0; display: flex; color: var(--accent-text); }
 .tp-icon.spin { animation: tpSpin 1s linear infinite; }
 @keyframes tpSpin { to { transform: rotate(360deg); } }
-.tp-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tp-chevron {
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;

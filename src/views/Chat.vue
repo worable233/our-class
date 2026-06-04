@@ -473,6 +473,8 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
       />
     </template>
     <template #main>
+      <div class="chat-main-area">
+      <div class="chat-thread-area">
       <div ref="threadRef" class="flex-1 overflow-y-auto" style="background: var(--ground)" >
         <div class="chat-scroll-inner">
         <!-- Welcome empty state -->
@@ -493,6 +495,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             :role="m.role"
             :content="m.content"
             :streaming="streaming && m.role === 'assistant' && !group.messages.slice(i + 1).some(x => x.role === 'assistant')"
+            :no-copy="stoppedByUser"
             :tool-status="m.toolStatus"
             :tool-result="m.toolResult"
             :card="m.card"
@@ -507,14 +510,28 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
         </div>
       </div>
       <ChatInput :loading="streaming" :disabled="terminated" @send="sendMessage" @stop="stopStream" @login="emit('login')" />
+        </div>
+        <SearchPanel class="search-sidebar" />
+      </div>
     </template>
   </ChatLayout>
-  <SearchPanel />
 </template>
 
 <style>
 /* unscoped — TransitionGroup classes are applied to child component roots */
 
+.chat-main-area {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.chat-thread-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
 .chat-scroll-inner {
   max-width: 768px;
   margin: 0 auto;
@@ -607,3 +624,5 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 }
 
 </style>
+
+
