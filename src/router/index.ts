@@ -19,7 +19,12 @@ const router = createRouter({
       component: () => import('@/layouts/DashboardLayout.vue'),
       meta: { role: 'teacher' },
       children: [
-        { path: '', redirect: '/teacher/points' },
+        { path: '', redirect: '/teacher/dashboard' },
+        {
+          path: 'dashboard',
+          name: 'teacher-dashboard',
+          component: () => import('@/views/teacher/DashboardHome.vue'),
+        },
         {
           path: 'points',
           name: 'teacher-points',
@@ -44,6 +49,16 @@ const router = createRouter({
           path: 'settings',
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),
+        },
+        {
+          path: 'logs',
+          name: 'teacher-logs',
+          component: () => import('@/views/teacher/AuditLogs.vue'),
+        },
+        {
+          path: 'traffic',
+          name: 'teacher-traffic',
+          component: () => import('@/views/teacher/TrafficMonitor.vue'),
         },
       ],
     },

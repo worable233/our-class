@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, provide } from 'vue'
 import { NLayout } from 'naive-ui'
 import Sidebar from '@/components/dashboard/Sidebar.vue'
 import Header from '@/components/dashboard/Header.vue'
@@ -9,7 +9,14 @@ const isMobile = ref(window.innerWidth < MOBILE_BP)
 window.addEventListener('resize', () => { isMobile.value = window.innerWidth < MOBILE_BP })
 
 const sidebarOpen = ref(!isMobile.value)
-const sidebarCollapsed = computed(() => !sidebarOpen.value)
+const sidebarCollapsed = computed({
+  get: () => !sidebarOpen.value,
+  set: (val) => { sidebarOpen.value = !val },
+})
+
+const refreshKey = ref(0)
+function refreshContent() { refreshKey.value++ }
+provide('refreshContent', refreshContent)
 
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function closeSidebar() { sidebarOpen.value = false }
@@ -31,7 +38,7 @@ function closeSidebar() { sidebarOpen.value = false }
     >
       <Header @toggle-sidebar="toggleSidebar" :is-mobile="isMobile" />
       <main style="flex: 1; padding: 24px; overflow-y: auto; background: var(--ground)">
-        <router-view />
+        <router-view :key="refreshKey" />
       </main>
     </div>
   </n-layout>

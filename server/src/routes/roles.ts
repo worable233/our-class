@@ -4,6 +4,7 @@ import { getDb } from '../db/init.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError } from '../lib/errors.js'
+import { writeAuditLog } from './audit.js'
 
 const router = Router()
 
@@ -25,6 +26,7 @@ const ALL_PERMISSIONS = [
   { code: 'chat.access', label: '使用AI助手', category: 'AI助手' },
   { code: 'chat.config', label: '配置API Key', category: 'AI助手' },
   { code: 'roles.manage', label: '管理权限组', category: '系统设置' },
+  { code: 'audit_logs.read', label: '查看操作日志', category: '系统设置' },
   { code: 'classes.read', label: '查看班级列表', category: '系统设置' },
 ]
 
@@ -108,6 +110,7 @@ router.post('/groups', validate(createGroupSchema), (req: Request, res: Response
   }
 
   const group = db.prepare('SELECT * FROM permission_groups WHERE id = ?').get(groupId)
+  writeAuditLog(req.user!.id, req.user!.display_name, 'create_role', 'role', groupId as number, { name, permissions })
   ok(res, { ...(group as any), permissions })
 })
 
@@ -146,6 +149,10 @@ router.put('/groups/:id', validate(updateGroupSchema), (req: Request, res: Respo
     'SELECT permission_code FROM group_permissions WHERE group_id = ?'
   ).all(id) as { permission_code: string }[]
 
+  writeAuditLog(req.user!.id, req.user!.display_name, 'update_role', 'role', id, {
+    name: (updated as any).name,
+    permissions: perms.map(p => p.permission_code),
+  })
   ok(res, { ...(updated as any), permissions: perms.map(p => p.permission_code) })
 })
 
@@ -165,6 +172,7 @@ router.delete('/groups/:id', (req: Request, res: Response) => {
   // Delete group (cascades to group_permissions)
   db.prepare('DELETE FROM permission_groups WHERE id = ?').run(id)
 
+  writeAuditLog(req.user!.id, req.user!.display_name, 'delete_role', 'role', id, { name: (existing as any).name })
   ok(res, { success: true })
 })
 

@@ -14,6 +14,7 @@ export function validate(schema: ZodSchema, source: 'body' | 'query' | 'params' 
       return
     }
     if (source === 'body') req.body = result.data
+    else (req as any)[source] = result.data
     next()
   }
 }

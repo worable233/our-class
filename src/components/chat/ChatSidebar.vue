@@ -218,6 +218,7 @@ defineExpose({ load, toggleSearch })
   color: var(--accent);
   letter-spacing: -0.03em;
   margin-left: 4px;
+  margin-top: 2px;
 }
 
 /* ── Search / New button ───────────── */

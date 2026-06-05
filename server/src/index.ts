@@ -16,6 +16,8 @@ import assignmentRoutes from './routes/assignments.js'
 import pointRoutes from './routes/points.js'
 import chatRoutes from './routes/chat.js'
 import roleRoutes from './routes/roles.js'
+import auditRoutes from './routes/audit.js'
+import analyticsRoutes, { trackPageView } from './routes/analytics.js'
 
 const app = express()
 
@@ -39,6 +41,12 @@ app.use(requestLogger)
 // ── Body parsing ──────────────────────────────────────────────────────
 app.use(express.json())
 
+// ── Analytics tracking (skip static assets) ───────────────────────────
+app.use('/api', (_req, _res, next) => {
+  try { trackPageView(_req.path) } catch {}
+  next()
+})
+
 // ── Routes ────────────────────────────────────────────────────────────
 
 // Public routes
@@ -52,6 +60,8 @@ app.use('/api/assignments', authMiddleware, assignmentRoutes)
 app.use('/api/points', authMiddleware, pointRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/roles', authMiddleware, roleRoutes)
+app.use('/api/audit', auditRoutes)
+app.use('/api/analytics', analyticsRoutes)
 
 // ── Error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler)
@@ -62,3 +72,5 @@ getDb()
 app.listen(config.port, () => {
   console.log(`🚀 OurClass API running at http://localhost:${config.port}`)
 })
+
+

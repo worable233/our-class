@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { NLayoutHeader, NButton, NText, NTag } from 'naive-ui'
-import { Sun, Moon, Menu } from '@lucide/vue'
+import { Sun, Moon, Menu, RefreshCw } from '@lucide/vue'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ isMobile?: boolean }>()
@@ -12,13 +12,19 @@ const emit = defineEmits<{ toggleSidebar: [] }>()
 const auth = useAuthStore()
 const router = useRouter()
 const { isDark, toggle: toggleTheme } = useTheme()
+const refreshContent = inject('refreshContent') as (() => void) | undefined
 
 const pageTitle = computed(() => {
   const path = router.currentRoute.value.path
   const titles: Record<string, string> = {
+    '/teacher/dashboard': '仪表盘',
     '/teacher/points': '积分管理',
     '/teacher/assignments': '作业管理',
     '/teacher/students': '学生管理',
+    '/teacher/roles': '职位管理',
+    '/teacher/logs': '操作日志',
+    '/teacher/traffic': '流量监控',
+    '/teacher/settings': 'AI 配置',
     '/student/points': '我的积分',
     '/student/leaderboard': '积分排行',
     '/student/assignments': '作业查询',
@@ -27,7 +33,6 @@ const pageTitle = computed(() => {
   return titles[path] || 'OurClass'
 })
 
-function handleLogout() { auth.logout(); router.push('/') }
 </script>
 
 <template>
@@ -47,8 +52,8 @@ function handleLogout() { auth.logout(); router.push('/') }
         <Sun v-if="isDark" :size="16" />
         <Moon v-else :size="16" />
       </n-button>
-      <n-button quaternary circle size="small" @click="handleLogout">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12l4-4-4-4"/><path d="M14 8H6"/><path d="M6 14H2V2h4"/></svg>
+      <n-button quaternary circle size="small" @click="refreshContent?.()" title="刷新页面">
+        <RefreshCw :size="16" />
       </n-button>
     </div>
   </n-layout-header>

@@ -6,6 +6,7 @@ import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
+import { writeAuditLog } from './audit.js'
 
 const router = Router()
 
@@ -622,7 +623,7 @@ async function agentLoopAnthropic(
     if (last) db.prepare('UPDATE messages SET content = content || ? WHERE id = ?').run(fullResponse, last.id)
   } else {
     db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-      .run(convId, 'assistant', fullResponse || '(已处理)', totalOutput || 0)
+      .run(convId, 'assistant', fullResponse || '(已处理)', (totalInput + totalOutput) || 0)
   }
   db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(convId)
 
@@ -1076,6 +1077,7 @@ router.post(
       'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
 
+    writeAuditLog(req.user!.id, req.user!.display_name, 'update_api_config', 'config', undefined, { provider, model: model || '' })
     ok(res, { message: 'API 配置已保存', provider })
   },
 )

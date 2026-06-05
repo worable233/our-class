@@ -2,7 +2,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { computed, ref } from 'vue'
-import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, ChevronDown, ChevronLeft, ChevronRight } from '@lucide/vue'
+import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, ChevronDown, ChevronLeft, ChevronRight } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -15,23 +15,51 @@ const settingsOpen = ref(false)
 const props = defineProps<{ collapsed: boolean }>()
 const emit = defineEmits<{ 'update:collapsed': [boolean] }>()
 
-const menuItems = computed(() => {
+const menuGroups = computed(() => {
   if (auth.isTeacher) {
     return [
-      { icon: Star, label: '积分管理', path: '/teacher/points' },
-      { icon: List, label: '作业管理', path: '/teacher/assignments' },
-      { icon: Users, label: '学生管理', path: '/teacher/students' },
-      { icon: Shield, label: '权限管理', path: '/teacher/roles' },
-      { icon: Settings, label: '站点设置', expandable: true, children: [
-        { icon: Bot, label: 'AI 配置', path: '/teacher/settings' },
-      ]},
+      {
+        label: '概览',
+        items: [
+          { icon: LayoutDashboard, label: '仪表盘', path: '/teacher/dashboard' },
+        ],
+      },
+      {
+        label: '学生管理',
+        items: [
+          { icon: Star, label: '积分管理', path: '/teacher/points' },
+          { icon: List, label: '作业管理', path: '/teacher/assignments' },
+          { icon: Users, label: '学生管理', path: '/teacher/students' },
+        ],
+      },
+      {
+        label: '系统设置',
+        items: [
+          { icon: Shield, label: '职位管理', path: '/teacher/roles' },
+          { icon: Settings, label: '站点设置', expandable: true, children: [
+            { icon: Bot, label: 'AI 配置', path: '/teacher/settings' },
+            { icon: History, label: '操作日志', path: '/teacher/logs' },
+            { icon: Globe, label: '流量监控', path: '/teacher/traffic' },
+          ]},
+        ],
+      },
     ]
   }
   return [
-    { icon: Star, label: '我的积分', path: '/student/points' },
-    { icon: Trophy, label: '积分排行', path: '/student/leaderboard' },
-    { icon: List, label: '作业查询', path: '/student/assignments' },
-    { icon: User, label: '个人主页', path: '/student/profile' },
+    {
+      label: '学习管理',
+      items: [
+        { icon: Star, label: '我的积分', path: '/student/points' },
+        { icon: Trophy, label: '积分排行', path: '/student/leaderboard' },
+        { icon: List, label: '作业查询', path: '/student/assignments' },
+      ],
+    },
+    {
+      label: '个人',
+      items: [
+        { icon: User, label: '个人主页', path: '/student/profile' },
+      ],
+    },
   ]
 })
 
@@ -63,49 +91,49 @@ function go(path: string) {
 
     <!-- Nav -->
     <nav class="sidebar-nav">
-      <div v-show="!collapsed" class="sidebar-label">
-        {{ auth.isTeacher ? '教师端' : '学生端' }}
-      </div>
+      <template v-for="group in menuGroups" :key="group.label">
+        <div v-show="!collapsed" class="sidebar-label">{{ group.label }}</div>
 
-      <template v-for="item in menuItems" :key="item.label">
-        <!-- Regular item -->
-        <a
-          v-if="!item.expandable"
-          class="sidebar-item"
-          :class="{ active: isActive(item.path) }"
-          @click="go(item.path)"
-        >
-          <span class="sidebar-item-icon">
-            <component :is="item.icon" :size="16" />
-          </span>
-          <span v-show="!collapsed" class="sidebar-item-label">{{ item.label }}</span>
-        </a>
-
-        <!-- Expandable item -->
-        <div v-else>
-          <button class="sidebar-item w-full" @click="settingsOpen = !settingsOpen">
+        <template v-for="item in group.items" :key="item.label">
+          <!-- Regular item -->
+          <a
+            v-if="!item.expandable"
+            class="sidebar-item"
+            :class="{ active: isActive(item.path) }"
+            @click="go(item.path)"
+          >
             <span class="sidebar-item-icon">
               <component :is="item.icon" :size="16" />
             </span>
             <span v-show="!collapsed" class="sidebar-item-label">{{ item.label }}</span>
-            <span v-show="!collapsed" class="sidebar-chevron">
-              <ChevronDown :size="12" :class="{ open: settingsOpen }" />
-            </span>
-          </button>
-          <div v-if="settingsOpen && !collapsed" class="sidebar-sub">
-            <button
-              v-for="child in item.children"
-              :key="child.label"
-              class="sidebar-item sub"
-              @click="go(child.path)"
-            >
+          </a>
+
+          <!-- Expandable item -->
+          <div v-else>
+            <button class="sidebar-item w-full" @click="settingsOpen = !settingsOpen">
               <span class="sidebar-item-icon">
-                <component :is="child.icon" :size="14" />
+                <component :is="item.icon" :size="16" />
               </span>
-              <span class="sidebar-item-label">{{ child.label }}</span>
+              <span v-show="!collapsed" class="sidebar-item-label">{{ item.label }}</span>
+              <span v-show="!collapsed" class="sidebar-chevron">
+                <ChevronDown :size="12" :class="{ open: settingsOpen }" />
+              </span>
             </button>
+            <div v-if="settingsOpen && !collapsed" class="sidebar-sub">
+              <button
+                v-for="child in item.children"
+                :key="child.label"
+                class="sidebar-item sub"
+                @click="go(child.path)"
+              >
+                <span class="sidebar-item-icon">
+                  <component :is="child.icon" :size="14" />
+                </span>
+                <span class="sidebar-item-label">{{ child.label }}</span>
+              </button>
+            </div>
           </div>
-        </div>
+        </template>
       </template>
     </nav>
 
@@ -117,14 +145,6 @@ function go(path: string) {
       <ChevronRight v-else :size="14" />
     </button>
 
-    <!-- Footer -->
-    <div class="sidebar-footer" :class="{ collapsed }" @click="auth.isStudent && router.push('/student/profile')">
-      <div class="sidebar-avatar">{{ auth.displayName.charAt(0) }}</div>
-      <div v-show="!collapsed" class="sidebar-user">
-        <div class="sidebar-user-name">{{ auth.displayName }}</div>
-        <div class="sidebar-user-role">{{ auth.isTeacher ? '教师' : '学生' }}</div>
-      </div>
-    </div>
   </aside>
 </template>
 
@@ -182,7 +202,8 @@ function go(path: string) {
 }
 
 .logo-text-area {
-  height: 22px; overflow: hidden; margin-left: 10px;
+  height: 28px; overflow: hidden; margin-left: 10px;
+  display: grid; place-items: center start;
 }
 
 .text-swap-item {
@@ -194,9 +215,10 @@ function go(path: string) {
 }
 
 .text-swap-item.active {
-  font-weight: 600; font-size: 20px;
+  font-weight: 600; font-size: 20px; line-height: 1;
   color: var(--accent); letter-spacing: -0.03em;
   opacity: 1; transform: translateY(0);
+  margin-top: 2px;
 }
 
 .sidebar-logo:not(.collapsed):hover .text-swap-item.active {
@@ -333,58 +355,6 @@ function go(path: string) {
 .sidebar-toggle:hover {
   color: var(--text-primary);
   background: var(--surface-2);
-}
-
-/* ── Footer / User ────────────────────── */
-
-.sidebar-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--hairline);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.sidebar-footer:hover {
-  background: var(--surface-2);
-}
-
-.sidebar-footer.collapsed {
-  padding: 12px;
-  justify-content: center;
-}
-
-.sidebar-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.sidebar-user {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.sidebar-user-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.sidebar-user-role {
-  font-size: 11px;
-  color: var(--text-muted);
 }
 
 @media (max-width: 768px) {

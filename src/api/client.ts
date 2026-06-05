@@ -1,6 +1,6 @@
 import type { User } from '@/types'
 
-const BASE = '/api'
+export const BASE = '/api'
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
