@@ -36,7 +36,7 @@ function closeSidebar() { sidebarOpen.value = false }
       }"
     >
       <Header @toggle-sidebar="toggleSidebar" :is-mobile="isMobile" />
-      <main style="flex: 1; padding: 24px; overflow-y: auto; background: var(--ground);">
+      <main style="flex: 1; padding: 24px; overflow-y: auto; background: var(--ground); min-height: 0;">
         <router-view  />
       </main>
     </div>
