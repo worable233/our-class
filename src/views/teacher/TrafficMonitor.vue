@@ -143,6 +143,7 @@ async function initGlobe(geoData: GeoItem[]) {
   const el = globeEl.value
   if (!el) return
   try {
+    el.style.position = 'relative'
     el.innerHTML = ''
     const w = el.clientWidth || 600
     const h = el.clientHeight || 500
@@ -228,32 +229,38 @@ async function initGlobe(geoData: GeoItem[]) {
       .backgroundImageUrl(null)
       .polygonsData(polygonsData)
       .polygonCapMaterial(new THREE.MeshBasicMaterial({
-        color: 0xE8F0FE, side: THREE.DoubleSide,
-        transparent: true, opacity: 0.5,
+        color: 0x5E6AD2, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.08,
       }))
       .polygonSideMaterial(new THREE.MeshBasicMaterial({
-        color: 0xE8F0FE, side: THREE.DoubleSide,
-        transparent: true, opacity: 0.2,
+        color: 0x5E6AD2, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.04,
       }))
       .polygonStrokeColor((d: any) => {
         const v = valMap.get(d.name || '')
-        return v ? 'rgba(15,198,194,0.8)' : 'rgba(200,200,200,0.2)'
+        return v ? 'rgba(15,198,194,0.6)' : 'rgba(200,200,200,0.08)'
       })
       .polygonLabel((d: any) => {
         const v = valMap.get(d.name || '')
         return `<div style="font-size:12px;font-weight:600">${d.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v} 次请求</div>` : ''}`
       })
-      .polygonAltitude(0.01)
-      .polygonCapColor((d: any) => {
-        const name = d.name || ''
-        const v = valMap.get(name)
-        if (!v) return 'rgba(255,255,255,0.06)'
-        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-        return `rgba(238,${Math.round(251 - t * 53)},${Math.round(251 - t * 57)},${0.25 + t * 0.3})`
-      })
       .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
 
-    // Auto-rotate — speed 4, zoom disabled（雷池一致）
+    // Darken the sphere (匹配原始工作代码)
+    setTimeout(() => {
+      try {
+        const mat = globeInstance.globeMaterial()
+        if (mat) {
+          mat.color = new THREE.Color(0x0d0e1a)
+          mat.emissive = new THREE.Color(0x1a1c30)
+          mat.emissiveIntensity = 0.1
+          mat.opacity = 0.15
+          mat.transparent = true
+        }
+      } catch {}
+    }, 50)
+
+    // Auto-rotate
     setTimeout(() => {
       try {
         const ctrl = globeInstance.controls()
