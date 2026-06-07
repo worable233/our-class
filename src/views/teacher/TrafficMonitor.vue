@@ -22,10 +22,7 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
-let globeSeq = 0
 let loadingGlobe = false
-let matTimer: any = null
-let ctrlTimer: any = null
 const qpsOption = shallowRef({})
 const accessOption = shallowRef({})
 const interceptOption = shallowRef({})
@@ -67,11 +64,8 @@ function buildBarOpt(data: { name: string; value: number }[]) {
 }
 
 async function load() {
-  if (loadingGlobe) return  // prevent concurrent reloads
+  if (loadingGlobe) return
   loadingGlobe = true
-  // 清理前一次的定时器
-  if (matTimer) { clearTimeout(matTimer); matTimer = null }
-  if (ctrlTimer) { clearTimeout(ctrlTimer); ctrlTimer = null }
   loading.value = true
   try {
     const res = await fetch(`${BASE}/analytics/waf-stats`, {
@@ -97,12 +91,15 @@ async function load() {
 }
 
 async function initGlobe(geoData: any[]) {
-  const seq = ++globeSeq
+  if (loadingGlobe) return  // 由 load() 保证串行
   const el = globeEl.value
   if (!el) return
   try {
-    el.style.position = 'relative'
+    // 销毁旧 globe
+    if (globeInstance && typeof globeInstance._destructor === 'function') globeInstance._destructor()
+    globeInstance = null
     el.innerHTML = ''
+    el.style.position = 'relative'
     const w = el.clientWidth || 640
     const h = el.clientHeight || 500
     const Globe = (await import('globe.gl')).default
@@ -132,6 +129,9 @@ async function initGlobe(geoData: any[]) {
     globeInstance = Globe()(el)
       .width(w).height(h)
       .backgroundColor('#FF000000').showAtmosphere(false)
+      .globeMaterial(new THREE.MeshPhongMaterial({
+        color: 0x5E6AD2, transparent: true, opacity: 0.1,
+      }))
       .hexPolygonsData(hexData).hexPolygonResolution(3).hexPolygonMargin(0.1).hexPolygonDotResolution(1)
       .hexPolygonColor((d: any) => {
         const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
@@ -147,12 +147,8 @@ async function initGlobe(geoData: any[]) {
       })
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
-    matTimer = setTimeout(() => {
-      if (seq !== globeSeq) return
-      try { const mat = globeInstance.globeMaterial(); if (mat) { mat.color = new THREE.Color(0x5E6AD2); mat.opacity = 0.1; mat.transparent = true } } catch {}
-    }, 100)
-    ctrlTimer = setTimeout(() => {
-      if (seq !== globeSeq) return
+    // Auto-rotate
+    setTimeout(() => {
       try { const ctrl = globeInstance.controls(); if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 } } catch {}
     }, 500)
   } catch (e) { console.error('Globe:', e) }
