@@ -25,12 +25,10 @@ function closeSidebar() { sidebarOpen.value = false }
 
 <template>
   <n-layout style="height: 100vh" position="absolute">
-    <!-- Mobile overlay -->
-    <div v-if="isMobile && sidebarOpen" class="sidebar-overlay" @click="closeSidebar" />
     <Sidebar v-model:collapsed="sidebarCollapsed" :class="{ 'mobile-sidebar': isMobile && sidebarOpen }" />
     <div
       :style="{
-        marginLeft: !sidebarOpen ? '60px' : (isMobile ? '0' : '220px'),
+        marginLeft: isMobile ? '0' : (sidebarOpen ? '220px' : '60px'),
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
@@ -44,14 +42,6 @@ function closeSidebar() { sidebarOpen.value = false }
     </div>
   </n-layout>
 </template>
-
-<style scoped>
-.sidebar-overlay {
-  position: fixed; inset: 0; z-index: 99;
-  background: rgba(0,0,0,.3);
-  backdrop-filter: blur(2px);
-}
-</style>
 
 <style>
 /* unscoped for sidebar z-index */

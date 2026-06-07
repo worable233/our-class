@@ -2,7 +2,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { computed, ref } from 'vue'
-import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, ChevronDown, ChevronLeft, ChevronRight } from '@lucide/vue'
+import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -87,6 +87,9 @@ function go(path: string) {
           <span class="text-swap-item">返回首页</span>
         </div>
       </div>
+      <button v-if="!collapsed" class="sidebar-close" @click.stop="emit('update:collapsed', !collapsed)" title="收起">
+        <X :size="18" />
+      </button>
     </div>
 
     <!-- Nav -->
@@ -173,6 +176,20 @@ function go(path: string) {
   padding: 14px 16px;
   cursor: pointer;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-close {
+  display: none;
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0;
+  transition: all .12s;
+}
+.sidebar-close:hover { background: var(--surface-2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar-root:not(.collapsed) .sidebar-close { display: flex; }
 }
 
 .sidebar-logo:not(.collapsed):hover .sidebar-logo-inner {
@@ -358,8 +375,15 @@ function go(path: string) {
 }
 
 @media (max-width: 768px) {
-  .sidebar-root {
-    box-shadow: 4px 0 20px rgba(0,0,0,.2);
+  .sidebar-root.collapsed {
+    width: 0 !important;
+    opacity: 0;
+    overflow: hidden;
+    border-right: none;
+  }
+  .sidebar-root:not(.collapsed) {
+    width: 100vw !important;
+    box-shadow: 4px 0 20px rgba(0,0,0,.3);
   }
 }
 </style>
