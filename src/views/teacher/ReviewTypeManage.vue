@@ -103,45 +103,39 @@ onMounted(load)
 
     <NSpin :show="loading" style="min-height:200px">
       <template v-if="types.length > 0">
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <!-- 正向加分 -->
-          <div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-              <ThumbsUp :size="18" style="color:#18a058" />
-              <span style="font-size:15px;font-weight:600;color:var(--text-primary)">正向加分</span>
-              <span style="font-size:12px;color:var(--text-muted)">{{ addTypes.length }} 项</span>
+        <div class="palette">
+          <div class="palette-col">
+            <div class="palette-header">
+              <ThumbsUp :size="16" style="color:#18a058" />
+              <span>正向加分</span>
+              <span class="palette-count">{{ addTypes.length }}</span>
             </div>
-            <div class="review-grid">
-              <div v-for="t in addTypes" :key="t.id" class="review-card add">
-                <span class="review-emoji">{{ t.emoji }}</span>
-                <div class="review-info">
-                  <span class="review-name">{{ t.name }}</span>
-                  <span class="review-amount">+{{ t.amount }}</span>
-                </div>
-                <div class="review-actions">
-                  <button class="mini-btn" @click="openEdit(t)" title="编辑"><Pencil :size="13" /></button>
-                  <button class="mini-btn danger" @click="remove(t.id)" title="删除"><Trash2 :size="13" /></button>
+            <div class="matrix">
+              <div v-for="t in addTypes" :key="t.id" class="matrix-item" @dblclick="openEdit(t)">
+                <span class="matrix-emoji">{{ t.emoji }}</span>
+                <span class="matrix-name">{{ t.name }}</span>
+                <span class="matrix-pts">+{{ t.amount }}</span>
+                <div class="matrix-actions">
+                  <button @click.stop="openEdit(t)" title="编辑"><Pencil :size="11" /></button>
+                  <button @click.stop="remove(t.id)" title="删除"><Trash2 :size="11" /></button>
                 </div>
               </div>
             </div>
           </div>
-          <!-- 负向约束 -->
-          <div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-              <ShieldBan :size="18" style="color:#d03050" />
-              <span style="font-size:15px;font-weight:600;color:var(--text-primary)">负向约束</span>
-              <span style="font-size:12px;color:var(--text-muted)">{{ deductTypes.length }} 项</span>
+          <div class="palette-col">
+            <div class="palette-header deduct">
+              <ShieldBan :size="16" style="color:#d03050" />
+              <span>负向约束</span>
+              <span class="palette-count">{{ deductTypes.length }}</span>
             </div>
-            <div class="review-grid">
-              <div v-for="t in deductTypes" :key="t.id" class="review-card deduct">
-                <span class="review-emoji">{{ t.emoji }}</span>
-                <div class="review-info">
-                  <span class="review-name">{{ t.name }}</span>
-                  <span class="review-amount deduct">-{{ t.amount }}</span>
-                </div>
-                <div class="review-actions">
-                  <button class="mini-btn" @click="openEdit(t)" title="编辑"><Pencil :size="13" /></button>
-                  <button class="mini-btn danger" @click="remove(t.id)" title="删除"><Trash2 :size="13" /></button>
+            <div class="matrix">
+              <div v-for="t in deductTypes" :key="t.id" class="matrix-item deduct" @dblclick="openEdit(t)">
+                <span class="matrix-emoji">{{ t.emoji }}</span>
+                <span class="matrix-name">{{ t.name }}</span>
+                <span class="matrix-pts deduct">-{{ t.amount }}</span>
+                <div class="matrix-actions">
+                  <button @click.stop="openEdit(t)" title="编辑"><Pencil :size="11" /></button>
+                  <button @click.stop="remove(t.id)" title="删除"><Trash2 :size="11" /></button>
                 </div>
               </div>
             </div>
@@ -204,40 +198,72 @@ onMounted(load)
 </template>
 
 <style scoped>
-.review-grid {
+.palette {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
 }
-.review-card {
+.palette-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.palette-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0 4px 6px;
+  border-bottom: 2px solid rgba(24,160,88,0.25);
+}
+.palette-header.deduct {
+  border-bottom-color: rgba(208,48,80,0.25);
+}
+.palette-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.matrix-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 8px;
   border: 1px solid var(--hairline);
   background: var(--surface-1);
-  transition: border-color .15s;
+  cursor: default;
+  transition: border-color .12s, background .12s;
 }
-.review-card.add:hover { border-color: rgba(24,160,88,0.3); }
-.review-card.deduct:hover { border-color: rgba(208,48,80,0.3); }
-.review-emoji { font-size: 24px; line-height:1; flex-shrink:0; }
-.review-info { flex:1; min-width:0; }
-.review-name { display:block; font-size:13px; font-weight:500; color:var(--text-primary); }
-.review-amount { font-size:12px; font-weight:600; color:#18a058; }
-.review-amount.deduct { color:#d03050; }
-.review-actions {
-  display:flex; gap:4px; opacity:0; transition:opacity .12s;
+.matrix-item.add:hover { border-color: rgba(24,160,88,0.3); background: rgba(24,160,88,0.04); }
+.matrix-item.deduct:hover { border-color: rgba(208,48,80,0.3); background: rgba(208,48,80,0.04); }
+.matrix-emoji { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.matrix-name { font-size: 12px; font-weight: 500; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.matrix-pts { font-size: 11px; font-weight: 700; color: #18a058; flex-shrink: 0; }
+.matrix-pts.deduct { color: #d03050; }
+.matrix-actions {
+  position: absolute; top: 4px; right: 4px;
+  display: flex; gap: 2px; opacity: 0; transition: opacity .1s;
 }
-.review-card:hover .review-actions { opacity:1; }
-.mini-btn {
-  width:26px; height:26px; border-radius:6px;
-  display:flex; align-items:center; justify-content:center;
-  background:none; border:none; color:var(--text-muted);
-  cursor:pointer; transition:all .1s;
+.matrix-item:hover .matrix-actions { opacity: 1; }
+.matrix-actions button {
+  width: 22px; height: 22px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: none;
+  color: var(--text-muted); cursor: pointer; transition: all .1s;
 }
-.mini-btn:hover { background:var(--surface-2); color:var(--text-primary); }
-.mini-btn.danger:hover { background:rgba(208,48,80,0.1); color:#d03050; }
+.matrix-actions button:hover { color: var(--text-primary); }
+.matrix-actions button:last-child:hover { color: #d03050; }
 
 .emoji-grid {
   display:flex; flex-wrap:wrap; gap:6px; max-height:200px; overflow-y:auto; padding:4px 0;
