@@ -22,6 +22,7 @@ const pageTitle = computed(() => {
     '/teacher/assignments': '作业管理',
     '/teacher/students': '学生管理',
     '/teacher/roles': '职位管理',
+    '/teacher/review-types': '点评类型',
     '/teacher/logs': '操作日志',
     '/teacher/traffic': '流量监控',
     '/teacher/settings': 'AI 配置',

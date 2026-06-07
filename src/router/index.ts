@@ -46,6 +46,11 @@ const router = createRouter({
           component: () => import('@/views/teacher/RoleManage.vue'),
         },
         {
+          path: 'review-types',
+          name: 'teacher-review-types',
+          component: () => import('@/views/teacher/ReviewTypeManage.vue'),
+        },
+        {
           path: 'settings',
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),

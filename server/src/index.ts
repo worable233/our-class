@@ -18,6 +18,7 @@ import chatRoutes from './routes/chat.js'
 import roleRoutes from './routes/roles.js'
 import auditRoutes from './routes/audit.js'
 import analyticsRoutes, { trackPageView } from './routes/analytics.js'
+import reviewTypeRoutes from './routes/reviewTypes.js'
 
 const app = express()
 
@@ -63,6 +64,7 @@ app.use('/api/chat', chatRoutes)
 app.use('/api/roles', authMiddleware, roleRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/analytics', analyticsRoutes)
+app.use('/api/review-types', reviewTypeRoutes)
 
 // ── Error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler)

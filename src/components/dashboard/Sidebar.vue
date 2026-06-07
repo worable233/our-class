@@ -30,6 +30,7 @@ const menuGroups = computed(() => {
           { icon: Star, label: '积分管理', path: '/teacher/points' },
           { icon: List, label: '作业管理', path: '/teacher/assignments' },
           { icon: Users, label: '学生管理', path: '/teacher/students' },
+          { icon: Star, label: '点评类型', path: '/teacher/review-types' },
         ],
       },
       {
