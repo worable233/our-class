@@ -72,23 +72,23 @@ function seedUsers(db: Database.Database) {
   if (count.c > 0) return
 
   const insertUser = db.prepare(
-    'INSERT INTO users (username, display_name, role, class, password, group_id) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO users (username, display_name, role, class, password, group_id, student_no) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
 
   // Find the teacher and student group IDs
   const tGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '教师'").get() as { id: number }
   const sGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as { id: number }
 
-  insertUser.run('teacher1', '张老师', 'teacher', '', '123456', tGroup.id)
-  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456', sGroup.id)
-  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id)
+  insertUser.run('teacher1', '张老师', 'teacher', '', '123456', tGroup.id, null)
+  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id, 'S2025001')
+  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456', sGroup.id, 'S2025002')
+  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456', sGroup.id, 'S2025003')
+  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456', sGroup.id, 'S2025004')
+  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456', sGroup.id, 'S2025005')
+  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456', sGroup.id, 'S2025006')
+  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456', sGroup.id, 'S2025007')
+  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456', sGroup.id, 'S2025008')
+  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id, 'S2025009')
 }
 
 function seedAllData(db: Database.Database) {

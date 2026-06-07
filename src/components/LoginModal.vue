@@ -48,11 +48,11 @@ async function handleLogin() {
 
         <form class="login-form" @submit.prevent="handleLogin()">
           <div class="login-field">
-            <label class="login-label">用户名</label>
+            <label class="login-label">学号/姓名</label>
             <input
               v-model="username"
               class="login-input"
-              placeholder="输入用户名..."
+              placeholder="输入学号或姓名"
               :disabled="loading"
             />
           </div>

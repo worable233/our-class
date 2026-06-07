@@ -14,6 +14,8 @@ const createSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional().default('123456'),
   group_id: z.number().int().nullable().optional(),
+  student_no: z.string().optional(),
+  nickname: z.string().optional(),
 })
 
 const updateSchema = z.object({
@@ -22,13 +24,15 @@ const updateSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
+  student_no: z.string().optional(),
+  nickname: z.string().optional(),
 })
 
 // GET /api/students?class=xxx
 router.get('/', requirePermission('students.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
-  let sql = `SELECT id, username, display_name, role, class, avatar FROM users WHERE role = 'student'`
+  let sql = `SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE role = 'student'`
   const params: string[] = []
 
   if (className) {
@@ -43,19 +47,20 @@ router.get('/', requirePermission('students.read'), (req: Request, res: Response
 // POST /api/students
 router.post('/', requirePermission('students.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { display_name, class: stuClass, username, group_id } = req.body
+  const { display_name, class: stuClass, username, group_id, nickname } = req.body
+  const studentNo = req.body.student_no || 'S' + Date.now()
 
   const uname = username || display_name.toLowerCase().replace(/\s/g, '')
   const pw = req.body.password
   const result = db
     .prepare(
-      'INSERT INTO users (username, display_name, role, class, password, group_id) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (username, display_name, role, class, password, group_id, student_no, nickname) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
-    .run(uname, display_name, 'student', stuClass, pw, group_id ?? null)
+    .run(uname, display_name, 'student', stuClass, pw, group_id ?? null, studentNo, nickname ?? null)
 
   const student = db
     .prepare(
-      'SELECT id, username, display_name, role, class, avatar FROM users WHERE id = ?',
+      'SELECT id, username, display_name, role, class, avatar, student_no, nickname FROM users WHERE id = ?',
     )
     .get(result.lastInsertRowid)
   ok(res, student)
@@ -66,7 +71,7 @@ router.get('/:id', requirePermission('students.read'), (req: Request, res: Respo
   const db = getDb()
   const student = db
     .prepare(
-      `SELECT id, username, display_name, role, class, avatar FROM users WHERE id = ? AND role = 'student'`,
+      `SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE id = ? AND role = 'student'`,
     )
     .get(req.params.id)
 
@@ -105,13 +110,23 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
     values.push(req.body.group_id)
   }
 
+  if (req.body.student_no !== undefined) {
+    fields.push('student_no = ?')
+    values.push(req.body.student_no)
+  }
+
+  if (req.body.nickname !== undefined) {
+    fields.push('nickname = ?')
+    values.push(req.body.nickname)
+  }
+
   values.push(req.params.id, 'student')
 
   db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND role = ?`).run(...values)
 
   const updated = db
     .prepare(
-      'SELECT id, username, display_name, role, class, avatar FROM users WHERE id = ?',
+      'SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE id = ?',
     )
     .get(req.params.id)
 

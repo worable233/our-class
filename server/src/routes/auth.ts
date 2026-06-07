@@ -15,6 +15,8 @@ interface UserRow {
   role: 'teacher' | 'student'
   class: string
   avatar: string | null
+  student_no: string | null
+  nickname: string | null
 }
 
 const loginSchema = z.object({
@@ -27,9 +29,23 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
   const { username, password } = req.body
 
   const db = getDb()
-  const user = db
-    .prepare('SELECT * FROM users WHERE username = ?')
+
+  // Try finding by student_no, then username, then display_name
+  let user = db
+    .prepare('SELECT * FROM users WHERE student_no = ?')
     .get(username) as (UserRow & { password: string }) | undefined
+
+  if (!user) {
+    user = db
+      .prepare('SELECT * FROM users WHERE username = ?')
+      .get(username) as (UserRow & { password: string }) | undefined
+  }
+
+  if (!user) {
+    user = db
+      .prepare('SELECT * FROM users WHERE display_name = ?')
+      .get(username) as (UserRow & { password: string }) | undefined
+  }
 
   if (!user) {
     return fail(res, 404, 'NOT_FOUND', '用户不存在')
@@ -49,6 +65,8 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
       role: user.role,
       class: user.class,
       avatar: user.avatar,
+      student_no: user.student_no,
+      nickname: user.nickname,
       token,
     },
     token,

@@ -6,6 +6,9 @@ export interface User {
   class: string
   avatar: string
   token?: string
+  student_no?: string
+  nickname?: string
+  password?: string  // only visible to teachers in student management
 }
 
 export interface Student extends User {

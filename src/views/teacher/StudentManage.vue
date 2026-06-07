@@ -15,11 +15,21 @@ const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ display_name: '', class: '高三(2)班', username: '', password: '123456', group_id: null as number | null })
+const form = ref({ student_no: '', display_name: '', nickname: '', class: '高三(2)班', password: '123456' })
 
 const columns = [
   {
-    title: '姓名',
+    title: '学号',
+    key: 'student_no',
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: (row: Student) =>
+      row.student_no
+        ? h('span', { style: 'font-family: monospace;' }, row.student_no)
+        : h('span', { style: 'color: #999;' }, '未设置'),
+  },
+  {
+    title: '真实姓名',
     key: 'display_name',
     render: (row: Student) =>
       h(NSpace, { align: 'center' }, [
@@ -27,11 +37,32 @@ const columns = [
         row.display_name,
       ]),
   },
-  { title: '用户名', key: 'username' },
-  { title: '班级', key: 'class' },
+  {
+    title: '昵称',
+    key: 'nickname',
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: (row: Student) =>
+      row.nickname
+        ? h('span', null, row.nickname)
+        : h('span', { style: 'color: #999;' }, '未设置'),
+  },
+  { title: '班级', key: 'class', width: 120 },
+  {
+    title: '密码',
+    key: 'password',
+    width: 100,
+    render: (row: Student) =>
+      h(
+        NTag,
+        { size: 'small', style: 'font-family: monospace;' },
+        { default: () => row.password || '-' },
+      ),
+  },
   {
     title: '操作',
     key: 'actions',
+    width: 150,
     render: (row: Student) =>
       h(NSpace, null, [
         h(
@@ -53,40 +84,39 @@ async function load() {
   loading.value = false
 }
 
-async function loadGroups() {
-  const groups = await api.get<PermissionGroup[]>('/roles/groups')
-  roleGroups.value = groups.map(g => ({ id: g.id, name: g.name }))
+function autoGenerateStudentNo(): string {
+  return 'S' + Date.now()
 }
 
 function openNew() {
   editing.value = null
-  form.value = { display_name: '', class: '高三(2)班', username: '', password: '123456', group_id: null }
+  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456' }
   showModal.value = true
 }
 
 function openEdit(s: Student) {
   editing.value = s
-  form.value = { display_name: s.display_name, class: s.class, username: s.username, password: '', group_id: null }
+  form.value = { student_no: s.student_no || '', display_name: s.display_name, nickname: s.nickname || '', class: s.class, password: s.password || '' }
   showModal.value = true
 }
 
 async function save() {
   saving.value = true
   try {
+    const student_no = form.value.student_no || autoGenerateStudentNo()
+    const payload = {
+      display_name: form.value.display_name,
+      nickname: form.value.nickname || undefined,
+      class: form.value.class,
+      student_no,
+      password: form.value.password || undefined,
+      // username and group_id omitted — not in form but the backend will
+      // fallback to auto-generated username (or preserve existing on edit)
+    }
     if (editing.value) {
-      await api.put(`/students/${editing.value.id}`, {
-        display_name: form.value.display_name,
-        class: form.value.class,
-        username: form.value.username,
-      })
+      await api.put(`/students/${editing.value.id}`, payload)
     } else {
-      await api.post('/students', {
-        display_name: form.value.display_name,
-        class: form.value.class,
-        username: form.value.username,
-        password: form.value.password,
-        group_id: form.value.group_id,
-      })
+      await api.post('/students', payload)
     }
     showModal.value = false
     await load()
@@ -110,7 +140,6 @@ async function remove(id: number) {
 
 onMounted(() => {
   load()
-  loadGroups()
 })
 </script>
 
@@ -139,25 +168,20 @@ onMounted(() => {
       :mask-closable="false"
     >
       <n-form :model="form" label-placement="top">
-        <n-form-item label="姓名" path="display_name">
-          <n-input v-model:value="form.display_name" placeholder="学生姓名" />
+        <n-form-item label="学号" path="student_no">
+          <n-input v-model:value="form.student_no" placeholder="留空自动生成，格式：S + 时间戳" />
         </n-form-item>
-        <n-form-item label="登录用户名">
-          <n-input v-model:value="form.username" :placeholder="editing ? '修改用户名' : '可选，默认使用姓名拼音'" />
+        <n-form-item label="真实姓名" path="display_name">
+          <n-input v-model:value="form.display_name" placeholder="学生真实姓名" />
         </n-form-item>
-        <n-form-item v-if="!editing" label="登录密码">
-          <n-input v-model:value="form.password" placeholder="默认 123456" />
-        </n-form-item>
-        <n-form-item label="权限组">
-          <n-select
-            v-model:value="form.group_id"
-            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
-            placeholder="选择权限组"
-            clearable
-          />
+        <n-form-item label="昵称" path="nickname">
+          <n-input v-model:value="form.nickname" placeholder="显示昵称（可选）" />
         </n-form-item>
         <n-form-item label="班级" path="class">
           <n-input v-model:value="form.class" placeholder="班级" />
+        </n-form-item>
+        <n-form-item label="密码" path="password">
+          <n-input v-model:value="form.password" placeholder="留空则保持原密码（编辑时）或使用默认密码" />
         </n-form-item>
       </n-form>
       <template #footer>
