@@ -66,7 +66,12 @@ router.put('/:id', requirePermission('points.write'), validate(updateSchema), (r
     }
   }
   const row = db.prepare('SELECT * FROM review_types WHERE id = ?').get(id)
-  ok(res, row)
+
+  // Build response message
+  let msg = '已保存'
+  if (name !== undefined) msg = '名称已更新，历史记录同步更新'
+  else if (amount !== undefined) msg = `分值已改为 ${amount} 分，已有记录不受影响`
+  ok(res, { ...(row as any), message: msg })
 })
 
 // DELETE /api/review-types/:id

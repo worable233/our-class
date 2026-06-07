@@ -60,8 +60,8 @@ async function save() {
   saving.value = true
   try {
     if (editing.value) {
-      await api.put(`/review-types/${editing.value.id}`, form.value)
-      message.success('已更新')
+      const res = await api.put<any>(`/review-types/${editing.value.id}`, form.value)
+      message.success(res?.message || '已保存')
     } else {
       await api.post('/review-types', form.value)
       message.success('已创建')
