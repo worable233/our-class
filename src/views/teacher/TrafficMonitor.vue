@@ -118,23 +118,23 @@ async function initGlobe(geoData: any[]) {
       .backgroundImageUrl(null)
       .width(w).height(h)
       .polygonsData(polygonsData)
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0xd0e4ec, side: THREE.DoubleSide }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0xc0d8e4, side: THREE.DoubleSide }))
-      .polygonStrokeColor(() => 'rgba(180, 195, 205, 0.3)')
+      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0xf8fafc, side: THREE.DoubleSide }))
+      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0xf0f4f8, side: THREE.DoubleSide }))
+      .polygonStrokeColor(() => 'rgba(180, 195, 205, 0.12)')
       .polygonLabel((d: any) => {
         const v = countryMap.get(d.name || '')
         return `<div style="font-size:12px;font-weight:600;color:#333">${d.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v} 次请求</div>` : ''}`
       })
-      .atmosphereColor('#0FC6C2')
-      .atmosphereAltitude(0.1)
+      .atmosphereColor('rgba(15,198,194,0.05)')
+      .atmosphereAltitude(0.08)
 
-    // Globe material — light transparent teal
+    // Globe material — barely visible, like 雷池's opacity 0.05
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
-          mat.color = new THREE.Color(0x9cb8d0)
-          mat.opacity = 0.12
+          mat.color = new THREE.Color(0xb0d0e0)
+          mat.opacity = 0.05
           mat.transparent = true
         }
       } catch {}
@@ -193,7 +193,7 @@ onUnmounted(() => {
 
         <!-- Globe Area -->
         <div style="display:flex;gap:12px;min-height:460px;">
-          <div ref="globeEl" style="flex:1;min-height:420px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;position:relative;background:var(--surface-1);"></div>
+          <div ref="globeEl" style="flex:1;min-height:420px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;position:relative;background-image:radial-gradient(rgba(15,198,194,0.06) 1px,transparent 1px);background-size:20px 20px;background-color:var(--surface-1);"></div>
           <div style="width:300px;flex-shrink:0;background:var(--surface-1);border:1px solid var(--hairline);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;">
             <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">地理位置</div>
             <div style="display:flex;gap:6px;margin-bottom:14px;font-size:11px;">
