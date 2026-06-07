@@ -98,10 +98,19 @@ async function initGlobe(geoData: any[]) {
         const v = countryMap.get(name)
         return `<div style="font-size:12px">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v}</div>` : ''}`
       })
-      .globeMaterial(new THREE.MeshPhongMaterial({
-        color: 0x4ECDC4, transparent: true, opacity: 0.08,
-      }))
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
+
+    // Globe material — 独立设置，和雷池完全一致
+    setTimeout(() => {
+      try {
+        const mat = globeInstance.globeMaterial()
+        if (mat) {
+          mat.color = new THREE.Color(0x5E6AD2)  // 主题色
+          mat.opacity = 0.1
+          mat.transparent = true
+        }
+      } catch {}
+    }, 100)
 
     // Auto-rotate
     setTimeout(() => {
