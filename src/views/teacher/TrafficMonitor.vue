@@ -15,13 +15,8 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
-let globeLoading = false
-let mtimer: any = null
 
 async function load() {
-  if (globeLoading) return
-  globeLoading = true
-  if (mtimer) { clearTimeout(mtimer); mtimer = null }
   loading.value = true
   try {
     const res = await fetch(`${BASE}/analytics/waf-stats`, {
@@ -35,7 +30,7 @@ async function load() {
     }
   } catch (e: any) {
     console.error('Load:', e)
-  } finally { loading.value = false; globeLoading = false }
+  } finally { loading.value = false }
 }
 
 async function initGlobe(geoData: any[]) {
@@ -74,7 +69,26 @@ async function initGlobe(geoData: any[]) {
     }
     const maxVal = Math.max(...Array.from(countryMap.values()), 1)
 
-    // ── Build globe — 完全匹配雷池 WAF 实现 ───────
+    // ── 雷池颜色渐变函数 ──
+    const hexToRgb = (hex: string) => ({
+      r: parseInt(hex.substring(1,3), 16),
+      g: parseInt(hex.substring(3,5), 16),
+      b: parseInt(hex.substring(5,7), 16),
+    })
+    const gScale = (colors: string[]) => {
+      const a = hexToRgb(colors[0]), b2 = hexToRgb(colors[1])
+      return { rgb1: a, rgb2: b2 }
+    }
+    const lerpColor = (t: number, s: { rgb1: any; rgb2: any }) => {
+      const r = Math.round(s.rgb1.r + (s.rgb2.r - s.rgb1.r) * t)
+      const g = Math.round(s.rgb1.g + (s.rgb2.g - s.rgb1.g) * t)
+      const b2 = Math.round(s.rgb1.b + (s.rgb2.b - s.rgb1.b) * t)
+      return `rgb(${r},${g},${b2})`
+    }
+    // 暗色模式渐变: 低→高 = #eefbfb → #0fc6c2
+    const gradient = gScale(['#0fc6c2', '#eefbfb'].reverse())
+
+    // 第一步：创建 globe 实例（不含材质和颜色）
     globeInstance = Globe()(el)
       .width(w).height(h)
       .backgroundColor('#FF000000')
@@ -83,13 +97,6 @@ async function initGlobe(geoData: any[]) {
       .hexPolygonResolution(3)
       .hexPolygonMargin(0.1)
       .hexPolygonDotResolution(1)
-      .hexPolygonColor((d: any) => {
-        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
-        const v = countryMap.get(name)
-        if (!v) return '#ffffff'
-        const t = Math.max(0, Math.min(1, v / maxVal))
-        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
-      })
       .hexPolygonLabel((d: any) => {
         const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
         const v = countryMap.get(name)
@@ -97,26 +104,22 @@ async function initGlobe(geoData: any[]) {
       })
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
-    // Globe material — 独立设置，和雷池完全一致
-    mtimer = setTimeout(() => {
-      mtimer = null
-      try {
-        const mat = globeInstance.globeMaterial()
-        if (mat) {
-          mat.color = new THREE.Color(0x5E6AD2)
-          mat.opacity = 0.1
-          mat.transparent = true
-        }
-      } catch {}
-    }, 100)
+    // 第二步：在已创建实例上设置材质 + 颜色（雷池模式）
+    globeInstance
+      .globeMaterial(new THREE.MeshPhongMaterial({
+        color: 0x0FC6C2, transparent: true, opacity: 0.1,
+      }))
+      .hexPolygonColor((d: any) => {
+        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
+        const v = countryMap.get(name)
+        if (!v) return '#ffffff'
+        const t = Math.max(0, Math.min(1, v / maxVal))
+        return lerpColor(t, gradient)
+      })
 
-    // Auto-rotate
-    setTimeout(() => {
-      try {
-        const ctrl = globeInstance.controls()
-        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 }
-      } catch {}
-    }, 500)
+    // 控制：关闭缩放，自动旋转 speed 4（雷池一致）
+    const ctrl = globeInstance.controls()
+    if (ctrl) { ctrl.enableZoom = false; ctrl.autoRotate = true; ctrl.autoRotateSpeed = 4 }
   } catch (e) { console.error('Globe:', e) }
 }
 
