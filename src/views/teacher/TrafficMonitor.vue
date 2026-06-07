@@ -22,6 +22,7 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
+let globeSeq = 0
 const qpsOption = shallowRef({})
 const accessOption = shallowRef({})
 const interceptOption = shallowRef({})
@@ -88,6 +89,7 @@ async function load() {
 }
 
 async function initGlobe(geoData: any[]) {
+  const seq = ++globeSeq
   const el = globeEl.value
   if (!el) return
   try {
@@ -138,12 +140,11 @@ async function initGlobe(geoData: any[]) {
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
     setTimeout(() => {
-      try {
-        const mat = globeInstance.globeMaterial()
-        if (mat) { mat.color = new THREE.Color(0x5E6AD2); mat.opacity = 0.1; mat.transparent = true }
-      } catch {}
+      if (seq !== globeSeq) return
+      try { const mat = globeInstance.globeMaterial(); if (mat) { mat.color = new THREE.Color(0x5E6AD2); mat.opacity = 0.1; mat.transparent = true } } catch {}
     }, 100)
     setTimeout(() => {
+      if (seq !== globeSeq) return
       try { const ctrl = globeInstance.controls(); if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 } } catch {}
     }, 500)
   } catch (e) { console.error('Globe:', e) }
