@@ -76,7 +76,6 @@ function go(path: string) {
   <aside
     class="sidebar-root"
     :class="{ collapsed }"
-    :style="{ width: collapsed ? '60px' : '220px' }"
   >
     <!-- Logo -->
     <div class="sidebar-logo" :class="{ collapsed }" @click="router.push('/')">
@@ -161,13 +160,15 @@ function go(path: string) {
   flex-direction: column;
   background: var(--surface-1);
   border-right: 1px solid var(--hairline);
-  transition: width 0.2s var(--ease-out);
+  transition: width 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
   overflow: hidden;
   z-index: 10;
+  width: 220px;
 }
 
 .sidebar-root.collapsed {
   align-items: center;
+  width: 60px;
 }
 
 /* ── Logo ─────────────────────────────── */
@@ -376,14 +377,18 @@ function go(path: string) {
 
 @media (max-width: 768px) {
   .sidebar-root.collapsed {
-    width: 0 !important;
+    width: 0;
     opacity: 0;
     overflow: hidden;
     border-right: none;
+    padding: 0;
   }
   .sidebar-root:not(.collapsed) {
-    width: 100vw !important;
+    width: 100vw;
     box-shadow: 4px 0 20px rgba(0,0,0,.3);
+  }
+  .sidebar-logo-inner {
+    width: 100%;
   }
 }
 </style>
