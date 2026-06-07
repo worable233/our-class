@@ -74,6 +74,10 @@ const themeOverrides = computed(() => (isDark.value ? darkOverrides : baseOverri
   --font-orbix: 'Orbix', sans-serif;
 }
 
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--ground);
+}
 body {
   font-family: 'Inter', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
