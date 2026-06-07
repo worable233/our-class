@@ -180,35 +180,49 @@ async function initGlobe(geoData: GeoItem[]) {
       return tealOrange(t)
     }
 
-    // Create globe
+    // Create globe — earth texture with colored country overlays
     globeInstance = Globe()(el)
       .width(w).height(h)
-      .globeImageUrl(null)
-      .bumpImageUrl(null)
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
       .backgroundImageUrl(null)
       .hexPolygonsData(hexData)
       .hexPolygonResolution(1)
-      .hexPolygonMargin(0.25)
-      .hexPolygonColor((d: any) => getCountryColor(d.properties?.name || ''))
+      .hexPolygonMargin(0.2)
+      .hexPolygonColor((d: any) => {
+        const v = valMap.get(d.properties?.name || '')
+        if (!v) return 'rgba(0,0,0,0)'
+        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
+        // Teal → Orange gradient with opacity
+        const r = Math.round(15 + t * 240)
+        const g = Math.round(198 - t * 110)
+        const b = Math.round(194 - t * 130)
+        return `rgba(${r},${g},${b},0.55)`
+      })
       .hexPolygonLabel((d: any) => {
         const v = valMap.get(d.properties?.name || '')
-        return `<div style="font-size:12px;font-weight:600;color:#fff">${d.properties?.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : '<div style="font-size:11px;color:#555">暂无数据</div>'}`
+        return `<div style="font-size:12px;font-weight:600;color:#fff">${d.properties?.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : ''}`
       })
+      .polygonsData(hexData.filter((d: any) => valMap.has(d.properties?.name)))
+      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.12 }))
+      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.06 }))
+      .polygonStrokeColor(() => 'rgba(15,198,194,0.12)')
       .pointsData(geoData)
-      .pointLat('lat').pointLng('lng').pointAltitude(0.02).pointRadius(0.15).pointColor(() => '#0FC6C2')
-      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#0FC6C2;margin-top:2px">${d.value} 次请求</div>`)
+      .pointLat('lat').pointLng('lng').pointAltitude(0.06).pointRadius(0.8).pointColor(() => '#FF8859')
+      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#FF8859">${d.value} 次请求</div>`)
       .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
+      .pointMerge(true)
       .lights([new THREE.AmbientLight(0xffffff, 0.6), new THREE.DirectionalLight(0xffffff, 0.8)])
 
-    // Customize globe material — dark semi-transparent sphere
+    // Globe material — semi-transparent overlay
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
-          mat.color = new THREE.Color(0x080a14)
-          mat.emissive = new THREE.Color(0x0a1525)
-          mat.emissiveIntensity = 0.08
-          mat.opacity = 0.85
+          mat.color = new THREE.Color(0x0a1420)
+          mat.emissive = new THREE.Color(0x0a1a28)
+          mat.emissiveIntensity = 0.15
+          mat.opacity = 0.25
           mat.transparent = true
         }
       } catch {}
@@ -218,7 +232,7 @@ async function initGlobe(geoData: GeoItem[]) {
     setTimeout(() => {
       try {
         const ctrl = globeInstance.controls()
-        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2.5 }
+        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 }
       } catch {}
     }, 500)
   } catch (e) { console.error('Globe:', e) }
