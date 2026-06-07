@@ -151,88 +151,108 @@ async function initGlobe(geoData: GeoItem[]) {
       import('three').then(m => m.default),
     ])
 
-    // Load country hex data
+    // Load country polygon data (TopoJSON → GeoJSON)
     let hexData: any[] = []
     try {
       const geoRes = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       const topology = await geoRes.json()
-      hexData = (topology.objects.countries?.geometries || []).map((c: any) => ({ ...c, properties: { ...c.properties, SUBUNIT: c.properties.name } }))
-    } catch {}
+      const arcs = topology.arcs
+      const transform = topology.transform
+
+      function decodeRing(arcIndices: number[]): number[][] {
+        const coords: number[][] = []
+        let x = 0, y = 0
+        for (const arcIdx of arcIndices) {
+          const idx = arcIdx >= 0 ? arcIdx : ~arcIdx
+          const arc = arcs[idx]
+          const reversed = arcIdx < 0
+          const iter = reversed ? [...arc].reverse() : arc
+          for (const [dx, dy] of iter) {
+            x += dx; y += dy
+            coords.push([x * transform.scale[0] + transform.translate[0], y * transform.scale[1] + transform.translate[1]])
+          }
+        }
+        return coords
+      }
+
+      const features: any[] = []
+      for (const geom of topology.objects.countries.geometries) {
+        if (geom.type === 'Polygon') {
+          features.push({ type: 'Polygon', properties: { name: geom.properties.name }, geometry: { type: 'Polygon', coordinates: [decodeRing(geom.arcs)] } })
+        } else if (geom.type === 'MultiPolygon') {
+          features.push({ type: 'MultiPolygon', properties: { name: geom.properties.name }, geometry: { type: 'MultiPolygon', coordinates: geom.arcs.map((ring: number[]) => [decodeRing(ring)]) } })
+        }
+      }
+      hexData = features
+    } catch (e) { console.error('Geo load:', e) }
 
     // Build value map for country coloring
+    const countryMap: Record<string, number> = {}
+    for (const g of geoData) countryMap[g.country] = g.value
+
+    // Map Chinese city names to country names (simplified)
+    const cityToCountry: Record<string, string> = {
+      '北京': 'China', '上海': 'China', '广州': 'China', '深圳': 'China',
+      '新加坡': 'Singapore', '纽约': 'United States', '伦敦': 'United Kingdom',
+      '东京': 'Japan', '首尔': 'South Korea', '悉尼': 'Australia',
+      '莫斯科': 'Russia', '巴黎': 'France', '柏林': 'Germany',
+      '多伦多': 'Canada', '荷兰': 'Netherlands', '印尼': 'Indonesia',
+      '法国': 'France', '加拿大': 'Canada', '美国': 'United States',
+      '中国': 'China',
+    }
     const valMap = new Map<string, number>()
-    for (const g of geoData) valMap.set(g.country, g.value)
+    for (const [city, val] of Object.entries(countryMap)) {
+      const country = cityToCountry[city] || city
+      valMap.set(country, Math.max(valMap.get(country) || 0, val))
+    }
     const maxVal = Math.max(...Array.from(valMap.values()), 1)
     const minVal = Math.min(...Array.from(valMap.values()), 0)
 
-    // Color helpers matching 雷池 gradient
-    function tealOrange(t: number): string {
-      // t: 0→1 maps to teal(#0FC6C2) → orange(#FF8859)
-      const r = Math.round(15 + t * 240)
-      const g = Math.round(198 - t * 110)
-      const b = Math.round(194 - t * 130)
-      return `rgb(${r},${g},${b})`
-    }
-    function getCountryColor(name: string): string {
-      const v = valMap.get(name)
-      if (!v) return 'rgba(255,255,255,0.04)'
-      const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-      return tealOrange(t)
-    }
-
-    // Create globe — earth texture with colored country overlays
+    // Create globe — 精确匹配雷池 WAF 风格
     globeInstance = Globe()(el)
       .width(w).height(h)
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl(null)
+      .globeImageUrl(null)
+      .bumpImageUrl(null)
+      .backgroundColor('#FF000000')
       .hexPolygonsData(hexData)
-      .hexPolygonResolution(1)
-      .hexPolygonMargin(0.2)
+      .hexPolygonResolution(3)
+      .hexPolygonMargin(0.1)
+      .hexPolygonDotResolution(1)
       .hexPolygonColor((d: any) => {
-        const v = valMap.get(d.properties?.name || '')
-        if (!v) return 'rgba(0,0,0,0)'
+        const name = d.properties?.name || ''
+        const v = valMap.get(name)
+        if (!v) return '#fff'
         const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-        // Teal → Orange gradient with opacity
-        const r = Math.round(15 + t * 240)
-        const g = Math.round(198 - t * 110)
-        const b = Math.round(194 - t * 130)
-        return `rgba(${r},${g},${b},0.55)`
+        // 渐变: #eefbfb(低) → #0fc6c2(高)
+        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
       })
       .hexPolygonLabel((d: any) => {
         const v = valMap.get(d.properties?.name || '')
-        return `<div style="font-size:12px;font-weight:600;color:#fff">${d.properties?.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : ''}`
+        const name = d.properties?.name || ''
+        return `<div style="font-size:12px;font-weight:600;color:#222">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : ''}`
       })
-      .polygonsData(hexData.filter((d: any) => valMap.has(d.properties?.name)))
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.12 }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.06 }))
-      .polygonStrokeColor(() => 'rgba(15,198,194,0.12)')
-      .pointsData(geoData)
-      .pointLat('lat').pointLng('lng').pointAltitude(0.06).pointRadius(0.8).pointColor(() => '#FF8859')
-      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#FF8859">${d.value} 次请求</div>`)
       .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
-      .pointMerge(true)
-      .lights([new THREE.AmbientLight(0xffffff, 0.6), new THREE.DirectionalLight(0xffffff, 0.8)])
+      .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
-    // Globe material — semi-transparent overlay
+    // Globe material — 高透明主体色（雷池: opacity 0.1）
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
-          mat.color = new THREE.Color(0x0a1420)
-          mat.emissive = new THREE.Color(0x0a1a28)
-          mat.emissiveIntensity = 0.15
-          mat.opacity = 0.25
+          mat.color = new THREE.Color(0x5E6AD2)
+          mat.emissive = new THREE.Color(0x0a1525)
+          mat.emissiveIntensity = 0.08
+          mat.opacity = 0.1
           mat.transparent = true
         }
       } catch {}
     }, 50)
 
-    // Auto-rotate
+    // Auto-rotate — speed 4, zoom disabled（雷池一致）
     setTimeout(() => {
       try {
         const ctrl = globeInstance.controls()
-        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 }
+        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 4; ctrl.enableZoom = false }
       } catch {}
     }, 500)
   } catch (e) { console.error('Globe:', e) }
@@ -360,7 +380,7 @@ onUnmounted(() => {
 /* Main Area: Globe + Legend + Right Panel */
 .main-area { display:flex; gap:12px; min-height:500px; }
 .globe-area { flex:1; display:flex; gap:0; min-height:460px; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; overflow:hidden; position:relative; }
-.globe-wrap { flex:1; min-height:420px; position:relative; display:flex; align-items:center; justify-content:center; background-image: radial-gradient(circle, rgba(15,198,194,0.04) 1px, transparent 1px); background-size: 20px 20px; }
+.globe-wrap { flex:1; min-height:420px; position:relative; display:flex; align-items:center; justify-content:center; background-image: radial-gradient(circle, rgba(15,198,194,0.05) 1px, transparent 1px); background-size: 24px 24px; background-color: var(--surface-1); }
 .geo-legend { width:280px; flex-shrink:0; border-left:1px solid var(--hairline); padding:14px 16px; display:flex; flex-direction:column; }
 .geo-legend-header { font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:8px; }
 .geo-legend-tabs { display:flex; gap:6px; margin-bottom:14px; font-size:11px; font-weight:500; }
@@ -374,7 +394,9 @@ onUnmounted(() => {
 .geo-name { flex:1; color:var(--text-secondary); }
 .geo-val { font-weight:600; color:var(--text-primary); }
 
-.right-panel { width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; }
+.right-panel { width:350px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; }
+.panel-section { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:8px 12px; }
+.panel-title { font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
 .panel-section { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:8px 10px; }
 .panel-title { font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
 
