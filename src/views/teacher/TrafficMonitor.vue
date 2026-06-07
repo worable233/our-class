@@ -223,7 +223,7 @@ async function initGlobe(geoData: GeoItem[]) {
         const v = valMap.get(name)
         if (!v) return '#fff'
         const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-        // 渐变: #eefbfb(低) → #0fc6c2(高)
+        // 渐变: #eefbfb(低) → #0fc6c2(高) 匹配雷池暗色模式
         return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
       })
       .hexPolygonLabel((d: any) => {
@@ -232,21 +232,14 @@ async function initGlobe(geoData: GeoItem[]) {
         return `<div style="font-size:12px;font-weight:600;color:#222">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : ''}`
       })
       .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
+      .globeMaterial(new THREE.MeshPhongMaterial({
+        color: 0x5E6AD2,
+        emissive: 0x0a1525,
+        emissiveIntensity: 0.08,
+        transparent: true,
+        opacity: 0.1,
+      }))
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
-
-    // Globe material — 高透明主体色（雷池: opacity 0.1）
-    setTimeout(() => {
-      try {
-        const mat = globeInstance.globeMaterial()
-        if (mat) {
-          mat.color = new THREE.Color(0x5E6AD2)
-          mat.emissive = new THREE.Color(0x0a1525)
-          mat.emissiveIntensity = 0.08
-          mat.opacity = 0.1
-          mat.transparent = true
-        }
-      } catch {}
-    }, 50)
 
     // Auto-rotate — speed 4, zoom disabled（雷池一致）
     setTimeout(() => {
