@@ -118,23 +118,25 @@ async function initGlobe(geoData: any[]) {
       .backgroundImageUrl(null)
       .width(w).height(h)
       .polygonsData(polygonsData)
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0xf8fafc, side: THREE.DoubleSide }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0xf0f4f8, side: THREE.DoubleSide }))
-      .polygonStrokeColor(() => 'rgba(180, 195, 205, 0.12)')
+      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x4ECDC4, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }))
+      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x3DBDB0, side: THREE.DoubleSide, transparent: true, opacity: 0.4 }))
+      .polygonStrokeColor(() => 'rgba(78, 205, 196, 0.7)')
       .polygonLabel((d: any) => {
         const v = countryMap.get(d.name || '')
         return `<div style="font-size:12px;font-weight:600;color:#333">${d.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v} 次请求</div>` : ''}`
       })
-      .atmosphereColor('rgba(15,198,194,0.05)')
-      .atmosphereAltitude(0.08)
+      .atmosphereColor('#4ECDC4')
+      .atmosphereAltitude(0.12)
 
-    // Globe material — barely visible, like 雷池's opacity 0.05
+    // Globe material — 半透明青绿，匹配雷池 #4ECDC4
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
-          mat.color = new THREE.Color(0xb0d0e0)
-          mat.opacity = 0.05
+          mat.color = new THREE.Color(0x4ECDC4)
+          mat.emissive = new THREE.Color(0x2DADA5)
+          mat.emissiveIntensity = 0.15
+          mat.opacity = 0.5
           mat.transparent = true
         }
       } catch {}
@@ -193,7 +195,7 @@ onUnmounted(() => {
 
         <!-- Globe Area -->
         <div style="display:flex;gap:12px;min-height:460px;">
-          <div ref="globeEl" style="flex:1;min-height:420px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;position:relative;background-image:radial-gradient(rgba(15,198,194,0.06) 1px,transparent 1px);background-size:20px 20px;background-color:var(--surface-1);"></div>
+          <div ref="globeEl" style="flex:1;min-height:420px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;position:relative;background-image:radial-gradient(rgba(15,198,194,0.04) 1px,transparent 1px);background-size:20px 20px;background-color:#f5f7fa;"></div>
           <div style="width:300px;flex-shrink:0;background:var(--surface-1);border:1px solid var(--hairline);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;">
             <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">地理位置</div>
             <div style="display:flex;gap:6px;margin-bottom:14px;font-size:11px;">
