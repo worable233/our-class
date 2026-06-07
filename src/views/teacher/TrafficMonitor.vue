@@ -122,18 +122,12 @@ async function initGlobe(geoData: any[]) {
     }
     const maxVal = Math.max(...Array.from(countryMap.values()), 1)
 
+    // 第一步：创建 globe 实例（不含材质和颜色设置）
     globeInstance = Globe()(el)
       .width(w).height(h)
       .backgroundColor('#FF000000').showAtmosphere(false)
       .globeImageUrl(null)
       .hexPolygonsData(hexData).hexPolygonResolution(3).hexPolygonMargin(0.1).hexPolygonDotResolution(1)
-      .hexPolygonColor((d: any) => {
-        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
-        const v = countryMap.get(name)
-        if (!v) return '#d0d0d0'  // 无数据国家用浅灰色，不用白色（避免白底上看不见）
-        const t = Math.max(0, Math.min(1, v / maxVal))
-        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
-      })
       .hexPolygonLabel((d: any) => {
         const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
         const v = countryMap.get(name)
@@ -141,18 +135,18 @@ async function initGlobe(geoData: any[]) {
       })
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
-    // 用链式设置 globe 材质透明度和颜色 - 此处必须在 hexPolygonsData 之后设置
-    // 如果放在链式开头会导致 hexPolygons 不渲染
-    setTimeout(() => {
-      try {
-        const mat = globeInstance.globeMaterial()
-        if (mat && mat.color) {
-          mat.color.setHex(0x5E6AD2)
-          mat.opacity = 0.1
-          mat.transparent = true
-        }
-      } catch {}
-    }, 100)
+    // 第二步：在已创建实例上同时设置材质和颜色（完全和雷池一致）
+    globeInstance
+      .globeMaterial(new THREE.MeshPhongMaterial({
+        color: 0x5E6AD2, transparent: true, opacity: 0.1,
+      }))
+      .hexPolygonColor((d: any) => {
+        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
+        const v = countryMap.get(name)
+        if (!v) return '#d0d0d0'
+        const t = Math.max(0, Math.min(1, v / maxVal))
+        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
+      })
 
     // Auto-rotate
     setTimeout(() => {
