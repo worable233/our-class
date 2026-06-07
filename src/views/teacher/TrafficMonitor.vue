@@ -151,53 +151,67 @@ async function initGlobe(geoData: GeoItem[]) {
       import('three').then(m => m.default),
     ])
 
-    // Load country polygon data (TopoJSON → GeoJSON)
+    // Load country polygon data (same approach as old working code)
     let hexData: any[] = []
     try {
       const geoRes = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       const topology = await geoRes.json()
       const arcs = topology.arcs
-      const transform = topology.transform
+      const tr = topology.transform
 
-      function decodeRing(arcIndices: number[]): number[][] {
-        const coords: number[][] = []
-        let x = 0, y = 0
-        for (const arcIdx of arcIndices) {
-          const idx = arcIdx >= 0 ? arcIdx : ~arcIdx
-          const arc = arcs[idx]
-          const reversed = arcIdx < 0
-          const iter = reversed ? [...arc].reverse() : arc
-          for (const [dx, dy] of iter) {
-            x += dx; y += dy
-            coords.push([x * transform.scale[0] + transform.translate[0], y * transform.scale[1] + transform.translate[1]])
+      function decodeArcs(geom: any): number[][][] {
+        const polygons: number[][][] = []
+        const rings = geom.type === 'MultiPolygon' ? geom.arcs : [geom.arcs]
+        for (const ring of rings) {
+          const coords: number[][] = []
+          let x = 0, y = 0
+          for (const arcIdx of ring) {
+            const idx = arcIdx >= 0 ? arcIdx : ~arcIdx
+            const arc = arcs[idx]
+            const iter = arcIdx < 0 ? [...arc].reverse() : arc
+            for (const [dx, dy] of iter) {
+              x += dx; y += dy
+              coords.push([x * tr.scale[0] + tr.translate[0], y * tr.scale[1] + tr.translate[1]])
+            }
+          }
+          if (coords.length > 0) polygons.push(coords)
+        }
+        return polygons
+      }
+
+      // Flat map: 每个 Polygon/MultiPolygon polygon 作为独立条目（和原始工作代码一致）
+      for (const geom of topology.objects.countries.geometries) {
+        const coords = decodeArcs(geom)
+        if (coords.length > 0) {
+          if (geom.type === 'Polygon') {
+            hexData.push({ name: geom.properties.name, coordinates: coords })
+          } else if (geom.type === 'MultiPolygon') {
+            // Split MultiPolygon into individual polygons
+            const arcs3d = geom.arcs
+            let polyIdx = 0
+            for (const ringGroup of arcs3d) {
+              const polyCoords = decodeArcs({ type: 'Polygon', arcs: ringGroup })
+              if (polyCoords.length > 0) {
+                hexData.push({ name: geom.properties.name, coordinates: polyCoords })
+              }
+              polyIdx++
+            }
           }
         }
-        return coords
       }
-
-      const features: any[] = []
-      for (const geom of topology.objects.countries.geometries) {
-        if (geom.type === 'Polygon') {
-          features.push({ type: 'Polygon', properties: { name: geom.properties.name }, geometry: { type: 'Polygon', coordinates: [decodeRing(geom.arcs)] } })
-        } else if (geom.type === 'MultiPolygon') {
-          features.push({ type: 'MultiPolygon', properties: { name: geom.properties.name }, geometry: { type: 'MultiPolygon', coordinates: geom.arcs.map((ring: number[]) => [decodeRing(ring)]) } })
-        }
-      }
-      hexData = features
     } catch (e) { console.error('Geo load:', e) }
 
     // Build value map for country coloring
     const countryMap: Record<string, number> = {}
     for (const g of geoData) countryMap[g.country] = g.value
 
-    // Map Chinese city names to country names (simplified)
     const cityToCountry: Record<string, string> = {
       '北京': 'China', '上海': 'China', '广州': 'China', '深圳': 'China',
-      '新加坡': 'Singapore', '纽约': 'United States', '伦敦': 'United Kingdom',
+      '新加坡': 'Singapore', '纽约': 'United States of America', '伦敦': 'United Kingdom',
       '东京': 'Japan', '首尔': 'South Korea', '悉尼': 'Australia',
       '莫斯科': 'Russia', '巴黎': 'France', '柏林': 'Germany',
       '多伦多': 'Canada', '荷兰': 'Netherlands', '印尼': 'Indonesia',
-      '法国': 'France', '加拿大': 'Canada', '美国': 'United States',
+      '法国': 'France', '加拿大': 'Canada', '美国': 'United States of America',
       '中国': 'China',
     }
     const valMap = new Map<string, number>()
@@ -208,36 +222,37 @@ async function initGlobe(geoData: GeoItem[]) {
     const maxVal = Math.max(...Array.from(valMap.values()), 1)
     const minVal = Math.min(...Array.from(valMap.values()), 0)
 
-    // Create globe — 精确匹配雷池 WAF 风格
+    // Create globe — polygonsData 方式（已验证可渲染）
     globeInstance = Globe()(el)
       .width(w).height(h)
       .globeImageUrl(null)
       .bumpImageUrl(null)
-      .backgroundColor('#FF000000')
-      .hexPolygonsData(hexData)
-      .hexPolygonResolution(3)
-      .hexPolygonMargin(0.1)
-      .hexPolygonDotResolution(1)
-      .hexPolygonColor((d: any) => {
-        const name = d.properties?.name || ''
+      .backgroundColor('#F4F6F8')
+      .polygonsData(hexData)
+      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.12 }))
+      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x0FC6C2, side: THREE.DoubleSide, transparent: true, opacity: 0.06 }))
+      .polygonStrokeColor((d: any) => {
+        const name = d.name || ''
         const v = valMap.get(name)
-        if (!v) return '#fff'
-        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-        // 渐变: #eefbfb(低) → #0fc6c2(高) 匹配雷池暗色模式
-        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
+        return v ? 'rgba(15,198,194,0.6)' : 'rgba(200,200,200,0.15)'
       })
-      .hexPolygonLabel((d: any) => {
-        const v = valMap.get(d.properties?.name || '')
-        const name = d.properties?.name || ''
+      .polygonLabel((d: any) => {
+        const v = valMap.get(d.name || '')
+        const name = d.name || ''
         return `<div style="font-size:12px;font-weight:600;color:#222">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : ''}`
+      })
+      .polygonAltitude(0.01)
+      .polygonCapColor((d: any) => {
+        const name = d.name || ''
+        const v = valMap.get(name)
+        if (!v) return 'rgba(255,255,255,0.03)'
+        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
+        return `rgba(238,${Math.round(251 - t * 53)},${Math.round(251 - t * 57)},${0.25 + t * 0.3})`
       })
       .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
       .globeMaterial(new THREE.MeshPhongMaterial({
-        color: 0x5E6AD2,
-        emissive: 0x0a1525,
-        emissiveIntensity: 0.08,
-        transparent: true,
-        opacity: 0.1,
+        color: 0x5E6AD2, emissive: 0x0a1525, emissiveIntensity: 0.08,
+        transparent: true, opacity: 0.08,
       }))
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
