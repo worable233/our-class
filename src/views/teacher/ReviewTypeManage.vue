@@ -80,7 +80,7 @@ async function remove(id: number) {
     positiveButtonProps: { type: 'error' as const },
     onPositiveClick: async () => {
       try { await api.delete(`/review-types/${id}`); message.success('已删除'); load() }
-      catch { message.error('删除失败') }
+      catch (e: any) { message.error(e.message || '删除失败') }
     },
   })
 }

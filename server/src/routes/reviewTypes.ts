@@ -59,6 +59,11 @@ router.put('/:id', requirePermission('points.write'), validate(updateSchema), (r
   if (fields.length > 0) {
     vals.push(id)
     db.prepare(`UPDATE review_types SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
+
+    // If name changed, backfill existing point records so history stays consistent
+    if (name !== undefined) {
+      db.prepare('UPDATE point_records SET reason = ? WHERE review_type_id = ?').run(name, id)
+    }
   }
   const row = db.prepare('SELECT * FROM review_types WHERE id = ?').get(id)
   ok(res, row)
@@ -70,6 +75,13 @@ router.delete('/:id', requirePermission('points.write'), (req: Request, res: Res
   const id = Number(req.params.id)
   const existing = db.prepare('SELECT * FROM review_types WHERE id = ?').get(id)
   if (!existing) throw new NotFoundError('点评类型不存在')
+
+  // Check if any point records reference this review type
+  const usage = db.prepare('SELECT COUNT(*) as c FROM point_records WHERE review_type_id = ?').get(id) as { c: number }
+  if (usage.c > 0) {
+    return fail(res, 400, 'IN_USE', `该点评类型已被 ${usage.c} 条记录使用，无法删除。建议修改为"已停用"状态`)
+  }
+
   db.prepare('DELETE FROM review_types WHERE id = ?').run(id)
   ok(res, { success: true })
 })

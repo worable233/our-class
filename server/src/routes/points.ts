@@ -14,6 +14,7 @@ const createPointSchema = z.object({
   type: z.enum(['add', 'deduct']),
   amount: z.number().int().min(1).max(100),
   date: z.string().optional(),
+  review_type_id: z.number().int().optional(),
 })
 
 // GET /api/points?student_id=xxx&class=xxx
@@ -67,10 +68,10 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
 // POST /api/points
 router.post('/', requirePermission('points.write'), validate(createPointSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { student_id, reason, type, amount, date } = req.body
+  const { student_id, reason, type, amount, date, review_type_id } = req.body
   const result = db.prepare(
-    `INSERT INTO point_records (student_id, reason, type, amount, created_by, date) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(student_id, reason, type, amount, req.user?.id ?? 1, date ?? new Date().toISOString().split('T')[0])
+    `INSERT INTO point_records (student_id, reason, type, amount, created_by, date, review_type_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(student_id, reason, type, amount, req.user?.id ?? 1, date ?? new Date().toISOString().split('T')[0], review_type_id || null)
   ok(res, { id: result.lastInsertRowid, ...req.body })
 })
 

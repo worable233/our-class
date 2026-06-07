@@ -94,6 +94,7 @@ async function confirmQuick() {
       reason: r.name,
       type: r.type,
       amount: r.amount,
+      review_type_id: r.id,
     })
 
     const sign = r.type === 'add' ? '+' : '-'
