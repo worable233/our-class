@@ -42,10 +42,8 @@ async function initGlobe(geoData: any[]) {
     const w = el.clientWidth || 640
     const h = el.clientHeight || 500
 
-    const [Globe, THREE] = await Promise.all([
-      import('globe.gl').then(m => m.default),
-      import('three').then(m => m.default),
-    ])
+    const Globe = (await import('globe.gl')).default
+    const THREE = await import('three')
 
     // ── Load country border data ───────
     let polygonsData: any[] = []
