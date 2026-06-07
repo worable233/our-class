@@ -36,8 +36,10 @@ function closeSidebar() { sidebarOpen.value = false }
       }"
     >
       <Header @toggle-sidebar="toggleSidebar" :is-mobile="isMobile" />
-      <main style="flex: 1; padding: 24px; overflow-y: auto; background: var(--ground)">
-        <router-view  />
+      <main style="flex: 1; overflow-y: auto;">
+        <div class="page-content">
+          <router-view  />
+        </div>
       </main>
     </div>
   </n-layout>
@@ -46,7 +48,8 @@ function closeSidebar() { sidebarOpen.value = false }
 <style>
 /* unscoped for sidebar z-index */
 .mobile-sidebar { z-index: 100 !important; }
+.page-content { min-height: 100%; padding: 24px; background: var(--ground); }
 @media (max-width: 768px) {
-  main { padding: 16px !important; }
+  .page-content { padding: 16px; }
 }
 </style>

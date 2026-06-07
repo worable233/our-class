@@ -89,7 +89,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 900px; margin: 0 auto">
+  <div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:var(--text-primary)">点评类型</h2>
