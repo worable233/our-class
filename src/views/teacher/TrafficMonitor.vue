@@ -129,9 +129,6 @@ async function initGlobe(geoData: any[]) {
     globeInstance = Globe()(el)
       .width(w).height(h)
       .backgroundColor('#FF000000').showAtmosphere(false)
-      .globeMaterial(new THREE.MeshPhongMaterial({
-        color: 0x5E6AD2, transparent: true, opacity: 0.1,
-      }))
       .hexPolygonsData(hexData).hexPolygonResolution(3).hexPolygonMargin(0.1).hexPolygonDotResolution(1)
       .hexPolygonColor((d: any) => {
         const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
@@ -146,6 +143,13 @@ async function initGlobe(geoData: any[]) {
         return `<div style="font-size:12px">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v}</div>` : ''}`
       })
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
+
+    // 初始化后设置材质颜色（不能在链式中设置，会和 hexPolygonsData 冲突）
+    const curGlobe = globeInstance
+    setTimeout(() => {
+      if (curGlobe !== globeInstance) return  // 如果已经被新 globe 替换则跳过
+      try { const mat = curGlobe.globeMaterial(); if (mat) { mat.color = new THREE.Color(0x5E6AD2); mat.opacity = 0.1; mat.transparent = true } } catch {}
+    }, 100)
 
     // Auto-rotate
     setTimeout(() => {
