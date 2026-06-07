@@ -45,22 +45,14 @@ async function initGlobe(geoData: any[]) {
     const Globe = (await import('globe.gl')).default
     const THREE = await import('three')
 
-    // ── Load country border data ───────
-    let polygonsData: any[] = []
+    // ── 加载国家 GeoJSON 数据（雷池同款数据源）───────
     let hexData: any[] = []
     try {
-      // 使用雷池同款数据源：ne_110m_land.json（GeoJSON FeatureCollection）
-      const geoRes = await fetch('https://unpkg.com/three-globe@2.31.1/example/data/ne_110m_land.json')
-      const geoJson = await geoRes.json()
-      hexData = geoJson.features || []
-      // 同时也准备 polygonsData 格式作为备选
-      polygonsData = hexData.map((f: any) => ({
-        name: (f.properties?.name || f.properties?.featurecla || ''),
-        coordinates: f.geometry.coordinates,
-      }))
+      const geoRes = await fetch('/countries.json')
+      hexData = await geoRes.json()
     } catch (e) { console.error('GeoJSON load error:', e) }
 
-    // Build value map for country coloring
+    // Build value map for country coloring（匹配雷池数据中的 SUBUNIT 字段）
     const cityToCountry: Record<string, string> = {
       '北京': 'China', '上海': 'China', '广州': 'China', '深圳': 'China',
       '新加坡': 'Singapore', '纽约': 'United States of America', '伦敦': 'United Kingdom',
@@ -87,14 +79,14 @@ async function initGlobe(geoData: any[]) {
       .hexPolygonMargin(0.1)
       .hexPolygonDotResolution(1)
       .hexPolygonColor((d: any) => {
-        const name = d?.properties?.name || d?.properties?.featurecla || ''
+        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
         const v = countryMap.get(name)
         if (!v) return '#ffffff'
         const t = Math.max(0, Math.min(1, v / maxVal))
         return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
       })
       .hexPolygonLabel((d: any) => {
-        const name = d?.properties?.name || d?.properties?.featurecla || ''
+        const name = d?.properties?.SUBUNIT || d?.properties?.NAME || ''
         const v = countryMap.get(name)
         return `<div style="font-size:12px">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v}</div>` : ''}`
       })
