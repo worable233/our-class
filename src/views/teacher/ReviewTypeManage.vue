@@ -6,7 +6,7 @@ import {
   NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
   NSpin, NEmpty,
 } from 'naive-ui'
-import { Plus, Pencil, Trash2 } from '@lucide/vue'
+import { Plus, Pencil, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
 
 interface ReviewType {
   id: number
@@ -107,7 +107,7 @@ onMounted(load)
           <!-- 正向加分 -->
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-              <span style="font-size:18px">⭐</span>
+              <ThumbsUp :size="18" style="color:#18a058" />
               <span style="font-size:15px;font-weight:600;color:var(--text-primary)">正向加分</span>
               <span style="font-size:12px;color:var(--text-muted)">{{ addTypes.length }} 项</span>
             </div>
@@ -128,7 +128,7 @@ onMounted(load)
           <!-- 负向约束 -->
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-              <span style="font-size:18px">🚫</span>
+              <ShieldBan :size="18" style="color:#d03050" />
               <span style="font-size:15px;font-weight:600;color:var(--text-primary)">负向约束</span>
               <span style="font-size:12px;color:var(--text-muted)">{{ deductTypes.length }} 项</span>
             </div>
@@ -168,11 +168,11 @@ onMounted(load)
             <NButton
               :type="form.type === 'add' ? 'primary' : 'default'"
               @click="form.type = 'add'" style="flex:1" round
-            >⭐ 加分</NButton>
+            ><ThumbsUp :size="15" style="margin-right:4px" /> 加分</NButton>
             <NButton
               :type="form.type === 'deduct' ? 'primary' : 'default'"
               @click="form.type = 'deduct'" style="flex:1" round
-            >🚫 扣分</NButton>
+            ><ShieldBan :size="15" style="margin-right:4px" /> 扣分</NButton>
           </div>
         </NFormItem>
         <NFormItem label="名称" required>
