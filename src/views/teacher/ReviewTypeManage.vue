@@ -6,7 +6,7 @@ import {
   NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
   NSpin, NEmpty,
 } from 'naive-ui'
-import { Plus, Pencil, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
+import { Plus, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
 
 interface ReviewType {
   id: number
@@ -89,7 +89,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 800px; margin: 0 auto">
+  <div style="max-width: 900px; margin: 0 auto">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:var(--text-primary)">点评类型</h2>
@@ -111,14 +111,10 @@ onMounted(load)
               <span class="palette-count">{{ addTypes.length }}</span>
             </div>
             <div class="matrix">
-              <div v-for="t in addTypes" :key="t.id" class="matrix-item" @dblclick="openEdit(t)">
+              <div v-for="t in addTypes" :key="t.id" class="matrix-item" @click="openEdit(t)">
                 <span class="matrix-emoji">{{ t.emoji }}</span>
                 <span class="matrix-name">{{ t.name }}</span>
                 <span class="matrix-pts">+{{ t.amount }}</span>
-                <div class="matrix-actions">
-                  <button @click.stop="openEdit(t)" title="编辑"><Pencil :size="11" /></button>
-                  <button @click.stop="remove(t.id)" title="删除"><Trash2 :size="11" /></button>
-                </div>
               </div>
             </div>
           </div>
@@ -129,14 +125,10 @@ onMounted(load)
               <span class="palette-count">{{ deductTypes.length }}</span>
             </div>
             <div class="matrix">
-              <div v-for="t in deductTypes" :key="t.id" class="matrix-item deduct" @dblclick="openEdit(t)">
+              <div v-for="t in deductTypes" :key="t.id" class="matrix-item deduct" @click="openEdit(t)">
                 <span class="matrix-emoji">{{ t.emoji }}</span>
                 <span class="matrix-name">{{ t.name }}</span>
                 <span class="matrix-pts deduct">-{{ t.amount }}</span>
-                <div class="matrix-actions">
-                  <button @click.stop="openEdit(t)" title="编辑"><Pencil :size="11" /></button>
-                  <button @click.stop="remove(t.id)" title="删除"><Trash2 :size="11" /></button>
-                </div>
               </div>
             </div>
           </div>
@@ -186,7 +178,11 @@ onMounted(load)
         </NFormItem>
       </NForm>
       <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:10px">
+        <div style="display:flex;justify-content:space-between;gap:10px">
+          <NButton v-if="editing" type="error" quaternary @click="remove(editing.id)" :disabled="saving">
+            <template #icon><Trash2 :size="14" /></template>删除
+          </NButton>
+          <span style="flex:1" />
           <NButton @click="showModal = false" quaternary :disabled="saving">取消</NButton>
           <NButton type="primary" @click="save" :disabled="!form.name || !form.emoji" :loading="saving" round>
             {{ editing ? '保存' : '创建' }}
@@ -201,26 +197,26 @@ onMounted(load)
 .palette {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 16px;
   align-items: start;
 }
 .palette-col {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .palette-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  padding: 0 4px 6px;
-  border-bottom: 2px solid rgba(24,160,88,0.25);
+  padding-bottom: 6px;
+  border-bottom: 2px solid rgba(24,160,88,0.2);
 }
 .palette-header.deduct {
-  border-bottom-color: rgba(208,48,80,0.25);
+  border-bottom-color: rgba(208,48,80,0.2);
 }
 .palette-count {
   font-size: 11px;
@@ -231,39 +227,29 @@ onMounted(load)
 .matrix {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 .matrix-item {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 10px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
   border: 1px solid var(--hairline);
   background: var(--surface-1);
-  cursor: default;
+  cursor: pointer;
   transition: border-color .12s, background .12s;
 }
-.matrix-item.add:hover { border-color: rgba(24,160,88,0.3); background: rgba(24,160,88,0.04); }
-.matrix-item.deduct:hover { border-color: rgba(208,48,80,0.3); background: rgba(208,48,80,0.04); }
-.matrix-emoji { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.matrix-item:hover { border-color: var(--accent); background: var(--surface-2); }
+.matrix-emoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
 .matrix-name { font-size: 12px; font-weight: 500; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .matrix-pts { font-size: 11px; font-weight: 700; color: #18a058; flex-shrink: 0; }
 .matrix-pts.deduct { color: #d03050; }
-.matrix-actions {
-  position: absolute; top: 4px; right: 4px;
-  display: flex; gap: 2px; opacity: 0; transition: opacity .1s;
+
+@media (max-width: 768px) {
+  .palette { grid-template-columns: 1fr; gap: 20px; }
+  .matrix { grid-template-columns: 1fr 1fr; }
 }
-.matrix-item:hover .matrix-actions { opacity: 1; }
-.matrix-actions button {
-  width: 22px; height: 22px; border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface-2); border: none;
-  color: var(--text-muted); cursor: pointer; transition: all .1s;
-}
-.matrix-actions button:hover { color: var(--text-primary); }
-.matrix-actions button:last-child:hover { color: #d03050; }
 
 .emoji-grid {
   display:flex; flex-wrap:wrap; gap:6px; max-height:200px; overflow-y:auto; padding:4px 0;
