@@ -151,68 +151,74 @@ async function initGlobe(geoData: GeoItem[]) {
       import('three').then(m => m.default),
     ])
 
-    // Load country data
+    // Load country hex data
     let hexData: any[] = []
     try {
       const geoRes = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       const topology = await geoRes.json()
-      const countries = topology.objects.countries.geometries || []
-      hexData = countries.map((c: any) => ({ ...c, properties: { ...c.properties, SUBUNIT: c.properties.name } }))
+      hexData = (topology.objects.countries?.geometries || []).map((c: any) => ({ ...c, properties: { ...c.properties, SUBUNIT: c.properties.name } }))
     } catch {}
 
-    // Build value map
+    // Build value map for country coloring
     const valMap = new Map<string, number>()
     for (const g of geoData) valMap.set(g.country, g.value)
     const maxVal = Math.max(...Array.from(valMap.values()), 1)
     const minVal = Math.min(...Array.from(valMap.values()), 0)
 
+    // Color helpers matching 雷池 gradient
+    function tealOrange(t: number): string {
+      // t: 0→1 maps to teal(#0FC6C2) → orange(#FF8859)
+      const r = Math.round(15 + t * 240)
+      const g = Math.round(198 - t * 110)
+      const b = Math.round(194 - t * 130)
+      return `rgb(${r},${g},${b})`
+    }
+    function getCountryColor(name: string): string {
+      const v = valMap.get(name)
+      if (!v) return 'rgba(255,255,255,0.04)'
+      const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
+      return tealOrange(t)
+    }
+
+    // Create globe
     globeInstance = Globe()(el)
       .width(w).height(h)
       .globeImageUrl(null)
       .bumpImageUrl(null)
       .backgroundImageUrl(null)
       .hexPolygonsData(hexData)
-      .hexPolygonResolution(3)
-      .hexPolygonMargin(0.1)
-      .hexPolygonDotResolution(1)
-      .hexPolygonColor((d: any) => {
+      .hexPolygonResolution(1)
+      .hexPolygonMargin(0.25)
+      .hexPolygonColor((d: any) => getCountryColor(d.properties?.name || ''))
+      .hexPolygonLabel((d: any) => {
         const v = valMap.get(d.properties?.name || '')
-        if (!v) return 'rgba(255,255,255,0.04)'
-        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
-        // Gradient: light teal → warm orange (matching 雷池)
-        const r = Math.round(15 + t * 240)
-        const g2 = Math.round(198 - t * 100)
-        const b = Math.round(194 - t * 80)
-        return `rgb(${r},${g2},${b})`
+        return `<div style="font-size:12px;font-weight:600;color:#fff">${d.properties?.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2;margin-top:2px">${v} 次请求</div>` : '<div style="font-size:11px;color:#555">暂无数据</div>'}`
       })
-      .pointLat('lat').pointLng('lng')
-      .pointAltitude(0.03)
-      .pointRadius(0.18)
-      .pointColor(() => '#0FC6C2')
-      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#0FC6C2">${d.value} 次请求</div>`)
       .pointsData(geoData)
-      .atmosphereColor('#0FC6C2')
-      .atmosphereAltitude(0.15)
-      .lights([new THREE.AmbientLight(0xffffff, 0.8), new THREE.DirectionalLight(0xffffff, 0.6)])
+      .pointLat('lat').pointLng('lng').pointAltitude(0.02).pointRadius(0.15).pointColor(() => '#0FC6C2')
+      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#0FC6C2;margin-top:2px">${d.value} 次请求</div>`)
+      .atmosphereColor('#0FC6C2').atmosphereAltitude(0.12)
+      .lights([new THREE.AmbientLight(0xffffff, 0.6), new THREE.DirectionalLight(0xffffff, 0.8)])
 
-    // Custom globe material
+    // Customize globe material — dark semi-transparent sphere
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
-          mat.color = new THREE.Color(0x0d0e1a)
-          mat.emissive = new THREE.Color(0x0a1520)
-          mat.emissiveIntensity = 0.1
-          mat.opacity = 0.95
+          mat.color = new THREE.Color(0x080a14)
+          mat.emissive = new THREE.Color(0x0a1525)
+          mat.emissiveIntensity = 0.08
+          mat.opacity = 0.85
           mat.transparent = true
         }
       } catch {}
     }, 50)
 
+    // Auto-rotate
     setTimeout(() => {
       try {
         const ctrl = globeInstance.controls()
-        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 3 }
+        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2.5 }
       } catch {}
     }, 500)
   } catch (e) { console.error('Globe:', e) }
@@ -248,9 +254,31 @@ onUnmounted(() => {
           <div class="stat-card"><div class="stat-icon pink"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div><div class="stat-num">{{ stats.err5xx }}</div><div class="stat-label">5xx 错误 {{ stats.err5xxRate }}</div></div></div>
         </div>
 
-        <!-- Main Content: Globe + Right Panel -->
+        <!-- Main Content: Globe + Legend + Right Panel -->
         <div class="main-area">
-          <div class="globe-wrap" ref="globeEl"><NEmpty v-if="!data.geoData.length" description="暂无数据" /></div>
+          <div class="globe-area">
+            <div class="globe-wrap" ref="globeEl"><NEmpty v-if="!data.geoData.length" description="暂无数据" /></div>
+            <!-- Geo Legend Panel -->
+            <div class="geo-legend">
+              <div class="geo-legend-header">地理位置</div>
+              <div class="geo-legend-tabs"><span class="active">3D</span><span>2D</span><span class="sep">|</span><span class="active">世界</span><span>中国</span><span class="sep">|</span><span class="active">访问</span><span>仅拦截</span></div>
+              <div class="geo-legend-list">
+                <div v-for="g in data.geoData" :key="g.country" class="geo-item">
+                  <span class="geo-dot" :style="{ background: (() => {
+                    const maxV = Math.max(...data.geoData.map(x => x.value), 1)
+                    const minV = Math.min(...data.geoData.map(x => x.value), 0)
+                    const t = Math.max(0, Math.min(1, (g.value - minV) / (maxV - minV || 1)))
+                    const r = Math.round(15 + t * 240)
+                    const g2 = Math.round(198 - t * 110)
+                    const b = Math.round(194 - t * 130)
+                    return 'rgb(' + r + ',' + g2 + ',' + b + ')'
+                  })() }"></span>
+                  <span class="geo-name">{{ g.country }}</span>
+                  <span class="geo-val">{{ fmtCompact(g.value) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="right-panel">
             <div class="panel-section"><div class="panel-title">实时 QPS</div><VChart :option="qpsOption" autoresize style="height:120px" /></div>
             <div class="panel-section"><div class="panel-title">访问情况</div><VChart :option="accessOption" autoresize style="height:180px" /></div>
@@ -315,9 +343,23 @@ onUnmounted(() => {
 .stat-num { font-size:17px; font-weight:700; color:var(--text-primary); letter-spacing:-0.02em; line-height:1.2; }
 .stat-label { font-size:10px; color:var(--text-muted); margin-top:1px; white-space:nowrap; }
 
-/* Main Area: Globe + Right Panel */
-.main-area { display:flex; gap:12px; min-height:460px; }
-.globe-wrap { flex:1; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; overflow:hidden; min-height:420px; position:relative; display:flex; align-items:center; justify-content:center; }
+/* Main Area: Globe + Legend + Right Panel */
+.main-area { display:flex; gap:12px; min-height:500px; }
+.globe-area { flex:1; display:flex; gap:0; min-height:460px; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; overflow:hidden; position:relative; }
+.globe-wrap { flex:1; min-height:420px; position:relative; display:flex; align-items:center; justify-content:center; background-image: radial-gradient(circle, rgba(15,198,194,0.04) 1px, transparent 1px); background-size: 20px 20px; }
+.geo-legend { width:280px; flex-shrink:0; border-left:1px solid var(--hairline); padding:14px 16px; display:flex; flex-direction:column; }
+.geo-legend-header { font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:8px; }
+.geo-legend-tabs { display:flex; gap:6px; margin-bottom:14px; font-size:11px; font-weight:500; }
+.geo-legend-tabs span { color:var(--text-muted); cursor:pointer; padding:2px 6px; border-radius:4px; }
+.geo-legend-tabs span.active { color:#0FC6C2; background:rgba(15,198,194,0.1); }
+.geo-legend-tabs span.sep { color:var(--hairline); cursor:default; padding:0 2px; }
+.geo-legend-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+.geo-item { display:flex; align-items:center; gap:8px; padding:5px 4px; border-radius:4px; font-size:12px; }
+.geo-item:hover { background:var(--surface-2); }
+.geo-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+.geo-name { flex:1; color:var(--text-secondary); }
+.geo-val { font-weight:600; color:var(--text-primary); }
+
 .right-panel { width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; }
 .panel-section { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:8px 10px; }
 .panel-title { font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
