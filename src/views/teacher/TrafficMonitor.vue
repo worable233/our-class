@@ -48,51 +48,14 @@ async function initGlobe(geoData: any[]) {
     // ── Load country border data ───────
     let polygonsData: any[] = []
     try {
-      const geoRes = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
-      const topology = await geoRes.json()
-      const arcs = topology.arcs as number[][][]
-      const transform = topology.transform
-      const features: any[] = []
-
-      for (const obj of Object.values(topology.objects) as any[]) {
-        for (const geom of obj.geometries || []) {
-          const coords = decodeArcs(geom, arcs, transform)
-          if (coords.length > 0) {
-            if (geom.type === 'Polygon') features.push({ type: 'Polygon', properties: { name: geom.properties?.name || '' }, geometry: { type: 'Polygon', coordinates: coords } })
-            else features.push({ type: 'MultiPolygon', properties: { name: geom.properties?.name || '' }, geometry: { type: 'MultiPolygon', coordinates: [coords] } })
-          }
-        }
-      }
-
-      polygonsData = features.flatMap((c: any) => {
-        if (c.geometry.type === 'Polygon') return [{ name: c.properties.name, coordinates: c.geometry.coordinates }]
-        if (c.geometry.type === 'MultiPolygon') return c.geometry.coordinates.map((coords: any) => ({ name: c.properties.name, coordinates: [coords] }))
-        return []
-      })
-    } catch {}
-
-    function decodeArcs(geom: any, arcs: number[][][], tr: { scale: number[]; translate: number[] }): number[][][] {
-      const polygons: number[][][] = []
-      const rings = geom.type === 'MultiPolygon' ? geom.arcs : [geom.arcs]
-      for (const ring of rings) {
-        const coords: number[][] = []
-        let x = 0, y = 0
-        for (const arcIdx of ring) {
-          const idx = arcIdx >= 0 ? arcIdx : ~arcIdx
-          const arc = arcs[idx]
-          const reversed = arcIdx < 0
-          const iter = reversed ? [...arc].reverse() : arc
-          for (const [dx, dy] of iter) {
-            x += dx; y += dy
-            const lng = x * tr.scale[0] + tr.translate[0]
-            const lat = y * tr.scale[1] + tr.translate[1]
-            coords.push([lng, lat])
-          }
-        }
-        if (coords.length > 0) polygons.push(coords)
-      }
-      return polygons
-    }
+      // 直接使用 globe.gl 示例用的 GeoJSON（自带坐标，无需解码 TopoJSON）
+      const geoRes = await fetch('https://unpkg.com/three-globe@2.31.1/example/data/ne_110m_land.json')
+      const geoJson = await geoRes.json()
+      polygonsData = geoJson.features.map((f: any) => ({
+        name: f.properties?.name || f.properties?.featurecla || '',
+        coordinates: f.geometry.coordinates,
+      }))
+    } catch (e) { console.error('GeoJSON load error:', e) }
 
     // Build value map for country coloring
     const cityToCountry: Record<string, string> = {
