@@ -14,9 +14,10 @@ const sidebarCollapsed = computed({
   set: (val) => { sidebarOpen.value = !val },
 })
 
-const refreshKey = ref(0)
-function refreshContent() { refreshKey.value++ }
+const refreshTick = ref(0)
+function refreshContent() { refreshTick.value++ }
 provide('refreshContent', refreshContent)
+provide('refreshTick', refreshTick)
 
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function closeSidebar() { sidebarOpen.value = false }
@@ -38,7 +39,7 @@ function closeSidebar() { sidebarOpen.value = false }
     >
       <Header @toggle-sidebar="toggleSidebar" :is-mobile="isMobile" />
       <main style="flex: 1; padding: 24px; overflow-y: auto; background: var(--ground)">
-        <router-view :key="refreshKey" />
+        <router-view  />
       </main>
     </div>
   </n-layout>

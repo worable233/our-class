@@ -34,7 +34,7 @@ const completedAssignments = computed(() => assignments.value.filter(a => a.subm
 </script>
 
 <template>
-  <div style="max-width: 800px;">
+  <div>
     <n-spin :show="loading" style="min-height: 200px;">
       <!-- Profile Header -->
       <div

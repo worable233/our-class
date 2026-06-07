@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
@@ -50,7 +50,7 @@ function dateLabel(d: string): string {
   const days = ['周日','周一','周二','周三','周四','周五','周六']
   if (convDay.getTime() === today.getTime()) return '今天'
   if (convDay.getTime() === yesterday.getTime()) return '昨天'
-  if (convDay.getTime() > today.getTime() - 7 * 86400000) return days[convDay.getDay()]
+  if (convDay.getTime() > today.getTime() - 7 * 86400000) return days[convDay.getDay()] || ''
   return `${convDay.getMonth() + 1}月${convDay.getDate()}日`
 }
 
@@ -59,9 +59,10 @@ const grouped = computed(() => {
   const groups: { label: string; items: Conversation[] }[] = []
   let last = ''
   for (const c of list) {
-    const l = dateLabel(c.updated_at)
+    const l = dateLabel(c.updated_at || '')
     if (l !== last) { groups.push({ label: l, items: [] }); last = l }
-    groups[groups.length - 1].items.push(c)
+    const lastGroup = groups[groups.length - 1]
+    if (lastGroup) lastGroup.items.push(c)
   }
   return groups
 })
@@ -104,6 +105,13 @@ async function remove(id: number) {
   } catch {}
 }
 
+watch(() => auth.isLoggedIn, (loggedIn: boolean) => {
+  if (!loggedIn) {
+    conversations.value = []
+  } else {
+    load()
+  }
+})
 onMounted(load)
 defineExpose({ load, toggleSearch })
 </script>
@@ -172,7 +180,7 @@ defineExpose({ load, toggleSearch })
           </template>
         </div>
       </div>
-      <button class="theme-btn" title="退出登录" @click="handleLogout">
+      <button v-if="auth.isLoggedIn" class="theme-btn" title="退出登录" @click="handleLogout">
         <LogOut :size="15" />
       </button>
       <button class="theme-btn" @click="toggleTheme" :title="isDark ? '浅色模式' : '深色模式'">

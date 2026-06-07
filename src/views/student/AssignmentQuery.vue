@@ -4,6 +4,8 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Assignment } from '@/types'
 import { NButton, NCard, NModal, NInput, NForm, NFormItem, NSpace, NTag, NSpin, NEmpty, NText } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
+import { Calendar } from '@lucide/vue'
 
 const auth = useAuthStore()
 const assignments = ref<Assignment[]>([])
@@ -17,6 +19,8 @@ async function load() {
   assignments.value = await api.get<Assignment[]>(`/assignments?student_id=${auth.user?.id}`)
   loading.value = false
 }
+
+useRefresh(load)
 
 function openSubmit(assignmentId: number) {
   submittingId.value = assignmentId
@@ -47,9 +51,6 @@ onMounted(load)
 
 <template>
   <div>
-    <div class="page-header">
-      <p style="font-size: 14px; color: var(--text-muted)">查看与提交作业</p>
-    </div>
 
     <n-spin :show="loading">
       <div
@@ -86,7 +87,7 @@ onMounted(load)
           <template #footer>
             <div class="assign-foot" style="display: flex; justify-content: space-between; align-items: center; padding-top: 16px; border-top: 1px solid var(--hairline)">
               <n-text depth="3" style="display: flex; align-items: center; gap: 6px">
-                <font-awesome-icon :icon="['fas', 'calendar']" /> 截止：{{ a.due_date }}
+                <Calendar :size="14" /> 截止：{{ a.due_date }}
               </n-text>
               <n-button
                 v-if="a.submit_status !== 'graded'"

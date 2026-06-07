@@ -20,10 +20,11 @@ const loaded = ref(false)
 
 async function load() {
   try {
-    const config = await api.get<{ has_key: boolean; api_url: string; model: string; provider: string } | null>('/chat/config')
+    const config = await api.get<{ has_key: boolean; api_key?: string; api_url: string; model: string; provider: string } | null>('/chat/config')
     if (config) {
       hasKey.value = !!config.has_key
       apiUrl.value = config.api_url || ''
+      apiKey.value = (config as any).api_key || ''
       model.value = config.model || ''
       provider.value = config.provider || 'anthropic'
     }
@@ -78,14 +79,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <div class="page-header-left">
-        <h2 class="page-title">AI 配置</h2>
-        <p class="page-subtitle">配置 API 连接以启用 AI 助手</p>
-      </div>
-    </div>
-
+  <div style="max-width: 600px; margin: 0 auto">
     <n-spin :show="!loaded">
       <div style="max-width: 480px; display: flex; flex-direction: column; gap: 16px">
         <!-- Provider -->

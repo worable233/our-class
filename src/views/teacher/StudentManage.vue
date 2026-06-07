@@ -4,9 +4,11 @@ import { Plus } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useDialog } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
 import { NButton, NCard, NDataTable, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty } from 'naive-ui'
 
 const dialog = useDialog()
+const useRef = useRefresh(load)
 const students = ref<Student[]>([])
 const roleGroups = ref<{ id: number; name: string }[]>([])
 const loading = ref(true)
@@ -64,7 +66,7 @@ function openNew() {
 
 function openEdit(s: Student) {
   editing.value = s
-  form.value = { display_name: s.display_name, class: s.class, username: s.username, password: '' }
+  form.value = { display_name: s.display_name, class: s.class, username: s.username, password: '', group_id: null }
   showModal.value = true
 }
 
@@ -113,12 +115,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <div class="page-header-left">
-        <h2 class="page-title">学生管理</h2>
-        <p class="page-subtitle">管理班级学生信息</p>
-      </div>
+  <div>
+    <div style="margin-bottom: 20px; text-align: right;">
       <n-button type="primary" @click="openNew">
         <Plus :size="16" /> 添加学生
       </n-button>

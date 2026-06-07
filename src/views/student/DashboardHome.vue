@@ -35,7 +35,7 @@ const totalPoints = computed(() => points.value.reduce((a, b) => a + (b.type ===
 
 <template>
   <n-spin :show="loading">
-    <div style="display:flex;flex-direction:column;gap:24px">
+    <div style="width: 100%; display:flex; flex-direction:column; gap:24px">
       <div style="margin-bottom:8px">
         <h2 style="font-family:'Inter Tight',sans-serif;font-weight:700;font-size:24px;color:var(--text-primary);letter-spacing:-0.02em;margin-bottom:4px;margin-block:0">
           欢迎回来，{{ auth.displayName }}

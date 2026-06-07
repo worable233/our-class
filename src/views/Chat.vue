@@ -13,6 +13,34 @@ import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
 const { setResults: setSearchResults } = useSearchPanel()
 
+interface ChatMessage {
+  role: string
+  content: string
+  toolStatus?: 'done' | 'running'
+  toolResult?: string
+  card?: any
+  _morphing?: boolean
+}
+
+function mapToolMsg(m: any): any {
+  if (m.role === 'tool') {
+    try {
+      const p = JSON.parse(m.content)
+      const result: any = { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result }
+      if (p.card) (result as any).card = p.card
+      return result
+    }
+    catch { return { role: m.role, content: m.content, toolStatus: 'done' as const } }
+  }
+  if (m.role === 'card') {
+    try {
+      const p = JSON.parse(m.content)
+      return { role: 'card', card: p }
+    } catch { return { role: m.role, content: m.content } }
+  }
+  return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
+}
+
 function loadSearchResults(rawMessages: any[]) {
   for (const m of rawMessages) {
     if (m.role === 'tool') {
@@ -37,7 +65,7 @@ auth.loadFromStorage()
 
 const sidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null)
 const currentConvId = ref<number | null>(null)
-const messages = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
+const messages = ref<ChatMessage[]>([])
 // Group messages into conversation turns (user → response)
 const messageGroups = computed(() => {
   const groups: { id: number; messages: typeof messages.value }[] = []
@@ -84,6 +112,16 @@ function cleanup() {
 
 onUnmounted(cleanup)
 
+watch(() => auth.isLoggedIn, (loggedIn) => {
+  if (!loggedIn) {
+    messages.value = []
+    currentConvId.value = null
+    terminated.value = false
+    stoppedByUser.value = false
+    hasConfig.value = false
+  }
+})
+
 onMounted(async () => {
   // Only load conversation if URL has an encoded ID
   const encoded = props.encodedId || route.params.encodedId
@@ -102,36 +140,17 @@ onMounted(async () => {
   if (!hasConfig.value) { router.push('/teacher/settings'); return }
 
   try {
-    const id = parseInt(atob(encoded))
+    const id = parseInt(atob((encoded as string).replace(/-/g, '+').replace(/_/g, '/')))
     if (!isNaN(id)) {
       if (loadSeq !== seq) return
       const res = await api.get<any>(`/chat/conversations/${id}`)
       if (loadSeq !== seq) return
       currentConvId.value = id
-      function mapMsg(m: any) {
-        if (m.role === 'tool') {
-          try {
-            const p = JSON.parse(m.content)
-            const result: any = { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result }
-            if (p.card) (result as any).card = p.card
-            return result
-          }
-          catch { return { role: m.role, content: m.content, toolStatus: 'done' as const } }
-        }
-        // Persisted card messages (saved alongside tool messages)
-        if (m.role === 'card') {
-          try {
-            const p = JSON.parse(m.content)
-            return { role: 'card', card: p }
-          } catch { return { role: m.role, content: m.content } }
-        }
-        return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
-      }
       if (res?.messages) {
         const raw = res.messages
         const flat: any[] = []
         for (const m of raw) {
-          const msg = mapMsg(m)
+          const msg = mapToolMsg(m)
           flat.push(msg)
           // If a tool message has embedded card data, emit a card message after the tool pill
           if (m.role === 'tool' && msg.card) {
@@ -154,34 +173,16 @@ async function selectConversation(id: number) {
   messages.value = []
   terminated.value = false
   stoppedByUser.value = false
-  router.replace('/chat/' + btoa(String(id)))
+  router.replace('/chat/' + btoa(String(id)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))
   const seq = ++loadSeq
   try {
     const res = await api.get<any>(`/chat/conversations/${id}`)
     if (loadSeq !== seq) return  // stale
-    function mapMsg(m: any) {
-      if (m.role === 'tool') {
-        try {
-          const p = JSON.parse(m.content)
-          const result: any = { role: m.role, content: p.label || m.content, toolStatus: 'done' as const, toolResult: p.result }
-          if (p.card) (result as any).card = p.card
-          return result
-        }
-        catch { return { role: m.role, content: m.content, toolStatus: 'done' as const } }
-      }
-      if (m.role === 'card') {
-        try {
-          const p = JSON.parse(m.content)
-          return { role: 'card', card: p }
-        } catch { return { role: m.role, content: m.content } }
-      }
-      return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
-    }
     if (res?.messages) {
       const raw = res.messages
       const flat: any[] = []
       for (const m of raw) {
-        const msg = mapMsg(m)
+        const msg = mapToolMsg(m)
         flat.push(msg)
         if (m.role === 'tool' && msg.card) {
           flat.push({ role: 'card', card: msg.card })
@@ -223,6 +224,7 @@ function onPickModalSkip() {
 
 function onPickModalDone(_cardData: PendingPickCard) {
   if (!pendingPickCard.value) return
+  console.log('[morph] onPickModalDone START')
   const card = pendingPickCard.value
   const cardIndex = messages.value.length - 1
 
@@ -230,6 +232,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
   const allModalResults = document.querySelectorAll('.rp-modal-results')
   const modalResults = allModalResults[allModalResults.length - 1] as HTMLElement | null
   const sourceRect = modalResults?.getBoundingClientRect() ?? null
+  console.log('[morph] source found:', !!sourceRect, '| modalResults exists:', !!modalResults)
 
   // Create flying clone BEFORE hiding modal
   let clone: HTMLElement | null = null
@@ -237,6 +240,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
     clone = modalResults.cloneNode(true) as HTMLElement
     clone.style.cssText = `position:fixed;left:${sourceRect.left}px;top:${sourceRect.top}px;width:${sourceRect.width}px;z-index:1001;pointer-events:none;`
     document.body.appendChild(clone)
+    console.log('[morph] clone created and appended to body')
   }
 
   // Insert compact card inline (hidden initially)
@@ -246,18 +250,26 @@ function onPickModalDone(_cardData: PendingPickCard) {
   pendingPickCard.value = null
 
   nextTick(() => {
+    console.log('[morph] nextTick', { hasClone: !!clone, hasSourceRect: !!sourceRect })
+
     if (!clone || !sourceRect) {
+      console.log('[morph] abort: no clone or sourceRect')
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
       if (clone) clone.remove()
       return
     }
 
     const cardMsgs = document.querySelectorAll('.card-msg')
+    console.log('[morph] cardMsgs count:', cardMsgs.length)
     const lastCard = cardMsgs[cardMsgs.length - 1]
     const targetEl = lastCard?.querySelector('.rp-results') as HTMLElement | null
+    console.log('[morph] targetEl:', !!targetEl)
     const targetRect = targetEl?.getBoundingClientRect() ?? null
+    console.log('[morph] sourceRect:', sourceRect.left, sourceRect.top, sourceRect.width, sourceRect.height)
+    console.log('[morph] targetRect:', targetRect?.left, targetRect?.top, targetRect?.width, targetRect?.height)
 
     if (!targetRect) {
+      console.log('[morph] abort: no targetRect')
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
       clone.remove()
       return
@@ -266,6 +278,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
     const dx = targetRect.left - sourceRect.left
     const dy = targetRect.top - sourceRect.top
     const scaleX = targetRect.width / (sourceRect.width || 1)
+    console.log('[morph] animating dx:', dx, 'dy:', dy, 'scaleX:', scaleX)
 
     clone.animate([
       { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
@@ -275,6 +288,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
       easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       fill: 'forwards'
     }).onfinish = () => {
+      console.log('[morph] animation finished, revealing card')
       clone!.remove()
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
     }
@@ -338,8 +352,8 @@ async function sendMessage(content: string) {
     queue = queue.slice(chars.length)
     if (currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
-        if (messages.value[j].role === 'assistant') {
-          (messages.value[j] as any).content += chars
+        if (messages.value[j]!.role === 'assistant') {
+          (messages.value[j] as any)!.content += chars
           break
         }
       }
@@ -418,7 +432,7 @@ async function sendMessage(content: string) {
           } else if (data.type === 'error') {
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
-                if (messages.value[j].role === 'assistant') {
+                if (messages.value[j]!.role === 'assistant') {
                   (messages.value[j] as any).content = `错误: ${data.content}`; break
                 }
               }
@@ -438,7 +452,7 @@ async function sendMessage(content: string) {
     const isLimit = e.message?.includes('轮上限')
     if (e.name !== 'AbortError' && currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
-        if (messages.value[j].role === 'assistant') {
+        if (messages.value[j]!.role === 'assistant') {
           (messages.value[j] as any).content = isLimit
             ? `⚠️ 此对话已达上限（50轮），无法继续发送消息。请「新对话」继续使用。`
             : `错误: ${e.message || '连接失败'}`
@@ -494,8 +508,8 @@ async function continueGeneration() {
     queue = queue.slice(chars.length)
     if (currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
-        if (messages.value[j].role === 'assistant') {
-          (messages.value[j] as any).content += chars
+        if (messages.value[j]!.role === 'assistant') {
+          (messages.value[j] as any)!.content += chars
           break
         }
       }
@@ -550,7 +564,7 @@ async function continueGeneration() {
           } else if (data.type === 'error') {
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
-                if (messages.value[j].role === 'assistant') {
+                if (messages.value[j]!.role === 'assistant') {
                   (messages.value[j] as any).content += `\n\n[错误: ${data.content}]`; break
                 }
               }
@@ -570,7 +584,7 @@ async function continueGeneration() {
     // Don't show abort error when user intentionally stopped
     if (e.name !== 'AbortError' && currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
-        if (messages.value[j].role === 'assistant') {
+        if (messages.value[j]!.role === 'assistant') {
           (messages.value[j] as any).content += `\n\n[错误: ${e.message || '连接失败'}]`
           break
         }
@@ -629,7 +643,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
           <ChatMessage
             v-for="(m, i) in group.messages"
             :key="group.id + '-' + i"
-            :role="m.role"
+            :role="m.role as 'user' | 'assistant' | 'card' | 'tool'"
             :content="m.content"
             :streaming="streaming && m.role === 'assistant' && !group.messages.slice(i + 1).some(x => x.role === 'assistant')"
             :no-copy="stoppedByUser"

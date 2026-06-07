@@ -18,7 +18,7 @@ export function getDb(): Database.Database {
     runMigrations(db)
     seedPermissionGroups(db)
     seedUsers(db)
-    seedPoints(db)
+    seedAllData(db)
   }
   return db
 }
@@ -91,7 +91,7 @@ function seedUsers(db: Database.Database) {
   insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id)
 }
 
-function seedPoints(db: Database.Database) {
+function seedAllData(db: Database.Database) {
   const count = db.prepare('SELECT COUNT(*) as c FROM point_records').get() as { c: number }
   if (count.c > 0) return
 

@@ -843,9 +843,10 @@ async function generateTitle(
     if (provider === 'openai') {
       const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
       const url = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
+      const authKey = apiUrl.includes('bigmodel') ? zhipuAuth(keyRecord.api_key) : keyRecord.api_key
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${keyRecord.api_key}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authKey}` },
         body: JSON.stringify({
           model,
           max_tokens: 15,
@@ -937,7 +938,7 @@ async function testOpenAI(apiUrl: string, apiKey: string, model: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${authKey}`,
     },
     body: JSON.stringify({
       model,
@@ -1036,7 +1037,7 @@ async function streamOpenAI(
 
 // ── Routes ───────────────────────────────────────────────────────────────
 
-router.get('/config', authMiddleware, (req: Request, res: Response) => {
+router.get('/config', (req: Request, res: Response) => {
   const db = getDb()
   const keyRecord = db
     .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
@@ -1050,6 +1051,7 @@ router.get('/config', authMiddleware, (req: Request, res: Response) => {
     id: keyRecord.id,
     provider: keyRecord.provider,
     has_key: !!keyRecord.api_key,
+    api_key: keyRecord.api_key || '',
     api_url: keyRecord.api_url || '',
     model: keyRecord.model,
     search_api_url: keyRecord.search_api_url || '',
@@ -1075,14 +1077,14 @@ router.post(
     db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId)
     db.prepare(
       'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
+    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '', '')
 
     writeAuditLog(req.user!.id, req.user!.display_name, 'update_api_config', 'config', undefined, { provider, model: model || '' })
     ok(res, { message: 'API 配置已保存', provider })
   },
 )
 
-router.get('/conversations', authMiddleware, (req: Request, res: Response) => {
+router.get('/conversations', (req: Request, res: Response) => {
   const db = getDb()
   const conversations = db
     .prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC')
@@ -1092,7 +1094,6 @@ router.get('/conversations', authMiddleware, (req: Request, res: Response) => {
 
 router.post(
   '/conversations',
-  authMiddleware,
   validate(createConversationSchema),
   (req: Request, res: Response) => {
     const db = getDb()
@@ -1107,7 +1108,7 @@ router.post(
   },
 )
 
-router.get('/conversations/:id', authMiddleware, (req: Request, res: Response) => {
+router.get('/conversations/:id', (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   if (isNaN(convId)) return fail(res, 400, 'VALIDATION_ERROR', '无效的对话 ID')
@@ -1123,7 +1124,7 @@ router.get('/conversations/:id', authMiddleware, (req: Request, res: Response) =
   ok(res, { conversation, messages })
 })
 
-router.delete('/conversations/:id', authMiddleware, (req: Request, res: Response) => {
+router.delete('/conversations/:id', (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   if (isNaN(convId)) return fail(res, 400, 'VALIDATION_ERROR', '无效的对话 ID')
@@ -1139,7 +1140,6 @@ router.delete('/conversations/:id', authMiddleware, (req: Request, res: Response
 
 router.post(
   '/conversations/:id/chat',
-  authMiddleware,
   validate(chatMessageSchema),
   async (req: Request, res: Response) => {
     const db = getDb()
@@ -1231,7 +1231,7 @@ router.post(
   },
 )
 
-router.put('/conversations/:id/title', authMiddleware, (req: Request, res: Response) => {
+router.put('/conversations/:id/title', (req: Request, res: Response) => {
   const db = getDb()
   const convId = Number(req.params.id)
   const { title } = req.body

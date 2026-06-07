@@ -6,6 +6,7 @@ import { useMessage } from 'naive-ui'
 import {
   NButton, NTag, NSpin, NEmpty, NSelect, NPagination,
 } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
@@ -94,35 +95,35 @@ function describeLog(log: AuditLog): DescriptionSegment[] {
       const name = String(d.name || '')
       const perms = fmtPerms(d.permissions)
       return [
-        { text: '创建了职位「', type: 'muted' },
-        { text: name, type: 'accent' },
-        { text: '」', type: 'muted' },
+        { text: '创建了职位「', type: 'muted' as const },
+        { text: name, type: 'accent' as const },
+        { text: '」', type: 'muted' as const },
         ...(perms ? [
-          { text: '，拥有 ', type: 'muted' },
-          { text: perms, type: 'accent' },
-          { text: ' 等权限', type: 'muted' },
-        ] : [{ text: '，暂无权限', type: 'muted' }]),
+          { text: '，拥有 ', type: 'muted' as const },
+          { text: perms, type: 'accent' as const },
+          { text: ' 等权限', type: 'muted' as const },
+        ] : [{ text: '，暂无权限', type: 'muted' as const }]),
       ]
     }
     case 'update_role': {
       const name = String(d.name || '')
       const perms = fmtPerms(d.permissions)
       return [
-        { text: '更新了职位「', type: 'muted' },
-        { text: name, type: 'accent' },
-        { text: '」的权限设置', type: 'muted' },
+        { text: '更新了职位「', type: 'muted' as const },
+        { text: name, type: 'accent' as const },
+        { text: '」的权限设置', type: 'muted' as const },
         ...(perms ? [
-          { text: '：', type: 'muted' },
-          { text: perms, type: 'accent' },
+          { text: '：', type: 'muted' as const },
+          { text: perms, type: 'accent' as const },
         ] : []),
       ]
     }
     case 'delete_role': {
       const name = String(d.name || '')
       return [
-        { text: '删除了职位「', type: 'muted' },
-        { text: name, type: 'accent' },
-        { text: '」', type: 'muted' },
+        { text: '删除了职位「', type: 'muted' as const },
+        { text: name, type: 'accent' as const },
+        { text: '」', type: 'muted' as const },
       ]
     }
     case 'update_api_config': {
@@ -130,21 +131,21 @@ function describeLog(log: AuditLog): DescriptionSegment[] {
       const model = String(d.model || '')
       const providerLabel = provider === 'anthropic' ? 'Anthropic' : provider === 'openai' ? 'OpenAI 兼容' : provider
       return [
-        { text: '修改了 API 配置（', type: 'muted' },
-        { text: providerLabel, type: 'accent' },
+        { text: '修改了 API 配置（', type: 'muted' as const },
+        { text: providerLabel, type: 'accent' as const },
         ...(model ? [
-          { text: '，模型 ', type: 'muted' },
-          { text: model, type: 'accent' },
+          { text: '，模型 ', type: 'muted' as const },
+          { text: model, type: 'accent' as const },
         ] : []),
-        { text: '）', type: 'muted' },
+        { text: '）', type: 'muted' as const },
       ]
     }
     default:
       return [
-        { text: log.action, type: 'primary' },
+        { text: log.action, type: 'primary' as const },
         ...Object.entries(d).flatMap(([k, v]) => [
-          { text: ` ${k}: `, type: 'muted' },
-          { text: String(Array.isArray(v) ? v.join(', ') : v), type: 'accent' },
+          { text: ` ${k}: `, type: 'muted' as const },
+          { text: String(Array.isArray(v) ? v.join(', ') : v), type: 'accent' as const },
         ]),
       ]
   }
@@ -211,6 +212,7 @@ function reset() {
   load()
 }
 
+  useRefresh(load)
 onMounted(() => {
   loadPermissions()
   loadTypes()
@@ -219,17 +221,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div style="max-width: 1000px; margin: 0 auto">
-    <!-- Header -->
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px">
-      <div>
-        <h2 style="margin: 0 0 6px; font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em">
-          操作日志
-        </h2>
-        <p style="margin: 0; font-size: 14px; color: var(--text-muted)">
-          记录所有后台设置变更操作，追踪每一步修改
-        </p>
-      </div>
+  <div>
+    <div style="margin-bottom: 16px; text-align: right;">
       <NButton quaternary @click="reset" :disabled="loading">
         <template #icon><RefreshCw :size="15" /></template>
         刷新

@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
   model TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  api_url TEXT DEFAULT '',
+  search_api_url TEXT DEFAULT '',
+  search_api_key TEXT DEFAULT '',
+  city TEXT DEFAULT '',
   FOREIGN KEY (user_id) REFERENCES users(id),
   UNIQUE(user_id, provider)
 );

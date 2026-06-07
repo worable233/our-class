@@ -41,10 +41,11 @@ app.use(requestLogger)
 // ── Body parsing ──────────────────────────────────────────────────────
 app.use(express.json())
 
-// ── Analytics tracking (skip static assets) ───────────────────────────
-app.use('/api', (_req, _res, next) => {
-  try { trackPageView(_req.path) } catch {}
-  next()
+// ── Analytics: track only frontend page visits, not every API call ───
+app.post('/api/analytics/pv', (req, res) => {
+  const path = (req.body as any)?.path || '/'
+  try { trackPageView(path) } catch {}
+  res.json({ success: true })
 })
 
 // ── Routes ────────────────────────────────────────────────────────────

@@ -148,10 +148,6 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="margin-bottom: 20px">
-      <n-text depth="3" style="font-size: 14px">成绩录入与分析</n-text>
-    </div>
-
     <n-space style="margin-bottom: 20px">
       <n-select v-model:value="selectedCourse" :options="courseOptions" style="width: 160px" />
       <n-select v-model:value="selectedExam" :options="examOptions" style="width: 160px" />

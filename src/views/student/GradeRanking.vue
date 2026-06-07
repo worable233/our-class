@@ -64,8 +64,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 800px;">
-    <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 20px;">考试成绩排名</n-text>
+  <div>
 
     <n-space style="margin-bottom: 20px;">
       <n-select v-model:value="selectedCourse" :options="courseOptions" @update:value="load" />

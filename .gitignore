@@ -55,3 +55,4 @@ cypress/screenshots/
 # ─── Misc ───
 .eslintcache
 *.tsbuildinfo
+.mcp.json

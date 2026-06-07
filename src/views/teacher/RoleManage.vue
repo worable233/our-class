@@ -118,22 +118,8 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 1000px; margin: 0 auto">
-    <!-- 页面头部 -->
-    <div
-      style="
-        display: flex; align-items: center; justify-content: space-between;
-        margin-bottom: 28px;
-      "
-    >
-      <div>
-        <h2 style="margin: 0 0 6px; font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em">
-          职位管理
-        </h2>
-        <p style="margin: 0; font-size: 14px; color: var(--text-muted)">
-          管理班干部职位及其权限，老师与普通学生也在此配置
-        </p>
-      </div>
+  <div>
+    <div style="margin-bottom: 16px; text-align: right;">
       <NButton type="primary" @click="openNew" round :disabled="allPermissions.length === 0">
         <template #icon><Plus :size="16" /></template>
         新建职位

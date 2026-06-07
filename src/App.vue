@@ -8,7 +8,8 @@ import { useTheme } from '@/composables/useTheme'
 const { isDark } = useTheme()
 const theme = computed(() => (isDark.value ? darkTheme : null))
 
-const darkOverrides: GlobalThemeOverrides = {
+// Base overrides shared by both themes (Naive UI docs site uses Inter for both)
+const baseOverrides: GlobalThemeOverrides = {
   common: {
     fontFamily: "'Inter', -apple-system, sans-serif",
     fontFamilyMono: "'JetBrains Mono', 'Fira Code', monospace",
@@ -18,6 +19,12 @@ const darkOverrides: GlobalThemeOverrides = {
     primaryColorHover: '#7C7FDC',
     primaryColorPressed: '#4D59C2',
     primaryColorSuppl: '#5E6AD2',
+  },
+}
+
+const darkOverrides: GlobalThemeOverrides = {
+  common: {
+    ...baseOverrides.common,
     bodyColor: '#0a0b0d',
     cardColor: '#121314',
     modalColor: '#121314',
@@ -37,7 +44,7 @@ const darkOverrides: GlobalThemeOverrides = {
   },
 }
 
-const themeOverrides = computed(() => (isDark.value ? darkOverrides : null))
+const themeOverrides = computed(() => (isDark.value ? darkOverrides : baseOverrides))
 </script>
 
 <template>

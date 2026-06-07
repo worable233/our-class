@@ -14,6 +14,8 @@ import {
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { PointSummary } from '@/types'
+import { useRefresh } from '@/composables/useRefresh'
+import { Crown } from '@lucide/vue'
 
 const auth = useAuthStore()
 const summary = ref<PointSummary[]>([])
@@ -96,12 +98,7 @@ const rowProps = (row: any) => {
 </script>
 
 <template>
-  <div style="max-width: 700px">
-    <div style="margin-bottom: var(--space-xl)">
-      <p style="font-size: 14px; color: var(--text-muted)">
-        班级光荣榜 — 实时积分排行
-      </p>
-    </div>
+  <div>
 
     <!-- Podium Top 3 -->
     <div
@@ -231,7 +228,7 @@ const rowProps = (row: any) => {
             top: -8px;
           "
         >
-          <font-awesome-icon :icon="['fas', 'crown']" />
+          <Crown :size="22" style="color:#d97706" />
         </div>
         <div
           class="podium-avatar big"

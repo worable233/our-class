@@ -124,7 +124,7 @@ function handleTableExport(e: MouseEvent) {
       <div class="body">
         <div v-if="!content && !isUser" class="dots"><span /><span /><span /></div>
         <div v-else-if="!isUser && content" class="text text-bot" v-html="render(content)" @click="handleTableExport" />
-        <div v-else class="text text-user" v-html="render(content)" />
+        <div v-else class="text text-user" v-html="render(content || '')" />
       </div>
     </div>
     <div v-if="!isUser && content && !streaming && !noCopy" class="copy-area">

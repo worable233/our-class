@@ -111,4 +111,18 @@ router.beforeEach((to, _from, next) => {
   next()
 })
 
+// Track page views after each navigation
+router.afterEach((to) => {
+  const token = localStorage.getItem('ourclass_user')
+  if (!token) return
+  try {
+    const parsed = JSON.parse(token)
+    fetch('/api/analytics/pv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${parsed.token}` },
+      body: JSON.stringify({ path: to.path }),
+    }).catch(() => {})
+  } catch {}
+})
+
 export default router

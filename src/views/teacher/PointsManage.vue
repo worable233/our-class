@@ -7,6 +7,8 @@ import {
   NButton, NCard, NModal, NInput, NSelect, NSpace,
   NGrid, NGi, NTag, NAvatar, NEmpty, NScrollbar, NText,
 } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
+import { Shuffle, Star, Plus, Minus } from '@lucide/vue'
 
 const auth = useAuthStore()
 const classes = ref<string[]>([])
@@ -195,23 +197,13 @@ function openScoreCard(student: Student) {
   openQuick(student, 'add', 1)
 }
 
-onMounted(async () => {
-  await loadClasses()
-  await loadAll()
-})
+async function refreshAll() { await loadClasses(); await loadAll(); }
+useRefresh(refreshAll);
+onMounted(refreshAll)
 </script>
 
 <template>
-  <div style="max-width: 1100px;">
-    <!-- Page Header -->
-    <div style="margin-bottom: 24px;">
-      <n-text style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; display: block; margin-bottom: 4px;">
-        积分管理
-      </n-text>
-      <n-text depth="3" style="font-size: 14px;">
-        班级积分管理与课堂表现记录
-      </n-text>
-    </div>
+  <div>
 
     <!-- Top Bar -->
     <div
@@ -230,7 +222,7 @@ onMounted(async () => {
         </n-button>
       </div>
       <n-button @click="openRandomModal">
-        <font-awesome-icon :icon="['fas', 'shuffle']" /> 抽号
+        <Shuffle :size="16" /> 抽号
       </n-button>
     </div>
 
@@ -270,7 +262,7 @@ onMounted(async () => {
           <div
             style="font-size: 20px; font-weight: 700; color: var(--accent-text); letter-spacing: -0.02em; display: flex; align-items: center; gap: 4px;"
           >
-            <font-awesome-icon :icon="['fas', 'star']" /> {{ getPoints(s.id) }}
+            <Star :size="16" /> {{ getPoints(s.id) }}
           </div>
         </div>
       </n-card>
@@ -345,14 +337,14 @@ onMounted(async () => {
             :type="quickAction?.type === 'add' ? 'primary' : 'default'"
             @click="quickAction && (quickAction.type = 'add')"
           >
-            <font-awesome-icon :icon="['fas', 'plus']" /> 加分
+            <Plus :size="16" /> 加分
           </n-button>
           <n-button
             style="flex: 1;"
             :type="quickAction?.type === 'deduct' ? 'primary' : 'default'"
             @click="quickAction && (quickAction.type = 'deduct')"
           >
-            <font-awesome-icon :icon="['fas', 'minus']" /> 扣分
+            <Minus :size="16" /> 扣分
           </n-button>
         </div>
 
@@ -417,7 +409,7 @@ onMounted(async () => {
       <div v-if="randomModalVisible" class="modal-mask" @click.self="closeRandomModal">
         <div class="random-modal">
           <div class="rm-header">
-            <h3 class="rm-title"><font-awesome-icon :icon="['fas', 'shuffle']" /> 随机抽号</h3>
+            <h3 class="rm-title"><Shuffle :size="16" /> 随机抽号</h3>
             <button class="rm-close" @click="closeRandomModal">✕</button>
           </div>
 
@@ -436,7 +428,7 @@ onMounted(async () => {
                 :disabled="randoming"
                 @click="startRandomPick"
               >
-                <font-awesome-icon :icon="['fas', 'shuffle']" />
+                <Shuffle :size="20" />
                 {{ randoming ? '抽选中...' : '开始抽选' }}
               </button>
             </div>

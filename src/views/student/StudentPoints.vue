@@ -4,6 +4,8 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { PointRecord, PointSummary } from '@/types'
 import { NCard, NGrid, NGi, NTag, NText, NSpace, NSpin, NEmpty, NAvatar } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
+import { ThumbsUp, ThumbsDown, Trophy, BarChart3 } from '@lucide/vue'
 
 const auth = useAuthStore()
 const records = ref<PointRecord[]>([])
@@ -39,7 +41,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 </script>
 
 <template>
-  <div style="max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:24px;padding:24px 0;">
+  <div style="width:100%;display:flex;flex-direction:column;gap:24px;padding:24px 0;">
     <!-- Hero Points Display -->
     <n-card
       :bordered="true"
@@ -70,7 +72,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
     <n-grid :cols="4" :x-gap="16">
       <n-gi>
         <n-card size="small" :hoverable="true" style="text-align:center;">
-          <font-awesome-icon :icon="['fas', 'thumbs-up']" style="font-size:18px;color:#22c55e;margin-bottom:8px;display:block;" />
+          <ThumbsUp :size="22" style="color:#22c55e;margin-bottom:8px;display:block;margin-inline:auto;" />
           <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
             +{{ totalAdded }}
           </n-text>
@@ -79,7 +81,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
       </n-gi>
       <n-gi>
         <n-card size="small" :hoverable="true" style="text-align:center;">
-          <font-awesome-icon :icon="['fas', 'thumbs-down']" style="font-size:18px;color:#ef4444;margin-bottom:8px;display:block;" />
+          <ThumbsDown :size="22" style="color:#ef4444;margin-bottom:8px;display:block;margin-inline:auto;" />
           <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
             -{{ totalDeducted }}
           </n-text>
@@ -88,7 +90,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
       </n-gi>
       <n-gi>
         <n-card size="small" :hoverable="true" style="text-align:center;">
-          <font-awesome-icon :icon="['fas', 'trophy']" style="font-size:18px;color:var(--accent-text);margin-bottom:8px;display:block;" />
+          <Trophy :size="22" style="color:var(--accent-text);margin-bottom:8px;display:block;margin-inline:auto;" />
           <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
             #{{ myRank }}
           </n-text>
@@ -97,7 +99,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
       </n-gi>
       <n-gi>
         <n-card size="small" :hoverable="true" style="text-align:center;">
-          <font-awesome-icon :icon="['fas', 'chart-bar']" style="font-size:18px;color:var(--text-muted);margin-bottom:8px;display:block;" />
+          <BarChart3 :size="22" style="color:var(--text-muted);margin-bottom:8px;display:block;margin-inline:auto;" />
           <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
             {{ records.length }}
           </n-text>

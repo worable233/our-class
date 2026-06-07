@@ -11,6 +11,8 @@ import {
   TitleComponent, TooltipComponent, LegendComponent,
   GridComponent,
 } from 'echarts/components'
+import { useRefresh } from '@/composables/useRefresh'
+import { RotateCw } from '@lucide/vue'
 
 use([CanvasRenderer, LineChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -124,7 +126,7 @@ function buildCharts(d: DashboardData) {
       formatter: (params: any) => {
         const p = params[0]
         const idx = p.dataIndex
-        const day = d.apiTrend[idx]
+        const day = d.apiTrend[idx]!
         let html = `<div style="font-weight:600;margin-bottom:6px;font-size:13px">${p.axisValue}</div>`
         html += `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:2px">调用次数<span style="color:#18a058;font-weight:600">${p.value}</span></div>`
         html += `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:2px">Token 消耗<span style="color:#f0a020;font-weight:600">${day.tokens.toLocaleString()}</span></div>`
@@ -166,30 +168,21 @@ const techCategories = computed(() => {
   const map: Record<string, TechItem[]> = {}
   for (const t of data.value.techStack) {
     if (!map[t.category]) map[t.category] = []
-    map[t.category].push(t)
+    const cat = map[t.category]!
+    cat.push(t)
   }
   return Object.entries(map)
 })
 
+  useRefresh(load)
 onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 1100px; margin: 0 auto">
-    <!-- Header -->
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px">
-      <div>
-        <h2 style="margin: 0 0 4px; font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em">
-          仪表盘
-        </h2>
-        <p style="margin: 0; font-size: 14px; color: var(--text-muted)">
-          查看系统运行概览
-        </p>
-      </div>
+  <div>
+    <div style="margin-bottom: 16px; text-align: right;">
       <NButton quaternary size="small" @click="load" :disabled="loading">
-        <template #icon>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>
-        </template>
+        <template #icon><RotateCw :size="15" /></template>
         刷新
       </NButton>
     </div>

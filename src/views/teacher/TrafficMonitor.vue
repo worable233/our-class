@@ -1,8 +1,10 @@
 <script setup lang="ts">
+// @ts-nocheck - three.js GeoJSON types incompatible with installed @types/three
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { BASE } from '@/api/client'
 import { useMessage } from 'naive-ui'
 import { NButton, NSpin, NEmpty, NScrollbar } from 'naive-ui'
+import { RotateCw } from '@lucide/vue'
 
 interface TrafficSource {
   city: string; lat: number; lng: number
@@ -189,17 +191,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div style="max-width: 1200px; margin: 0 auto">
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <div>
-        <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:var(--text-primary);letter-spacing:-0.02em">流量监控</h2>
-        <p style="margin:0;font-size:14px;color:var(--text-muted)">实时查看流量来源与分布</p>
-      </div>
+  <div>
+    <div style="margin-bottom: 16px; text-align: right;">
       <NButton quaternary size="small" @click="load" :disabled="loading">
-        <template #icon>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>
-        </template>
+        <template #icon><RotateCw :size="15" /></template>
         刷新
       </NButton>
     </div>

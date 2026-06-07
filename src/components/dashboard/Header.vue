@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { computed, inject } from 'vue'
 import { NLayoutHeader, NButton, NText, NTag } from 'naive-ui'
-import { Sun, Moon, Menu, RefreshCw } from '@lucide/vue'
+import { Sun, Moon, Menu, RotateCw } from '@lucide/vue'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ isMobile?: boolean }>()
@@ -52,8 +52,11 @@ const pageTitle = computed(() => {
         <Sun v-if="isDark" :size="16" />
         <Moon v-else :size="16" />
       </n-button>
-      <n-button quaternary circle size="small" @click="refreshContent?.()" title="刷新页面">
-        <RefreshCw :size="16" />
+      <n-button size="small" @click="refreshContent?.()">
+        <template #icon>
+          <RotateCw :size="15" />
+        </template>
+        刷新
       </n-button>
     </div>
   </n-layout-header>

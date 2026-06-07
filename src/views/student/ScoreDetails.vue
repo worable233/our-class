@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, h } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Score } from '@/types'
@@ -14,7 +14,6 @@ import {
   NSpin,
   NEmpty,
 } from 'naive-ui'
-import { h } from 'vue'
 
 const auth = useAuthStore()
 const scores = ref<Score[]>([])
@@ -50,11 +49,52 @@ const averageByCourse = computed(() => {
     return { course, avg }
   })
 })
+
+const tableColumns = computed(() => {
+  const cols: any[] = [
+    { title: '科目', key: 'course', width: 100 },
+    ...exams.value.map(e => ({
+      title: e, key: e, width: 100,
+      render: (row: any) => {
+        const s = row.scores[e]
+        if (!s) return h(NText, { depth: 3 }, () => '—')
+        return h(NTag, {
+          size: 'small',
+          bordered: false,
+          type: s >= 80 ? 'success' : s >= 60 ? 'warning' : 'error',
+        }, () => s)
+      },
+    })),
+    {
+      title: '趋势', key: 'trend', width: 80,
+      render: (row: any) => {
+        const vals = exams.value.map(e => row.scores[e]).filter(v => v != null)
+        if (vals.length < 2) return h(NText, { depth: 3 }, () => '—')
+        return vals[vals.length - 1] >= vals[vals.length - 2]
+          ? h(NText, { type: 'success', depth: 3 }, () => '↑ 上升')
+          : h(NText, { type: 'error', depth: 3 }, () => '↓ 下降')
+      },
+    },
+  ]
+  return cols
+})
+
+const tableData = computed(() => {
+  return courses.value.map(c => {
+    const row: any = { course: c, scores: {} }
+    for (const e of exams.value) {
+      const s = getScore(c, e)
+      row[e] = s?.score ?? null
+      row.scores[e] = s?.score ?? null
+    }
+    return row
+  })
+})
 </script>
 
 <template>
   <n-spin :show="loading">
-    <div style="max-width: 800px;">
+    <div>
       <div v-if="!loading && scores.length === 0" style="padding: 80px 0;">
         <n-empty description="暂无成绩数据" />
       </div>
@@ -96,82 +136,12 @@ const averageByCourse = computed(() => {
           </n-gi>
         </n-grid>
 
-        <div
-          style="background: var(--surface-1); border: 1px solid var(--hairline); border-radius: var(--radius-md); overflow: hidden;"
-        >
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr>
-                <th
-                  style="text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface-2); border-bottom: 1px solid var(--hairline);"
-                >
-                  科目
-                </th>
-                <th
-                  v-for="e in exams"
-                  :key="e"
-                  style="text-align: center; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface-2); border-bottom: 1px solid var(--hairline);"
-                >
-                  {{ e }}
-                </th>
-                <th
-                  style="text-align: center; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface-2); border-bottom: 1px solid var(--hairline);"
-                >
-                  趋势
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in courses" :key="c">
-                <td
-                  style="text-align: left; padding: 12px 16px; font-size: 14px; font-weight: 500; color: var(--text-primary); border-bottom: 1px solid var(--hairline);"
-                >
-                  {{ c }}
-                </td>
-                <td
-                  v-for="e in exams"
-                  :key="e"
-                  style="text-align: center; padding: 12px 16px; border-bottom: 1px solid var(--hairline);"
-                >
-                  <n-tag
-                    v-if="getScore(c, e)"
-                    :type="
-                      (getScore(c, e)?.score || 0) >= 80
-                        ? 'success'
-                        : (getScore(c, e)?.score || 0) >= 60
-                          ? 'warning'
-                          : 'error'
-                    "
-                    size="small"
-                    :bordered="false"
-                  >
-                    {{ getScore(c, e)?.score }}
-                  </n-tag>
-                  <n-text v-else depth="3">&mdash;</n-text>
-                </td>
-                <td
-                  style="text-align: center; padding: 12px 16px; font-size: 13px; font-weight: 500; border-bottom: 1px solid var(--hairline);"
-                >
-                  <div v-if="scores.filter(s => s.course === c).length >= 2">
-                    <n-text
-                      v-if="
-                        (scores.filter(s => s.course === c).slice(-1)[0]
-                          ?.score || 0) >=
-                        (scores.filter(s => s.course === c).slice(-2, -1)[0]
-                          ?.score || 0)
-                      "
-                      :type="'success'"
-                    >
-                      &uarr; 上升
-                    </n-text>
-                    <n-text v-else :type="'error'"> &darr; 下降 </n-text>
-                  </div>
-                  <n-text v-else depth="3">&mdash;</n-text>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <n-data-table
+          :bordered="false"
+          :single-line="false"
+          :columns="tableColumns"
+          :data="tableData"
+        />
       </template>
     </div>
   </n-spin>

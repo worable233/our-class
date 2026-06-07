@@ -129,6 +129,8 @@ router.delete('/:id', requirePermission('students.delete'), (req: Request, res: 
   if (!student) throw new NotFoundError('学生不存在')
 
   // Cascade delete all related data
+  db.prepare('DELETE FROM comments WHERE author_id = ?').run(id)
+  db.prepare('DELETE FROM posts WHERE author_id = ?').run(id)
   db.prepare('DELETE FROM submissions WHERE student_id = ?').run(id)
   db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(id)
   db.prepare('DELETE FROM conversations WHERE user_id = ?').run(id)

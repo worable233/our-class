@@ -99,8 +99,8 @@ function go(path: string) {
           <a
             v-if="!item.expandable"
             class="sidebar-item"
-            :class="{ active: isActive(item.path) }"
-            @click="go(item.path)"
+            :class="{ active: isActive(item.path || '') }"
+            @click="go(item.path || '')"
           >
             <span class="sidebar-item-icon">
               <component :is="item.icon" :size="16" />

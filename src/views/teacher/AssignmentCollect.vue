@@ -7,6 +7,8 @@ import {
   NButton, NCard, NModal, NInput, NSelect, NForm, NFormItem, NSpace,
   NTag, NSpin, NEmpty, NText, NDatePicker, NInputNumber, NAvatar,
 } from 'naive-ui'
+import { useRefresh } from '@/composables/useRefresh'
+import { Plus } from '@lucide/vue'
 
 const auth = useAuthStore()
 const assignments = ref<Assignment[]>([])
@@ -61,34 +63,15 @@ async function grade(submissionId: number) {
   if (sub) { sub.score = input.score; sub.feedback = input.feedback; sub.status = 'graded' }
 }
 
+  useRefresh(load)
 onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 1100px">
-    <!-- Page Header -->
-    <div
-      style="
-        display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 24px;
-      "
-    >
-      <div style="display: flex; flex-direction: column; gap: 4px">
-        <h2
-          style="
-            font-family: 'Inter Tight', sans-serif; font-weight: 700;
-            font-size: 22px; color: var(--text-primary);
-            letter-spacing: -0.02em; margin: 0;
-          "
-        >
-          作业收集
-        </h2>
-        <p style="font-size: 14px; color: var(--text-muted); margin: 0">
-          发布作业与批改管理
-        </p>
-      </div>
+  <div>
+    <div style="margin-bottom: 16px; text-align: right;">
       <n-button type="primary" @click="showNew = true">
-        <font-awesome-icon :icon="['fas', 'plus']" /> 发布作业
+        <Plus :size="16" /> 发布作业
       </n-button>
     </div>
 

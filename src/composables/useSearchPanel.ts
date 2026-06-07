@@ -8,7 +8,7 @@ async function loadFavicons() {
   favicons.value = results.value.map(() => '')
   for (let i = 0; i < results.value.length; i++) {
     try {
-      const res = await fetch(`https://uapis.cn/api/v1/webparse/metadata?url=${encodeURIComponent(results.value[i].url)}`)
+      const res = await fetch(`https://uapis.cn/api/v1/webparse/metadata?url=${encodeURIComponent(results.value[i]!.url)}`)
       if (res.ok) {
         const data = await res.json()
         if (data.favicon_url) favicons.value[i] = data.favicon_url
