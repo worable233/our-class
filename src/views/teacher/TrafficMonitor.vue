@@ -91,13 +91,9 @@ async function load() {
 }
 
 async function initGlobe(geoData: any[]) {
-  if (loadingGlobe) return  // 由 load() 保证串行
   const el = globeEl.value
   if (!el) return
   try {
-    // 销毁旧 globe
-    if (globeInstance && typeof globeInstance._destructor === 'function') globeInstance._destructor()
-    globeInstance = null
     el.innerHTML = ''
     el.style.position = 'relative'
     const w = el.clientWidth || 640
