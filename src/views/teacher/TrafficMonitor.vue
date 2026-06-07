@@ -47,12 +47,15 @@ async function initGlobe(geoData: any[]) {
 
     // ── Load country border data ───────
     let polygonsData: any[] = []
+    let hexData: any[] = []
     try {
-      // 直接使用 globe.gl 示例用的 GeoJSON（自带坐标，无需解码 TopoJSON）
+      // 使用雷池同款数据源：ne_110m_land.json（GeoJSON FeatureCollection）
       const geoRes = await fetch('https://unpkg.com/three-globe@2.31.1/example/data/ne_110m_land.json')
       const geoJson = await geoRes.json()
-      polygonsData = geoJson.features.map((f: any) => ({
-        name: f.properties?.name || f.properties?.featurecla || '',
+      hexData = geoJson.features || []
+      // 同时也准备 polygonsData 格式作为备选
+      polygonsData = hexData.map((f: any) => ({
+        name: (f.properties?.name || f.properties?.featurecla || ''),
         coordinates: f.geometry.coordinates,
       }))
     } catch (e) { console.error('GeoJSON load error:', e) }
@@ -74,36 +77,31 @@ async function initGlobe(geoData: any[]) {
     }
     const maxVal = Math.max(...Array.from(countryMap.values()), 1)
 
-    // ── Build globe ───────────────────────────────
+    // ── Build globe — 完全匹配雷池 WAF 实现 ───────
     globeInstance = Globe()(el)
-      .globeImageUrl(null)
-      .bumpImageUrl(null)
-      .backgroundImageUrl(null)
       .width(w).height(h)
-      .polygonsData(polygonsData)
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0xcc2222, side: THREE.DoubleSide }))
-      .polygonStrokeColor(() => 'rgba(255, 255, 0, 0.9)')
-      .polygonLabel((d: any) => {
-        const v = countryMap.get(d.name || '')
-        return `<div style="font-size:12px;font-weight:600;color:#333">${d.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v} 次请求</div>` : ''}`
+      .backgroundColor('#FF000000')
+      .showAtmosphere(false)
+      .hexPolygonsData(hexData)
+      .hexPolygonResolution(3)
+      .hexPolygonMargin(0.1)
+      .hexPolygonDotResolution(1)
+      .hexPolygonColor((d: any) => {
+        const name = d?.properties?.name || d?.properties?.featurecla || ''
+        const v = countryMap.get(name)
+        if (!v) return '#ffffff'
+        const t = Math.max(0, Math.min(1, v / maxVal))
+        return `rgb(${Math.round(238 - t * 223)},${Math.round(251 - t * 53)},${Math.round(251 - t * 57)})`
       })
-      .atmosphereColor('#4ECDC4')
-      .atmosphereAltitude(0.12)
-
-    // Globe material — 半透明青绿，匹配雷池 #4ECDC4
-    setTimeout(() => {
-      try {
-        const mat = globeInstance.globeMaterial()
-        if (mat) {
-          mat.color = new THREE.Color(0x4ECDC4)
-          mat.emissive = new THREE.Color(0x2DADA5)
-          mat.emissiveIntensity = 0.15
-          mat.opacity = 0.5
-          mat.transparent = true
-        }
-      } catch {}
-    }, 100)
+      .hexPolygonLabel((d: any) => {
+        const name = d?.properties?.name || d?.properties?.featurecla || ''
+        const v = countryMap.get(name)
+        return `<div style="font-size:12px">${name}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v}</div>` : ''}`
+      })
+      .globeMaterial(new THREE.MeshPhongMaterial({
+        color: 0x4ECDC4, transparent: true, opacity: 0.08,
+      }))
+      .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
     // Auto-rotate
     setTimeout(() => {
