@@ -3,8 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useDialog, useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NForm, NFormItem, NInput, NInputNumber,
-  NSpace, NTag, NSpin, NEmpty, NPopconfirm, NButtonGroup,
+  NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
+  NSpin, NEmpty,
 } from 'naive-ui'
 import { Plus, Pencil, Trash2 } from '@lucide/vue'
 

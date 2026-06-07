@@ -3,18 +3,19 @@ import { ref, onMounted, computed } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Student, PointRecord, PointSummary } from '@/types'
+import { useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NInput, NSelect, NSpace,
-  NGrid, NGi, NTag, NAvatar, NEmpty, NScrollbar, NText,
+  NButton, NCard, NModal, NTag, NEmpty, NText,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Shuffle, Star, Plus, Minus, Check } from '@lucide/vue'
+import { Shuffle, Star } from '@lucide/vue'
 
 interface ReviewType {
   id: number; name: string; emoji: string
   type: 'add' | 'deduct'; amount: number; is_active: number
 }
 
+const message = useMessage()
 const auth = useAuthStore()
 const classes = ref<string[]>([])
 const currentClass = ref('')
@@ -87,25 +88,31 @@ async function confirmQuick() {
   if (!quickAction.value || !selectedReview.value) return
   const r = selectedReview.value
 
-  await api.post('/points', {
-    student_id: quickAction.value.student.id,
-    reason: r.name,
-    type: r.type,
-    amount: r.amount,
-  })
+  try {
+    await api.post('/points', {
+      student_id: quickAction.value.student.id,
+      reason: r.name,
+      type: r.type,
+      amount: r.amount,
+    })
 
-  const sign = r.type === 'add' ? '+' : '-'
-  floatingAnim.value = {
-    id: quickAction.value.student.id,
-    text: `${sign}${r.amount}`,
-    type: r.type,
+    const sign = r.type === 'add' ? '+' : '-'
+    floatingAnim.value = {
+      id: quickAction.value.student.id,
+      text: `${sign}${r.amount}`,
+      type: r.type,
+    }
+    setTimeout(() => { floatingAnim.value = null }, 1200)
+
+    quickAction.value = null
+    selectedReview.value = null
+    await loadPoints()
+    await loadRecords()
+  } catch (e: any) {
+    message.error(e.message || '操作失败')
+    quickAction.value = null
+    selectedReview.value = null
   }
-  setTimeout(() => { floatingAnim.value = null }, 1200)
-
-  quickAction.value = null
-  selectedReview.value = null
-  await loadPoints()
-  await loadRecords()
 }
 
 // Random student picker
@@ -151,15 +158,17 @@ function startRandomPick() {
 }
 
 function quickForRandom(type: 'add' | 'deduct', amount: number) {
-  if (randomResult.value) {
-    randomStop = true; randoming.value = false
-    randomModalVisible.value = false
-    // Find matching review type or use generic
-    const rt = reviewTypes.value.find(t => t.type === type && t.amount === amount)
-    if (rt) {
-      selectedReview.value = rt
-      quickAction.value = { student: randomResult.value, show: true }
-    }
+  if (!randomResult.value) return
+  randomStop = true; randoming.value = false
+  randomModalVisible.value = false
+  // Find matching review type, fall back to first of same type
+  let rt = reviewTypes.value.find(t => t.type === type && t.amount === amount)
+  if (!rt) rt = reviewTypes.value.find(t => t.type === type)
+  if (rt) {
+    selectedReview.value = rt
+    quickAction.value = { student: randomResult.value, show: true }
+  } else {
+    message.warning('暂无可用点评类型，请先在点评类型页面创建')
   }
 }
 
