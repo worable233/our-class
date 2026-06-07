@@ -1,6 +1,22 @@
 import { chromium } from 'playwright'
+import { readFileSync, existsSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
 
-const API_KEY = process.env.MIMO_API_KEY || ''
+// Try env var first, then fallback to ~/.claude/settings.local.json
+function getApiKey() {
+  if (process.env.MIMO_API_KEY) return process.env.MIMO_API_KEY
+  const settingsPath = join(homedir(), '.claude', 'settings.local.json')
+  if (existsSync(settingsPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+      if (cfg.env?.MIMO_API_KEY) return cfg.env.MIMO_API_KEY
+    } catch {}
+  }
+  return ''
+}
+
+const API_KEY = getApiKey()
 
 async function main() {
   const prompt = process.argv[2] || '请详细描述这张截图中的内容。'

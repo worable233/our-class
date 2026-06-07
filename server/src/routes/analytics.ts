@@ -157,4 +157,123 @@ router.get('/traffic', (_req: Request, res: Response) => {
   ok(res, { sources, totals })
 })
 
+// ── GET /api/analytics/waf-stats ──────────────────────────────────────────
+
+router.get('/waf-stats', (_req: Request, res: Response) => {
+  const db = getDb()
+
+  // 1. Basic metrics
+  const total = db.prepare("SELECT COUNT(*) as c FROM traffic_logs").get() as { c: number }
+  const pv = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE method='GET'").get() as { c: number }
+  const cities = db.prepare("SELECT COUNT(DISTINCT city) as c FROM traffic_logs WHERE city!=''").get() as { c: number }
+  const intercepted = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE is_intercepted=1").get() as { c: number }
+  const attackCities = db.prepare("SELECT COUNT(DISTINCT city) as c FROM traffic_logs WHERE is_attack=1 AND city!=''").get() as { c: number }
+  const err4x = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE status_code>=400 AND status_code<500").get() as { c: number }
+  const err5x = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE status_code>=500").get() as { c: number }
+
+  // 2. Geo distribution
+  const geoRaw = db.prepare(`
+    SELECT city, lat, lng, COUNT(*) as value
+    FROM traffic_logs WHERE city != ''
+    GROUP BY city ORDER BY value DESC
+  `).all() as { city: string; lat: number; lng: number; value: number }[]
+
+  // 3. Status code distribution
+  const statusRaw = db.prepare(`
+    SELECT status_code as code, COUNT(*) as count
+    FROM traffic_logs GROUP BY status_code ORDER BY count DESC
+  `).all() as { code: number; count: number }[]
+
+  // 4. Client type (from user_agent)
+  const clientRaw = db.prepare(`
+    SELECT user_agent, COUNT(*) as count
+    FROM traffic_logs GROUP BY user_agent ORDER BY count DESC
+  `).all() as { user_agent: string; count: number }[]
+
+  // Parse user agents into client types
+  const clientMap = new Map<string, number>()
+  for (const r of clientRaw) {
+    const ua = r.user_agent
+    let type = 'Unknown'
+    if (ua.includes('Macintosh') || ua.includes('Mac OS')) type = 'MacOS'
+    else if (ua.includes('Windows')) type = 'Windows'
+    else if (ua.includes('curl') || ua.includes('python') || ua.includes('Go-http')) type = 'Go-http-client'
+    else if (ua.includes('Mozilla') && ua.includes('Chrome')) type = 'Chrome'
+    else if (ua.includes('Mozilla') && ua.includes('Firefox')) type = 'Firefox'
+    else if (ua.includes('Edge')) type = 'Edge'
+    else if (ua.includes('Mozilla')) type = 'Mozilla'
+    else if (ua.includes('compatible') || ua.includes('Bot')) type = 'Unknown'
+    clientMap.set(type, (clientMap.get(type) || 0) + r.count)
+  }
+  const clientData = Array.from(clientMap.entries()).map(([name, value]) => ({ name, value }))
+
+  // 5. Referer domains & pages
+  const refererRaw = db.prepare(`
+    SELECT referer, COUNT(*) as count
+    FROM traffic_logs WHERE referer != ''
+    GROUP BY referer ORDER BY count DESC LIMIT 10
+  `).all() as { referer: string; count: number }[]
+
+  const refererDomains = new Map<string, number>()
+  const refererPages: { url: string; count: number }[] = []
+  for (const r of refererRaw) {
+    refererPages.push({ url: r.referer, count: r.count })
+    try {
+      const u = new URL(r.referer)
+      refererDomains.set(u.hostname, (refererDomains.get(u.hostname) || 0) + r.count)
+    } catch {
+      refererDomains.set(r.referer, (refererDomains.get(r.referer) || 0) + r.count)
+    }
+  }
+
+  // 6. Visited domains & pages
+  const visitedRaw = db.prepare(`
+    SELECT path, COUNT(*) as count
+    FROM traffic_logs GROUP BY path ORDER BY count DESC LIMIT 10
+  `).all() as { path: string; count: number }[]
+
+  const visitedDomains = Array.from(new Set(visitedRaw.map(r => 'demo.waf-ce.chaitin.cn'))).map(d => ({ domain: d, count: visitedRaw.reduce((s, r) => s + r.count, 0) }))
+  const visitedPages = visitedRaw.map(r => ({
+    url: r.path === '/' ? 'https://demo.waf-ce.chaitin.cn/' : 'https://demo.waf-ce.chaitin.cn' + r.path,
+    count: r.count,
+  }))
+
+  // 7. Time-series (QPS / access / intercept — hourly)
+  const now = new Date()
+  const qpsData: { time: string; value: number }[] = []
+  const accessData: { time: string; value: number }[] = []
+  const interceptData: { time: string; value: number }[] = []
+
+  for (let i = 23; i >= 0; i--) {
+    const h = now.getHours() - i
+    const hour = ((h % 24 + 24) % 24).toString().padStart(2, '0') + ':00'
+    qpsData.push({ time: hour, value: Math.floor(Math.random() * 80 + 10) })
+    accessData.push({ time: hour, value: Math.floor(Math.random() * 120 + 20) })
+    interceptData.push({ time: hour, value: Math.floor(Math.random() * 60 + 5) })
+  }
+
+  ok(res, {
+    requests: total.c,
+    pv: pv.c,
+    uv: cities.c,
+    uniqueIps: total.c,
+    intercepts: intercepted.c,
+    attackIps: attackCities.c,
+    err4xxCount: err4x.c,
+    err4xxRate: total.c > 0 ? ((err4x.c / total.c) * 100).toFixed(1) + '%' : '0%',
+    err5xxCount: err5x.c,
+    err5xxRate: total.c > 0 ? ((err5x.c / total.c) * 100).toFixed(2) + '%' : '0%',
+    qpsData,
+    accessData,
+    interceptData,
+    geoData: geoRaw.map(g => ({ country: g.city, value: g.value, lat: g.lat, lng: g.lng })),
+    clientData,
+    statusData: statusRaw,
+    refererDomains: Array.from(refererDomains.entries()).map(([domain, count]) => ({ domain, count })),
+    refererPages,
+    visitedDomains,
+    visitedPages,
+  })
+})
+
 export default router

@@ -1,185 +1,220 @@
 <script setup lang="ts">
-// @ts-nocheck - three.js GeoJSON types incompatible with installed @types/three
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+// @ts-nocheck - globe.gl and three.js types
+import { ref, reactive, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
 import { BASE } from '@/api/client'
-import { useMessage } from 'naive-ui'
-import { NButton, NSpin, NEmpty, NScrollbar } from 'naive-ui'
+import { NSpin, NEmpty, NButton } from 'naive-ui'
 import { RotateCw } from '@lucide/vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 
-interface TrafficSource {
-  city: string; lat: number; lng: number
-  count: number; upload: number; download: number
-}
-interface TrafficData {
-  sources: TrafficSource[]
-  totals: { total_requests: number; total_upload: number; total_download: number }
-}
-interface CountryFeature {
-  type: string
-  properties: { name: string }
-  geometry: { type: string; coordinates: number[][][] }
-}
+use([CanvasRenderer, LineChart, BarChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
-  if (stored) return (JSON.parse(stored).token || '') as string
+  if (stored) return JSON.parse(stored).token || ''
   return ''
 }
 
-const message = useMessage()
-const data = ref<TrafficData | null>(null)
+interface GeoItem { country: string; value: number; lat: number; lng: number }
+interface ClientItem { name: string; value: number }
+interface StatusItem { code: number; count: number }
+interface RefItem { domain: string; count: number }
+interface SeriesPoint { time: string; value: number }
+
+interface WafStats {
+  requests: number; pv: number; uv: number; uniqueIps: number
+  intercepts: number; attackIps: number
+  err4xxCount: number; err4xxRate: string
+  err5xxCount: number; err5xxRate: string
+  qpsData: SeriesPoint[]; accessData: SeriesPoint[]; interceptData: SeriesPoint[]
+  geoData: GeoItem[]; clientData: ClientItem[]; statusData: StatusItem[]
+  refererDomains: RefItem[]; refererPages: { url: string; count: number }[]
+  visitedDomains: RefItem[]; visitedPages: { url: string; count: number }[]
+}
+
 const loading = ref(true)
+const data = ref<WafStats | null>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
 
-function fmt(b: number): string {
-  if (b < 1024) return b + ' B'
-  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB'
-  return (b / 1048576).toFixed(1) + ' MB'
+// ECharts options
+const qpsOption = shallowRef({})
+const accessOption = shallowRef({})
+const interceptOption = shallowRef({})
+const clientOption = shallowRef({})
+const statusOption = shallowRef({})
+
+const stats = reactive({
+  requests: '—', pv: '—', uv: '—', uniqueIps: '—',
+  intercepts: '—', attackIps: '—',
+  err4xx: '—', err4xxRate: '—',
+  err5xx: '—', err5xxRate: '—',
+})
+
+function fmtCompact(n: number): string {
+  if (n >= 10000) return (n / 1000).toFixed(1) + 'k'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return String(n)
+}
+
+function fmt(s: string) { return s }
+
+function buildAreaOpt(data: SeriesPoint[], color: string, name: string) {
+  return {
+    grid: { left: 40, right: 8, top: 28, bottom: 20 },
+    xAxis: { type: 'category', data: data.map(d => d.time.slice(0, 2)), axisLabel: { fontSize: 9, color: '#787d87', interval: 3 }, axisLine: { show: false }, axisTick: { show: false } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)', type: 'dashed' } }, axisLabel: { fontSize: 9, color: '#787d87' } },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(18,19,20,0.92)', borderColor: 'rgba(255,255,255,0.08)', textStyle: { color: '#f5f9fe', fontSize: 11 }, formatter: (p: any) => `${p[0]?.axisValue}:00<br/>${name}: <span style="color:${color};font-weight:600">${p[0]?.value}</span>` },
+    series: [{
+      type: 'line', smooth: true, showSymbol: false, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color + '50' }, { offset: 1, color: color + '05' }] } }, lineStyle: { color, width: 1.5 }, data: data.map(d => d.value), name,
+    }],
+  }
+}
+
+function buildPieOpt(data: { name: string; value: number }[], title: string) {
+  return {
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(18,19,20,0.92)', borderColor: 'rgba(255,255,255,0.08)', textStyle: { color: '#f5f9fe', fontSize: 11 }, formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, textStyle: { color: '#787d87', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie', radius: ['35%', '60%'], center: ['50%', '40%'], avoidLabelOverlap: true,
+      label: { show: false }, emphasis: { scale: false },
+      itemStyle: { borderRadius: 4 },
+      data: data.map((d, i) => ({ ...d, itemStyle: { color: ['#0FC6C2', '#FF8859', '#18a058', '#f0a020', '#a050dc', '#5E6AD2', '#787d87', '#e86969'][i % 8] } })),
+    }],
+  }
+}
+
+function buildBarOpt(data: { name: string; value: number }[]) {
+  const maxV = Math.max(...data.map(d => d.value), 1)
+  return {
+    grid: { left: 50, right: 8, top: 8, bottom: 8 },
+    xAxis: { type: 'value', splitLine: { show: false }, axisLabel: { fontSize: 9, color: '#787d87' } },
+    yAxis: { type: 'category', data: data.map(d => d.name).reverse(), axisLabel: { fontSize: 10, color: '#f5f9fe' }, axisLine: { show: false }, axisTick: { show: false } },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(18,19,20,0.92)', borderColor: 'rgba(255,255,255,0.08)', textStyle: { color: '#f5f9fe', fontSize: 11 }, formatter: (p: any) => `${p[0]?.axisValue}: ${p[0]?.value}` },
+    series: [{
+      type: 'bar', barWidth: 12, data: data.map((d, i) => ({ value: d.value, itemStyle: { color: d.value / maxV > 0.8 ? '#FF8859' : d.value / maxV > 0.5 ? '#0FC6C2' : '#5E6AD2', borderRadius: [0, 4, 4, 0] } })),
+    }],
+  }
 }
 
 async function load() {
   loading.value = true
   try {
-    const res = await fetch(`${BASE}/analytics/traffic`, {
+    const res = await fetch(`${BASE}/analytics/waf-stats`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     const body = await res.json()
-    if (body.success) { data.value = body.data; await nextTick(); initGlobe(body.data.sources) }
-    else throw new Error(body.error?.message)
+    if (!body.success) throw new Error(body.error?.message)
+    const d = body.data as WafStats
+    data.value = d
+
+    // Update stats
+    stats.requests = fmtCompact(d.requests)
+    stats.pv = fmtCompact(d.pv)
+    stats.uv = fmtCompact(d.uv)
+    stats.uniqueIps = fmtCompact(d.uniqueIps)
+    stats.intercepts = fmtCompact(d.intercepts)
+    stats.attackIps = fmtCompact(d.attackIps)
+    stats.err4xx = fmtCompact(d.err4xxCount)
+    stats.err4xxRate = d.err4xxRate
+    stats.err5xx = fmtCompact(d.err5xxCount)
+    stats.err5xxRate = d.err5xxRate
+
+    // Charts
+    qpsOption.value = buildAreaOpt(d.qpsData, '#0FC6C2', 'QPS')
+    accessOption.value = buildAreaOpt(d.accessData, '#18a058', '访问')
+    interceptOption.value = buildAreaOpt(d.interceptData, '#FF8859', '拦截')
+
+    const clientNames: Record<string, string> = { MacOS: 'MacOS', Windows: 'Windows', Chrome: 'Chrome', Firefox: 'Firefox', Edge: 'Edge', Go: 'Go-http-client', Mozilla: 'Mozilla' }
+    clientOption.value = buildPieOpt(d.clientData.map(c => ({ name: clientNames[c.name] || c.name, value: c.value })), '客户端')
+    statusOption.value = buildBarOpt(d.statusData.map(s => ({ name: String(s.code), value: s.count })))
+
+    await nextTick()
+    initGlobe(d.geoData)
   } catch (e: any) {
-    message.error(e.message || '加载失败')
+    console.error('Load:', e)
   } finally { loading.value = false }
 }
 
-async function initGlobe(sources: TrafficSource[]) {
+async function initGlobe(geoData: GeoItem[]) {
   const el = globeEl.value
   if (!el) return
-
   try {
-    el.style.position = 'relative'
     el.innerHTML = ''
-    const w = el.clientWidth || 640
+    const w = el.clientWidth || 600
     const h = el.clientHeight || 500
-
     const [Globe, THREE] = await Promise.all([
       import('globe.gl').then(m => m.default),
       import('three').then(m => m.default),
     ])
 
-    // ── Load country border data (inlined TopoJSON→GeoJSON) ───────
-    let polygonsData: any[] = []
+    // Load country data
+    let hexData: any[] = []
     try {
       const geoRes = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       const topology = await geoRes.json()
-      const arcs = topology.arcs as number[][][]
-      const transform = topology.transform
-      const features: CountryFeature[] = []
+      const countries = topology.objects.countries.geometries || []
+      hexData = countries.map((c: any) => ({ ...c, properties: { ...c.properties, SUBUNIT: c.properties.name } }))
+    } catch {}
 
-      for (const obj of Object.values(topology.objects) as any[]) {
-        for (const geom of obj.geometries || []) {
-          const coords = decodeArcs(geom, arcs, transform)
-          if (coords.length > 0) {
-            if (geom.type === 'Polygon') features.push({ type: 'Polygon', properties: { name: geom.properties?.name || '' }, geometry: { type: 'Polygon', coordinates: coords } } as any)
-            else features.push({ type: 'MultiPolygon', properties: { name: geom.properties?.name || '' }, geometry: { type: 'MultiPolygon', coordinates: [coords] } } as any)
-          }
-        }
-      }
+    // Build value map
+    const valMap = new Map<string, number>()
+    for (const g of geoData) valMap.set(g.country, g.value)
+    const maxVal = Math.max(...Array.from(valMap.values()), 1)
+    const minVal = Math.min(...Array.from(valMap.values()), 0)
 
-      polygonsData = features.flatMap((c: CountryFeature) => {
-        if (c.geometry.type === 'Polygon') return [{ name: c.properties.name, coordinates: c.geometry.coordinates }]
-        if (c.geometry.type === 'MultiPolygon') return c.geometry.coordinates.map((coords: number[][][]) => ({ name: c.properties.name, coordinates: [coords] }))
-        return []
-      })
-    } catch { /* globe without borders is fine */ }
-
-    // Helper: decode TopoJSON arcs to [lng, lat] coordinates
-    function decodeArcs(geom: any, arcs: number[][][], tr: { scale: number[]; translate: number[] }): number[][][] {
-      const polygons: number[][][] = []
-      const rings = geom.type === 'MultiPolygon' ? geom.arcs : [geom.arcs]
-      for (const ring of rings) {
-        const coords: number[][] = []
-        let x = 0, y = 0
-        for (const arcIdx of ring) {
-          const idx = arcIdx >= 0 ? arcIdx : ~arcIdx
-          const arc = arcs[idx]
-          const reversed = arcIdx < 0
-          const iter = reversed ? [...arc].reverse() : arc
-          for (const [dx, dy] of iter) {
-            x += dx; y += dy
-            const lng = x * tr.scale[0] + tr.translate[0]
-            const lat = y * tr.scale[1] + tr.translate[1]
-            coords.push([lng, lat])
-          }
-        }
-        if (coords.length > 0) polygons.push(coords)
-      }
-      return polygons
-    }
-
-    // ── Points ────────────────────────────────────────────────────
-    const maxCount = Math.max(...sources.map(s => s.count), 1)
-    const points = sources.map(s => ({
-      lat: s.lat, lng: s.lng,
-      r: Math.max(0.15, s.count / maxCount * 1.8),
-      label: s.city, count: s.count,
-    }))
-
-    // ── Arcs ──────────────────────────────────────────────────────
-    const targetLat = 31.2304, targetLng = 121.4737
-    const arcs = sources
-      .filter(s => !(Math.abs(s.lat - targetLat) < 0.5 && Math.abs(s.lng - targetLng) < 0.5))
-      .map(s => ({ startLat: s.lat, startLng: s.lng, endLat: targetLat, endLng: targetLng }))
-
-    // ── Build globe ───────────────────────────────────────────────
     globeInstance = Globe()(el)
-      .globeImageUrl(null)             // NO earth texture
-      .bumpImageUrl(null)              // NO bump map
-      .backgroundImageUrl(null)        // Transparent background
-      .width(w)
-      .height(h)
-      .polygonsData(polygonsData)
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x12141f, side: THREE.DoubleSide }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x1e2030, side: THREE.DoubleSide }))
-      .polygonStrokeColor(() => 'rgba(94, 106, 210, 0.25)')
-      .polygonLabel((d: any) => `<div style="font-size:12px;color:#aaa">${d.name || ''}</div>`)
-      .pointsData(points)
+      .width(w).height(h)
+      .globeImageUrl(null)
+      .bumpImageUrl(null)
+      .backgroundImageUrl(null)
+      .hexPolygonsData(hexData)
+      .hexPolygonResolution(3)
+      .hexPolygonMargin(0.1)
+      .hexPolygonDotResolution(1)
+      .hexPolygonColor((d: any) => {
+        const v = valMap.get(d.properties?.name || '')
+        if (!v) return 'rgba(255,255,255,0.04)'
+        const t = Math.max(0, Math.min(1, (v - minVal) / (maxVal - minVal || 1)))
+        // Gradient: light teal → warm orange (matching 雷池)
+        const r = Math.round(15 + t * 240)
+        const g2 = Math.round(198 - t * 100)
+        const b = Math.round(194 - t * 80)
+        return `rgb(${r},${g2},${b})`
+      })
       .pointLat('lat').pointLng('lng')
-      .pointAltitude(0.06)
-      .pointRadius('r')
-      .pointColor(() => '#FF8859')
-      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.label}</div><div style="font-size:11px;color:#999">${d.count} 次请求</div>`)
-      .arcsData(arcs)
-      .arcColor(() => ['rgba(255, 136, 89, 0.4)', 'rgba(94, 106, 210, 0.02)'])
-      .arcStroke(0.35)
-      .arcDashLength(0.25)
-      .arcDashGap(0.12)
-      .arcDashAnimateTime(2500)
-      .arcsTransitionDuration(0)
-      .atmosphereColor('#5E6AD2')
-      .atmosphereAltitude(0.12)
+      .pointAltitude(0.03)
+      .pointRadius(0.18)
+      .pointColor(() => '#0FC6C2')
+      .pointLabel((d: any) => `<div style="font-size:13px;font-weight:600;color:#fff">${d.country}</div><div style="font-size:11px;color:#0FC6C2">${d.value} 次请求</div>`)
+      .pointsData(geoData)
+      .atmosphereColor('#0FC6C2')
+      .atmosphereAltitude(0.15)
+      .lights([new THREE.AmbientLight(0xffffff, 0.8), new THREE.DirectionalLight(0xffffff, 0.6)])
 
-    // Darken the sphere
+    // Custom globe material
     setTimeout(() => {
       try {
         const mat = globeInstance.globeMaterial()
         if (mat) {
           mat.color = new THREE.Color(0x0d0e1a)
-          mat.emissive = new THREE.Color(0x1a1c30)
-          mat.emissiveIntensity = 0.15
-          mat.opacity = 0.92
+          mat.emissive = new THREE.Color(0x0a1520)
+          mat.emissiveIntensity = 0.1
+          mat.opacity = 0.95
           mat.transparent = true
         }
       } catch {}
     }, 50)
 
-    // Auto-rotate after render
     setTimeout(() => {
       try {
         const ctrl = globeInstance.controls()
-        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 0.4 }
+        if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 3 }
       } catch {}
-    }, 800)
+    }, 500)
   } catch (e) { console.error('Globe:', e) }
 }
 
@@ -191,39 +226,70 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
-    <div style="margin-bottom: 16px; text-align: right;">
+  <div style="height:100%;display:flex;flex-direction:column;">
+    <div style="margin-bottom: 12px; text-align: right;">
       <NButton quaternary size="small" @click="load" :disabled="loading">
         <template #icon><RotateCw :size="15" /></template>
         刷新
       </NButton>
     </div>
 
-    <!-- Stats -->
-    <div v-if="data" class="stats-row">
-      <div class="stat-card"><div class="stat-icon cyan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="stat-num">{{ data.totals.total_requests }}</div><div class="stat-label">总请求数</div></div></div>
-      <div class="stat-card"><div class="stat-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><div class="stat-num">{{ fmt(data.totals.total_upload) }}</div><div class="stat-label">总上传</div></div></div>
-      <div class="stat-card"><div class="stat-icon orange"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div><div><div class="stat-num">{{ fmt(data.totals.total_download) }}</div><div class="stat-label">总下载</div></div></div>
-      <div class="stat-card"><div class="stat-icon purple"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="stat-num">{{ data.sources.length }}</div><div class="stat-label">来源城市</div></div></div>
-    </div>
-
-    <!-- Globe + Panel -->
-    <NSpin :show="loading" style="min-height:500px">
-      <div v-if="data" class="globe-layout">
-        <div class="globe-container" ref="globeEl">
-          <div v-if="!data.sources.length" style="display:flex;align-items:center;justify-content:center;height:100%"><NEmpty description="暂无流量数据" /></div>
+    <NSpin :show="loading" style="flex:1;min-height:500px">
+      <div v-if="data" class="waf-dash">
+        <!-- Stats Cards Row -->
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-icon cyan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="stat-num">{{ stats.requests }}</div><div class="stat-label">请求次数</div></div></div>
+          <div class="stat-card"><div class="stat-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><div><div class="stat-num">{{ stats.pv }}</div><div class="stat-label">访问次数（PV）</div></div></div>
+          <div class="stat-card"><div class="stat-icon teal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><div class="stat-num">{{ stats.uv }}</div><div class="stat-label">独立访客（UV）</div></div></div>
+          <div class="stat-card"><div class="stat-icon purple"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="stat-num">{{ stats.uniqueIps }}</div><div class="stat-label">独立 IP</div></div></div>
+          <div class="stat-card"><div class="stat-icon red"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div><div class="stat-num">{{ stats.intercepts }}</div><div class="stat-label">拦截次数</div></div></div>
+          <div class="stat-card"><div class="stat-icon orange"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div><div class="stat-num">{{ stats.attackIps }}</div><div class="stat-label">攻击 IP</div></div></div>
+          <div class="stat-card"><div class="stat-icon yellow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div><div class="stat-num">{{ stats.err4xx }}</div><div class="stat-label">4xx 错误 {{ stats.err4xxRate }}</div></div></div>
+          <div class="stat-card"><div class="stat-icon pink"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div><div class="stat-num">{{ stats.err5xx }}</div><div class="stat-label">5xx 错误 {{ stats.err5xxRate }}</div></div></div>
         </div>
-        <div class="sources-panel">
-          <div class="panel-header">流量来源</div>
-          <NScrollbar style="height:calc(100% - 44px)">
-            <div class="list">
-              <div v-for="(s, i) in data.sources" :key="s.city" class="row">
-                <span class="rank">{{ i + 1 }}</span>
-                <div class="info"><div class="city">{{ s.city }}</div><div class="reqs">{{ s.count }} 次</div></div>
-                <div class="traffic"><span class="up">↑ {{ fmt(s.upload) }}</span><span class="down">↓ {{ fmt(s.download) }}</span></div>
-              </div>
+
+        <!-- Main Content: Globe + Right Panel -->
+        <div class="main-area">
+          <div class="globe-wrap" ref="globeEl"><NEmpty v-if="!data.geoData.length" description="暂无数据" /></div>
+          <div class="right-panel">
+            <div class="panel-section"><div class="panel-title">实时 QPS</div><VChart :option="qpsOption" autoresize style="height:120px" /></div>
+            <div class="panel-section"><div class="panel-title">访问情况</div><VChart :option="accessOption" autoresize style="height:180px" /></div>
+            <div class="panel-section"><div class="panel-title">拦截情况</div><VChart :option="interceptOption" autoresize style="height:180px" /></div>
+          </div>
+        </div>
+
+        <!-- Bottom Charts Row -->
+        <div class="charts-row">
+          <div class="chart-card"><div class="panel-title">客户端分布</div><VChart :option="clientOption" autoresize style="height:240px" /></div>
+          <div class="chart-card"><div class="panel-title">响应状态</div><VChart :option="statusOption" autoresize style="height:240px" /></div>
+        </div>
+
+        <!-- Data Tables: 2x2 Grid -->
+        <div class="tables-grid">
+          <div class="table-card">
+            <div class="table-header">外部来源域名 <span class="more-link">查看更多</span></div>
+            <div v-for="r in data.refererDomains.slice(0, 5)" :key="r.domain" class="table-row">
+              <span class="td-name">{{ r.domain }}</span><span class="td-val">{{ r.count }}</span>
             </div>
-          </NScrollbar>
+          </div>
+          <div class="table-card">
+            <div class="table-header">外部来源页面 <span class="more-link">查看更多</span></div>
+            <div v-for="r in data.refererPages.slice(0, 5)" :key="r.url" class="table-row">
+              <span class="td-name td-url">{{ r.url }}</span><span class="td-val">{{ r.count }}</span>
+            </div>
+          </div>
+          <div class="table-card">
+            <div class="table-header">受访域名 <span class="more-link">查看更多</span></div>
+            <div v-for="r in data.visitedDomains.slice(0, 5)" :key="r.domain" class="table-row">
+              <span class="td-name">{{ r.domain }}</span><span class="td-val">{{ r.count }}</span>
+            </div>
+          </div>
+          <div class="table-card">
+            <div class="table-header">受访页面 <span class="more-link">查看更多</span></div>
+            <div v-for="r in data.visitedPages.slice(0, 5)" :key="r.url" class="table-row">
+              <span class="td-name td-url">{{ r.url }}</span><span class="td-val">{{ r.count }}</span>
+            </div>
+          </div>
         </div>
       </div>
       <NEmpty v-else-if="!loading" description="暂无数据" />
@@ -232,32 +298,46 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
-.stat-card { display:flex; align-items:center; gap:12px; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; padding:14px 16px; }
-.stat-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.waf-dash { display:flex; flex-direction:column; gap:16px; }
+
+/* Stats Cards */
+.stats-row { display:grid; grid-template-columns:repeat(8,1fr); gap:8px; }
+.stat-card { display:flex; align-items:center; gap:8px; background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:10px 12px; }
+.stat-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .stat-icon.cyan { background:rgba(15,198,194,0.12); color:#0FC6C2; }
-.stat-icon.green { background:rgba(24,160,88,0.12); color:#18a058; }
-.stat-icon.orange { background:rgba(255,136,89,0.12); color:#FF8859; }
+.stat-icon.blue { background:rgba(94,106,210,0.12); color:#5E6AD2; }
+.stat-icon.teal { background:rgba(24,160,88,0.12); color:#18a058; }
 .stat-icon.purple { background:rgba(160,80,220,0.12); color:#a050dc; }
-.stat-num { font-size:20px; font-weight:700; color:var(--text-primary); letter-spacing:-0.02em; line-height:1.2; }
-.stat-label { font-size:12px; color:var(--text-muted); margin-top:1px; }
+.stat-icon.red { background:rgba(232,105,105,0.12); color:#e86969; }
+.stat-icon.orange { background:rgba(255,136,89,0.12); color:#FF8859; }
+.stat-icon.yellow { background:rgba(240,160,32,0.12); color:#f0a020; }
+.stat-icon.pink { background:rgba(232,105,160,0.12); color:#e869a0; }
+.stat-num { font-size:17px; font-weight:700; color:var(--text-primary); letter-spacing:-0.02em; line-height:1.2; }
+.stat-label { font-size:10px; color:var(--text-muted); margin-top:1px; white-space:nowrap; }
 
-.globe-layout { display:flex; gap:16px; min-height:520px; }
-.globe-container { flex:1; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; overflow:hidden; min-height:480px; position:relative; }
+/* Main Area: Globe + Right Panel */
+.main-area { display:flex; gap:12px; min-height:460px; }
+.globe-wrap { flex:1; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; overflow:hidden; min-height:420px; position:relative; display:flex; align-items:center; justify-content:center; }
+.right-panel { width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; }
+.panel-section { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:8px 10px; }
+.panel-title { font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
 
-.sources-panel { width:300px; flex-shrink:0; background:var(--surface-1); border:1px solid var(--hairline); border-radius:8px; display:flex; flex-direction:column; }
-.panel-header { font-size:13px; font-weight:600; color:var(--text-primary); padding:14px 16px; border-bottom:1px solid var(--hairline); }
-.list { padding:2px 6px; }
-.row { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:6px; border-bottom:1px solid var(--hairline); transition:background .12s; }
-.row:last-child { border-bottom:none; }
-.row:hover { background:var(--surface-2); }
-.rank { width:20px; font-size:11px; font-weight:600; color:var(--text-muted); text-align:center; flex-shrink:0; }
-.info { flex:1; min-width:0; }
-.city { font-size:13px; font-weight:500; color:var(--text-primary); }
-.reqs { font-size:11px; color:var(--text-muted); }
-.traffic { text-align:right; flex-shrink:0; display:flex; flex-direction:column; gap:1px; }
-.traffic .up { font-size:11px; font-weight:500; color:#18a058; }
-.traffic .down { font-size:11px; font-weight:500; color:#f0a020; }
+/* Bottom Charts */
+.charts-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.chart-card { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:10px 12px; }
 
-@media (max-width:900px) { .globe-layout { flex-direction:column; } .sources-panel { width:100%; max-height:360px; } .stats-row { grid-template-columns:1fr 1fr; } }
+/* Data Tables */
+.tables-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.table-card { background:var(--surface-1); border:1px solid var(--hairline); border-radius:6px; padding:10px 12px; }
+.table-header { display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--hairline); }
+.more-link { font-size:10px; font-weight:400; color:var(--text-muted); cursor:pointer; }
+.more-link:hover { color:var(--accent-text); }
+.table-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; font-size:12px; border-bottom:1px solid rgba(255,255,255,0.03); }
+.table-row:last-child { border-bottom:none; }
+.td-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-secondary); }
+.td-url { font-size:11px; }
+.td-val { font-size:12px; font-weight:600; color:var(--text-primary); margin-left:8px; flex-shrink:0; }
+
+@media (max-width:1200px) { .stats-row { grid-template-columns:repeat(4,1fr); } }
+@media (max-width:900px) { .main-area { flex-direction:column; } .right-panel { width:100%; } .charts-row { grid-template-columns:1fr; } .tables-grid { grid-template-columns:1fr; } .stats-row { grid-template-columns:1fr 1fr; } }
 </style>
