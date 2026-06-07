@@ -23,6 +23,9 @@ const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
 let globeSeq = 0
+let loadingGlobe = false
+let matTimer: any = null
+let ctrlTimer: any = null
 const qpsOption = shallowRef({})
 const accessOption = shallowRef({})
 const interceptOption = shallowRef({})
@@ -64,6 +67,11 @@ function buildBarOpt(data: { name: string; value: number }[]) {
 }
 
 async function load() {
+  if (loadingGlobe) return  // prevent concurrent reloads
+  loadingGlobe = true
+  // 清理前一次的定时器
+  if (matTimer) { clearTimeout(matTimer); matTimer = null }
+  if (ctrlTimer) { clearTimeout(ctrlTimer); ctrlTimer = null }
   loading.value = true
   try {
     const res = await fetch(`${BASE}/analytics/waf-stats`, {
@@ -85,7 +93,7 @@ async function load() {
     await nextTick()
     initGlobe(d.geoData || [])
   } catch (e: any) { console.error('Load:', e) }
-  finally { loading.value = false }
+  finally { loading.value = false; loadingGlobe = false }
 }
 
 async function initGlobe(geoData: any[]) {
@@ -139,11 +147,11 @@ async function initGlobe(geoData: any[]) {
       })
       .lights([new THREE.AmbientLight(0xffffff, Math.PI)])
 
-    setTimeout(() => {
+    matTimer = setTimeout(() => {
       if (seq !== globeSeq) return
       try { const mat = globeInstance.globeMaterial(); if (mat) { mat.color = new THREE.Color(0x5E6AD2); mat.opacity = 0.1; mat.transparent = true } } catch {}
     }, 100)
-    setTimeout(() => {
+    ctrlTimer = setTimeout(() => {
       if (seq !== globeSeq) return
       try { const ctrl = globeInstance.controls(); if (ctrl) { ctrl.autoRotate = true; ctrl.autoRotateSpeed = 2 } } catch {}
     }, 500)
