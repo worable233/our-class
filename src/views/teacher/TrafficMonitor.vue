@@ -118,9 +118,9 @@ async function initGlobe(geoData: any[]) {
       .backgroundImageUrl(null)
       .width(w).height(h)
       .polygonsData(polygonsData)
-      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0x4ECDC4, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }))
-      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0x3DBDB0, side: THREE.DoubleSide, transparent: true, opacity: 0.4 }))
-      .polygonStrokeColor(() => 'rgba(78, 205, 196, 0.7)')
+      .polygonCapMaterial(new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide }))
+      .polygonSideMaterial(new THREE.MeshBasicMaterial({ color: 0xcc2222, side: THREE.DoubleSide }))
+      .polygonStrokeColor(() => 'rgba(255, 255, 0, 0.9)')
       .polygonLabel((d: any) => {
         const v = countryMap.get(d.name || '')
         return `<div style="font-size:12px;font-weight:600;color:#333">${d.name || ''}</div>${v ? `<div style="font-size:11px;color:#0FC6C2">${v} 次请求</div>` : ''}`
