@@ -53,11 +53,8 @@ const pageTitle = computed(() => {
         <Sun v-if="isDark" :size="16" />
         <Moon v-else :size="16" />
       </n-button>
-      <n-button size="small" @click="refreshContent?.()">
-        <template #icon>
-          <RotateCw :size="15" />
-        </template>
-        刷新
+      <n-button quaternary circle size="small" @click="refreshContent?.()" title="刷新">
+        <RotateCw :size="16" />
       </n-button>
     </div>
   </n-layout-header>
