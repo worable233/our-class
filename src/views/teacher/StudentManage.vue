@@ -148,15 +148,12 @@ onMounted(() => { load() })
               {{ s.display_name?.charAt(0) || '?' }}
             </n-avatar>
           </template>
-          <n-thing
-            :title="s.display_name"
-            :title-extra="s.student_no ? '#' + s.student_no : ''"
-          >
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
-              <span v-if="s.class">{{ s.class }}</span>
-              <span v-if="s.nickname">📛 {{ s.nickname }}</span>
-            </div>
-          </n-thing>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ s.display_name }}</span>
+            <span v-if="s.student_no" style="font-size: 12px; color: var(--text-muted); font-family: monospace;">#{{ s.student_no }}</span>
+            <span v-if="s.class" style="font-size: 12px; color: var(--text-muted);">{{ s.class }}</span>
+            <span v-if="s.nickname" style="font-size: 12px; color: var(--text-muted);">📛 {{ s.nickname }}</span>
+          </div>
           <template #suffix>
             <div style="display: flex; gap: 4px; flex-shrink: 0;">
               <n-button quaternary size="small" @click.stop="openEdit(s)" round>
