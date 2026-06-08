@@ -58,6 +58,14 @@ const actionLabels: Record<string, string> = {
   update_role: '编辑职位',
   delete_role: '删除职位',
   update_api_config: '修改 API 配置',
+  update_chat_settings: '修改 AI 设置',
+  update_tool_config: '修改工具配置',
+  upload_file: '上传文件',
+  delete_file: '删除文件',
+  create_skill: '创建 Skill',
+  update_skill: '编辑 Skill',
+  delete_skill: '删除 Skill',
+  reorder_skills: 'Skill 排序',
 }
 
 const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
@@ -65,11 +73,21 @@ const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
   update_role: 'info',
   delete_role: 'error',
   update_api_config: 'warning',
+  update_chat_settings: 'warning',
+  update_tool_config: 'warning',
+  upload_file: 'success',
+  delete_file: 'error',
+  create_skill: 'success',
+  update_skill: 'info',
+  delete_skill: 'error',
+  reorder_skills: 'info',
 }
 
 const entityLabels: Record<string, string> = {
   role: '职位管理',
   config: '系统设置',
+  skill: 'Skill 管理',
+  file: '文件管理',
 }
 
 function formatTime(t: string) {
@@ -138,6 +156,90 @@ function describeLog(log: AuditLog): DescriptionSegment[] {
           { text: model, type: 'accent' as const },
         ] : []),
         { text: '）', type: 'muted' as const },
+      ]
+    }
+    case 'update_chat_settings': {
+      const changes: string[] = []
+      if (d.enable_deep_think !== undefined) changes.push(`深度思考 ${d.enable_deep_think ? '开启' : '关闭'}`)
+      if (d.enable_file_upload !== undefined) changes.push(`文件上传 ${d.enable_file_upload ? '开启' : '关闭'}`)
+      if (d.allowed_file_types) changes.push(`文件类型: ${d.allowed_file_types}`)
+      if (d.max_file_size) changes.push(`大小上限: ${(Number(d.max_file_size) / 1048576).toFixed(1)}MB`)
+      if (d.max_files_per_conversation) changes.push(`每对话文件数: ${d.max_files_per_conversation}`)
+      return [
+        { text: '修改了 AI 设置（', type: 'muted' as const },
+        { text: changes.join('，'), type: 'accent' as const },
+        { text: '）', type: 'muted' as const },
+      ]
+    }
+    case 'update_tool_config': {
+      const toolName = String(d.tool || '')
+      const cfg: string[] = []
+      if (d.config_json) {
+        try {
+          const j = JSON.parse(String(d.config_json))
+          Object.entries(j).forEach(([k, v]) => cfg.push(`${k}: ${v}`))
+        } catch { cfg.push('配置已修改') }
+      }
+      if (d.max_result_length) cfg.push(`最大返回 ${d.max_result_length} 字符`)
+      if (d.enabled !== undefined) cfg.push(d.enabled ? '已启用' : '已禁用')
+      return [
+        { text: '修改了工具「', type: 'muted' as const },
+        { text: toolName, type: 'accent' as const },
+        { text: '」的配置', type: 'muted' as const },
+        ...(cfg.length ? [
+          { text: '：', type: 'muted' as const },
+          { text: cfg.join('，'), type: 'accent' as const },
+        ] : []),
+      ]
+    }
+    case 'upload_file': {
+      return [
+        { text: '上传了文件「', type: 'muted' as const },
+        { text: String(d.name || ''), type: 'accent' as const },
+        { text: `」（${d.size ? (Number(d.size) / 1024).toFixed(1) : '?'}KB）`, type: 'muted' as const },
+      ]
+    }
+    case 'delete_file': {
+      return [
+        { text: '删除了文件「', type: 'muted' as const },
+        { text: String(d.name || ''), type: 'accent' as const },
+        { text: '」', type: 'muted' as const },
+      ]
+    }
+    case 'create_skill': {
+      return [
+        { text: '创建了 Skill「', type: 'muted' as const },
+        { text: String(d.name || ''), type: 'accent' as const },
+        { text: '」', type: 'muted' as const },
+      ]
+    }
+    case 'update_skill': {
+      const skillName = String(d.name || '')
+      const skillChanges: string[] = []
+      if (d.content !== undefined) skillChanges.push('内容已更新')
+      if (d.enabled !== undefined) skillChanges.push(d.enabled ? '已启用' : '已禁用')
+      return [
+        { text: '编辑了 Skill「', type: 'muted' as const },
+        { text: skillName, type: 'accent' as const },
+        ...(skillChanges.length ? [
+          { text: '」（', type: 'muted' as const },
+          { text: skillChanges.join('，'), type: 'accent' as const },
+          { text: '）', type: 'muted' as const },
+        ] : [
+          { text: '」', type: 'muted' as const },
+        ]),
+      ]
+    }
+    case 'delete_skill': {
+      return [
+        { text: '删除了 Skill「', type: 'muted' as const },
+        { text: String(d.name || ''), type: 'accent' as const },
+        { text: '」', type: 'muted' as const },
+      ]
+    }
+    case 'reorder_skills': {
+      return [
+        { text: `重新排列了 ${d.count || ''} 个 Skill 的顺序`, type: 'muted' as const },
       ]
     }
     default:
