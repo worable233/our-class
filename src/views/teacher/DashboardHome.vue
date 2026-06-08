@@ -12,7 +12,6 @@ import {
   GridComponent,
 } from 'echarts/components'
 import { useRefresh } from '@/composables/useRefresh'
-import { RotateCw } from '@lucide/vue'
 
 use([CanvasRenderer, LineChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -180,13 +179,6 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="margin-bottom: 16px; text-align: right;">
-      <NButton quaternary size="small" @click="load" :disabled="loading">
-        <template #icon><RotateCw :size="15" /></template>
-        刷新
-      </NButton>
-    </div>
-
     <NSpin :show="loading" style="min-height: 400px">
       <template v-if="data">
         <!-- Stats Row -->
