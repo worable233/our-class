@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { History, Search } from '@lucide/vue'
+import Tooltip from '@/components/Tooltip.vue'
 const props = defineProps<{ sidebarOpen?: boolean }>()
 const emit = defineEmits<{ history: []; search: [] }>()
 </script>
@@ -7,13 +8,17 @@ const emit = defineEmits<{ history: []; search: [] }>()
 <template>
   <!-- Left capsule — morphs into sidebar header when sidebar opens -->
   <div class="capsule-left" :class="{ merged: props.sidebarOpen }">
-    <button class="capsule-btn" title="历史记录" @click="emit('history')">
-      <History :size="16" />
-    </button>
+    <Tooltip text="搜索对话" :placement="'bottom'">
+      <button class="capsule-btn" @click="emit('search')">
+        <Search :size="16" />
+      </button>
+    </Tooltip>
     <div class="capsule-divider" />
-    <button class="capsule-btn" title="搜索" @click="emit('search')">
-      <Search :size="16" />
-    </button>
+    <Tooltip text="历史记录" :placement="'bottom'">
+      <button class="capsule-btn" @click="emit('history')">
+        <History :size="16" />
+      </button>
+    </Tooltip>
   </div>
 </template>
 
@@ -39,7 +44,7 @@ const emit = defineEmits<{ history: []; search: [] }>()
   left: 181px;
   background: transparent;
   border-color: transparent;
-  box-shadow: none;
+  box-shadow: none !important;
 }
 .capsule-left.merged .capsule-divider { background: transparent; }
 
@@ -49,9 +54,10 @@ const emit = defineEmits<{ history: []; search: [] }>()
   display: flex; align-items: center; justify-content: center;
   background: none; border: none;
   color: var(--text-secondary); cursor: pointer;
-  transition: color .15s;
+  transition: color .15s, background .15s;
 }
 .capsule-btn:hover { color: var(--text-primary); background: var(--surface-2); }
+.capsule-btn:active { transform: scale(0.92); background: var(--surface-3); }
 
 .capsule-divider { width: 1px; height: 16px; background: var(--hairline); }
 

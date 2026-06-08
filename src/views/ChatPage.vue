@@ -12,7 +12,11 @@ const sidebarOpen = ref(true)
 const showLogin = ref(false)
 const chatRef = ref<InstanceType<typeof ChatView> | null>(null)
 
-function toggleHistory() { sidebarOpen.value = !sidebarOpen.value }
+function toggleHistory() {
+  const wasOpen = sidebarOpen.value
+  sidebarOpen.value = !sidebarOpen.value
+  if (wasOpen) chatRef.value?.closeSearch()
+}
 function toggleSearch() { chatRef.value?.toggleSearch() }
 </script>
 

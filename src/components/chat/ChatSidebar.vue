@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
 import { Plus, MessageSquare, Trash2, Search, Sun, Moon, LogOut, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
+import Tooltip from '@/components/Tooltip.vue'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ selectedId?: number | null }>()
@@ -35,6 +36,7 @@ const searchQuery = ref('')
 const searchActive = ref(false)
 
 function toggleSearch() { searchActive.value = !searchActive.value; if (!searchActive.value) searchQuery.value = '' }
+function closeSearch() { searchActive.value = false; searchQuery.value = '' }
 const filtered = computed(() => {
   if (!searchQuery.value) return conversations.value
   const q = searchQuery.value.toLowerCase()
@@ -79,8 +81,9 @@ async function load() {
 
 function select(id: number) {
   if (props.selectedId === id) return
+  cancelEdit()
   emit('select', id)
-  if (window.innerWidth <= 768) emit('closeSidebar')
+  if (window.innerWidth <= 768) { closeSearch(); emit('closeSidebar') }
   router.push('/chat/' + btoa(String(id)))
 }
 
@@ -113,7 +116,7 @@ watch(() => auth.isLoggedIn, (loggedIn: boolean) => {
   }
 })
 onMounted(load)
-defineExpose({ load, toggleSearch })
+defineExpose({ load, toggleSearch, closeSearch })
 </script>
 
 <template>
@@ -129,15 +132,17 @@ defineExpose({ load, toggleSearch })
     <div v-if="searchActive" class="search-bar">
       <Search :size="14" class="search-bar-icon" />
       <input ref="searchInputRef" v-model="searchQuery" placeholder="搜索对话..." class="search-bar-input" />
-      <button class="search-bar-close" @click="toggleSearch()" title="关闭搜索">
-        <X :size="14" />
-      </button>
+      <Tooltip text="关闭搜索">
+        <button class="search-bar-close" @click="toggleSearch()">
+          <X :size="14" />
+        </button>
+      </Tooltip>
     </div>
     <button v-else class="new-btn" @click="emit('new')">
       <Plus :size="15" stroke-width="2.5" /> 新对话
     </button>
 
-    <div class="list">
+    <div class="list" @click="cancelEdit">
       <template v-for="group in grouped" :key="group.label">
         <div class="section-label">{{ group.label }}</div>
         <div
@@ -180,13 +185,17 @@ defineExpose({ load, toggleSearch })
           </template>
         </div>
       </div>
-      <button v-if="auth.isLoggedIn" class="theme-btn" title="退出登录" @click="handleLogout">
-        <LogOut :size="15" />
-      </button>
-      <button class="theme-btn" @click="toggleTheme" :title="isDark ? '浅色模式' : '深色模式'">
-        <Sun v-if="isDark" :size="15" />
-        <Moon v-else :size="15" />
-      </button>
+      <Tooltip text="退出登录">
+        <button v-if="auth.isLoggedIn" class="theme-btn" @click="handleLogout">
+          <LogOut :size="15" />
+        </button>
+      </Tooltip>
+      <Tooltip :text="isDark ? '浅色模式' : '深色模式'">
+        <button class="theme-btn" @click="toggleTheme">
+          <Sun v-if="isDark" :size="15" />
+          <Moon v-else :size="15" />
+        </button>
+      </Tooltip>
     </div>
   </div>
 </template>
@@ -231,24 +240,50 @@ defineExpose({ load, toggleSearch })
 
 /* ── Search / New button ───────────── */
 .search-bar {
+  position: relative;
   display: flex; align-items: center; gap: 8px;
   margin: 8px 12px 12px;
-  padding: 0 4px 0 14px;
+  padding: 0 4px 0 12px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--ground);
+  transition: background-color .3s cubic-bezier(.4,0,.2,1);
+}
+.search-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
   border: 1px solid var(--hairline);
-  transition: border-color .15s, box-shadow .15s;
+  transition: border-color .3s cubic-bezier(.4,0,.2,1),
+              box-shadow .3s cubic-bezier(.4,0,.2,1);
+}
+html.dark .search-bar::before {
+  border-color: transparent;
 }
 .search-bar:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-glow);
+  background-color: rgba(94, 106, 210, 0.08);
+}
+.search-bar:focus-within::before {
+  border-color: #7C7FDC;
+  box-shadow: 0 0 8px 0 rgba(94, 106, 210, 0.3);
+}
+html:not(.dark) .search-bar:focus-within::before {
+  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.2);
+}
+.search-bar:hover::before {
+  border-color: #7C7FDC;
+}
+html:not(.dark) .search-bar:hover::before {
+  border-color: var(--hairline-strong);
 }
 .search-bar-icon { flex-shrink: 0; color: var(--text-muted); }
 .search-bar-input {
   flex: 1; min-width: 0; height: 100%;
   border: none; outline: none; background: transparent;
-  font-size: 13px; color: var(--text-primary);
+  font-size: 13px; line-height: 1.5;
+  color: var(--text-primary);
   font-family: inherit;
 }
 .search-bar-input::placeholder { color: var(--text-muted); }
@@ -259,9 +294,12 @@ defineExpose({ load, toggleSearch })
   border: none; background: transparent;
   color: var(--text-muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all .12s;
+  transition: background-color .3s cubic-bezier(.4,0,.2,1),
+              color .3s cubic-bezier(.4,0,.2,1),
+              transform .3s cubic-bezier(.4,0,.2,1);
 }
 .search-bar-close:hover { background: var(--surface-2); color: var(--text-primary); }
+.search-bar-close:active { transform: scale(0.88); }
 
 .new-btn {
   display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -277,7 +315,12 @@ defineExpose({ load, toggleSearch })
   transition: background .15s;
   font-family: inherit;
 }
+.new-btn {
+  transition: background-color .3s cubic-bezier(.4,0,.2,1),
+              transform .3s cubic-bezier(.4,0,.2,1);
+}
 .new-btn:hover { background: var(--surface-3); }
+.new-btn:active { transform: scale(0.97); }
 
 /* ── Section label ──────────────────── */
 .section-label {
@@ -308,10 +351,12 @@ defineExpose({ load, toggleSearch })
   border-radius: 6px;
   font-size: 13px; color: var(--text-secondary);
   background: none; border: none;
-  cursor: pointer; transition: all .12s;
+  cursor: pointer;
   font-family: inherit;
   margin-bottom: 1px;
   user-select: none;
+  transition: background-color .3s cubic-bezier(.4,0,.2,1),
+              color .3s cubic-bezier(.4,0,.2,1);
 }
 .item:hover { background: var(--surface-2); color: var(--text-primary); }
 .item:active { background: var(--surface-3); }
@@ -337,19 +382,26 @@ defineExpose({ load, toggleSearch })
 
 .edit-input {
   flex: 1;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   border: 1px solid var(--accent);
   background: var(--ground);
-  font-size: 13px; color: var(--text-primary);
+  font-size: 13px; line-height: 1.5;
+  color: var(--text-primary);
   outline: none; font-family: inherit;
+  transition: border-color .3s cubic-bezier(.4,0,.2,1),
+              box-shadow .3s cubic-bezier(.4,0,.2,1);
+}
+.edit-input:focus {
+  border-color: #7C7FDC;
+  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.2);
 }
 
 .item-del {
   flex-shrink: 0; opacity: 0;
   color: inherit; cursor: pointer;
   padding: 2px; border-radius: 4px;
-  transition: opacity .12s;
+  transition: opacity .3s cubic-bezier(.4,0,.2,1);
   display: flex; align-items: center;
 }
 .item:hover .item-del { opacity: 0.6; }
@@ -444,7 +496,9 @@ defineExpose({ load, toggleSearch })
   background: none; border: none;
   color: var(--text-secondary);
   cursor: pointer; flex-shrink: 0;
-  transition: all .12s;
+  transition: background-color .3s cubic-bezier(.4,0,.2,1),
+              color .3s cubic-bezier(.4,0,.2,1),
+              transform .3s cubic-bezier(.4,0,.2,1);
 }
 .theme-btn:hover { background: var(--surface-2); color: var(--text-primary); }
 .theme-btn:active { background: var(--surface-3); transform: scale(0.92); }

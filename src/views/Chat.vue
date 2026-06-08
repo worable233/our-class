@@ -11,6 +11,7 @@ import { Star, BarChart3, FileText, MessageSquare } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
+import { STREAM_CONFIG } from '@/composables/useStreamAnimation'
 const { setResults: setSearchResults } = useSearchPanel()
 
 interface ChatMessage {
@@ -20,6 +21,7 @@ interface ChatMessage {
   toolResult?: string
   card?: any
   _morphing?: boolean
+  _streamTimestamps?: number[]
 }
 
 function mapToolMsg(m: any): any {
@@ -347,18 +349,20 @@ async function sendMessage(content: string) {
       }
       return
     }
-    // Process 2 chars at a time for a more deliberate pace
-    const chars = queue.slice(0, 2)
+    const chars = queue.slice(0, STREAM_CONFIG.CHARS_PER_TICK)
     queue = queue.slice(chars.length)
     if (currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
         if (messages.value[j]!.role === 'assistant') {
-          (messages.value[j] as any)!.content += chars
+          const msg = messages.value[j] as any
+          msg.content += chars
+          if (!msg._streamTimestamps) msg._streamTimestamps = []
+          msg._streamTimestamps.push(performance.now())
           break
         }
       }
     }
-    streamTimer = window.setTimeout(tick, 60)
+    streamTimer = window.setTimeout(tick, STREAM_CONFIG.TICK_INTERVAL_MS)
   }
 
   try {
@@ -471,7 +475,7 @@ async function sendMessage(content: string) {
   sending = false
 }
 
-defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() } })
+defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() }, closeSearch() { sidebarRef.value?.closeSearch() } })
 
 
 function stopStream() {
@@ -504,17 +508,20 @@ async function continueGeneration() {
       }
       return
     }
-    const chars = queue.slice(0, 2)
+    const chars = queue.slice(0, STREAM_CONFIG.CHARS_PER_TICK)
     queue = queue.slice(chars.length)
     if (currentConvId.value === convId) {
       for (let j = messages.value.length - 1; j >= 0; j--) {
         if (messages.value[j]!.role === 'assistant') {
-          (messages.value[j] as any)!.content += chars
+          const msg = messages.value[j] as any
+          msg.content += chars
+          if (!msg._streamTimestamps) msg._streamTimestamps = []
+          msg._streamTimestamps.push(performance.now())
           break
         }
       }
     }
-    streamTimer = window.setTimeout(tick, 60)
+    streamTimer = window.setTimeout(tick, STREAM_CONFIG.TICK_INTERVAL_MS)
   }
 
   try {
@@ -651,6 +658,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             :tool-result="m.toolResult"
             :card="m.card"
             :_morphing="(m as any)._morphing"
+            :stream-timestamps="(m as any)._streamTimestamps"
           />
         </div>
         </div>
@@ -746,6 +754,9 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   background: var(--accent-glow);
   color: var(--accent-text);
 }
+.welcome-btn {
+  transition: all .12s, transform .12s cubic-bezier(.4,0,.2,1);
+}
 
 .terminated-banner {
   text-align: center;
@@ -782,6 +793,9 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .continue-btn:hover {
   border-color: var(--accent);
   background: var(--accent-glow);
+}
+.continue-btn:active {
+  transform: scale(0.96);
 }
 
 </style>

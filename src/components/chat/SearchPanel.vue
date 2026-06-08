@@ -8,27 +8,29 @@ function safeHost(url: string): string {
 </script>
 
 <template>
-  <!-- Overlay (visible only on mobile when open) -->
-  <div class="sp-overlay" :class="{ open: show && results.length }" @click="close()" />
-  <div class="sp-panel" :class="{ open: show && results.length }">
-    <div class="sp-panel-inner">
-      <div class="sp-header">
-        <h3 class="sp-title">搜索结果</h3>
-        <span class="sp-count">{{ results.length }} 条</span>
-        <button class="sp-close" @click="close()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
-      </div>
-      <div class="sp-list">
-        <a v-for="(r, i) in results" :key="i" :href="r.url" target="_blank" class="sp-item" rel="noreferrer">
-          <div class="sp-item-top">
-            <span class="sp-index">{{ i + 1 }}</span>
-            <img v-if="favicons[i]" :src="favicons[i]" width="16" height="16" class="sp-favicon" />
-            <span class="sp-domain">{{ safeHost(r.url) }}</span>
-          </div>
-          <div class="sp-item-title">{{ r.title }}</div>
-          <div class="sp-item-snippet">{{ r.snippet }}</div>
-        </a>
+  <div class="search-panel-root">
+    <!-- Overlay (visible only on mobile when open) -->
+    <div class="sp-overlay" :class="{ open: show && results.length }" @click="close()" />
+    <div class="sp-panel" :class="{ open: show && results.length }">
+      <div class="sp-panel-inner">
+        <div class="sp-header">
+          <h3 class="sp-title">搜索结果</h3>
+          <span class="sp-count">{{ results.length }} 条</span>
+          <button class="sp-close" @click="close()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+        <div class="sp-list">
+          <a v-for="(r, i) in results" :key="i" :href="r.url" target="_blank" class="sp-item" rel="noreferrer">
+            <div class="sp-item-top">
+              <span class="sp-index">{{ i + 1 }}</span>
+              <img v-if="favicons[i]" :src="favicons[i]" width="16" height="16" class="sp-favicon" />
+              <span class="sp-domain">{{ safeHost(r.url) }}</span>
+            </div>
+            <div class="sp-item-title">{{ r.title }}</div>
+            <div class="sp-item-snippet">{{ r.snippet }}</div>
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -66,6 +68,9 @@ function safeHost(url: string): string {
   flex-direction: column;
   transition: width .28s cubic-bezier(0,0,0,1);
 }
+.search-panel-root {
+  display: contents;
+}
 .sp-panel.open {
   width: 340px;
   border-left: 1px solid var(--hairline);
@@ -95,6 +100,7 @@ function safeHost(url: string): string {
   transition: all .15s;
 }
 .sp-close:hover { background: var(--surface-2); color: var(--text-primary); }
+.sp-close:active { transform: scale(0.88); }
 
 .sp-list { flex: 1; overflow-y: auto; padding: 2px; }
 

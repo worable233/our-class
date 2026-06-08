@@ -1076,8 +1076,8 @@ router.post(
 
     db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId)
     db.prepare(
-      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '', '')
+      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
 
     writeAuditLog(req.user!.id, req.user!.display_name, 'update_api_config', 'config', undefined, { provider, model: model || '' })
     ok(res, { message: 'API 配置已保存', provider })

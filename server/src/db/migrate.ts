@@ -23,9 +23,17 @@ export function runMigrations(db: Database.Database) {
   for (const file of files) {
     if (!appliedSet.has(file)) {
       const sql = readFileSync(join(dir, file), 'utf-8')
-      db.exec(sql)
+      try {
+        db.exec(sql)
+        console.log(`✅ Migration applied: ${file}`)
+      } catch (err: any) {
+        if (err.message?.includes('duplicate column name')) {
+          console.warn(`⚠️  Skipped duplicate columns in: ${file} (${err.message})`)
+        } else {
+          throw err
+        }
+      }
       db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file)
-      console.log(`✅ Migration applied: ${file}`)
     }
   }
 }

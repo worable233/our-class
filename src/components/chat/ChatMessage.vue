@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { Loader2, Check, ChevronDown, Copy, CheckCheck } from '@lucide/vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
 import * as XLSX from 'xlsx'
+import { STREAM_CONFIG, getGlowRgb } from '@/composables/useStreamAnimation'
 const { open: openSearchPanel, results: searchPanelResults, favicons: spFavicons } = useSearchPanel()
 
 function showSearch() {
@@ -17,7 +18,7 @@ import { marked } from 'marked'
 
 marked.use({ breaks: true, gfm: true })
 
-const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string; _morphing?: boolean }>()
+const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string; _morphing?: boolean; streamTimestamps?: number[] }>()
 const toolExpanded = ref(false)
 const copied = ref(false)
 const isUser = computed(() => props.role === 'user')
@@ -49,50 +50,370 @@ async function doCopy() {
   } catch {}
 }
 
-function render(text: string): string {
+function render(text: string, postProcess = true): string {
   if (!text) return ''
-
   let html = marked.parse(text) as string
-
-  // Replace citation markers [1] [2] etc with styled spans
+  if (!postProcess) return html
   html = html.replace(/\[(\d+)\]/g, '<span class="cite">$1</span>')
-
   html = html.replace(
     /<pre><code class="language-(\w*)">([\s\S]*?)<\/code><\/pre>/g,
     (_, lang, code) => {
-      return `<div class="code-block-wrapper"><div class="code-block-header"><figcaption>${lang || 'code'}</figcaption></div><div class="code-block-body"><pre><code>${code}</code></pre></div></div>`
+      return `<div class="code-block-wrapper"><div class="code-block-header"><figcaption>${lang || 'code'}</figcaption><button class="code-copy-btn" data-action="copy-code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div><div class="code-block-body"><pre><code>${code}</code></pre></div></div>`
     },
   )
-
-  // Wrap tables for export button
   html = html.replace(
     /<table>([\s\S]*?)<\/table>/g,
     (_, inner) => `<div class="table-wrapper"><div class="table-export"><button class="export-btn" data-action="export-table"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div><div class="table-scroll"><table>${inner}</table></div></div>`,
   )
-
   return html
 }
 
-function handleTableExport(e: MouseEvent) {
-  const btn = (e.target as HTMLElement).closest('[data-action="export-table"]')
-  if (!btn) return
+function handleContentClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const action = target.closest('[data-action]')
+  if (!action) return
   e.stopPropagation()
-  const wrapper = btn.closest('.table-wrapper')
-  if (!wrapper) return
-  const table = wrapper.querySelector('table')
-  if (!table) return
-  // Export as .xlsx
-  const data: string[][] = []
-  const rows = table.querySelectorAll('tr')
-  for (const row of rows) {
-    const cells = row.querySelectorAll('th, td')
-    data.push(Array.from(cells).map(c => c.textContent?.trim() || ''))
+
+  const dataAction = action.getAttribute('data-action')
+
+  // Table export
+  if (dataAction === 'export-table') {
+    const wrapper = action.closest('.table-wrapper')
+    if (!wrapper) return
+    const table = wrapper.querySelector('table')
+    if (!table) return
+    const data: string[][] = []
+    const rows = table.querySelectorAll('tr')
+    for (const row of rows) {
+      const cells = row.querySelectorAll('th, td')
+      data.push(Array.from(cells).map(c => c.textContent?.trim() || ''))
+    }
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+    XLSX.writeFile(wb, 'exported-table.xlsx')
   }
-  const ws = XLSX.utils.aoa_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-  XLSX.writeFile(wb, 'exported-table.xlsx')
+
+  // Code block copy
+  if (dataAction === 'copy-code') {
+    const wrapper = action.closest('.code-block-wrapper')
+    if (!wrapper) return
+    const code = wrapper.querySelector('code')?.textContent || ''
+    if (!code) return
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = action as HTMLElement
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+      setTimeout(() => {
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
+      }, 1500)
+    }).catch(() => {})
+  }
 }
+
+// ── Inline markdown formatting via marked.lexer() tokens ────────────────────
+
+let _fmtCache: string[] | null = null
+let _fmtCacheText = ''
+
+/**
+ * 用 marked.lexer() 精确解析 markdown 语法树，
+ * 返回每个字符位置的格式标记字符串（空格分隔的 class 名）
+ */
+function computeCharFormats(content: string): string[] {
+  if (content === _fmtCacheText && _fmtCache) return _fmtCache
+
+  const n = content.length
+  const fmt: string[] = new Array(n).fill('')
+  let pos = 0
+
+  try {
+    function walk(tokens: marked.Token[], inherited = '') {
+      for (const token of tokens) {
+        const startPos = pos
+        const raw = (token as any).raw || ''
+
+        switch (token.type) {
+          case 'text': {
+            const t = token as marked.Tokens.Text
+            for (let i = 0; i < t.text.length; i++) fmt[pos + i] = inherited
+            pos += t.text.length
+            break
+          }
+          case 'strong': {
+            pos += 2 // **
+            walk((token as any).tokens || [], inherited + ' strong')
+            pos += 2 // **
+            break
+          }
+          case 'em': {
+            pos += 1 // *
+            walk((token as any).tokens || [], inherited + ' em')
+            pos += 1 // *
+            break
+          }
+          case 'del': {
+            pos += 2 // ~~
+            walk((token as any).tokens || [], inherited + ' del')
+            pos += 2 // ~~
+            break
+          }
+          case 'codespan': {
+            const t = token as marked.Tokens.CodeSpan
+            const delimLen = raw.length - t.text.length
+            const openLen = Math.ceil(delimLen / 2)
+            const closeLen = Math.floor(delimLen / 2)
+            pos += openLen
+            for (let i = 0; i < t.text.length; i++) fmt[pos + i] = inherited + ' code'
+            pos += t.text.length
+            pos += closeLen
+            break
+          }
+          case 'link': {
+            const t = token as marked.Tokens.Link
+            pos += 1 // [
+            walk(t.tokens || [], inherited + ' link')
+            pos += 1 // ]
+            pos += 1 // (
+            pos += t.href.length
+            if (t.title) pos += t.title.length + 3 //  "title"
+            pos += 1 // )
+            break
+          }
+          case 'image': {
+            pos += raw.length
+            break
+          }
+          default: {
+            // block-level: paragraph, heading, list_item, etc.
+            if ((token as any).tokens) {
+              walk((token as any).tokens, inherited)
+            } else {
+              pos += raw.length
+            }
+          }
+        }
+
+        // 确保总向前推进了 raw.length 个字符
+        pos = startPos + raw.length
+      }
+    }
+
+    walk(marked.lexer(content))
+  } catch {}
+
+  _fmtCache = fmt
+  _fmtCacheText = content
+  return fmt
+}
+
+/**
+ * 将格式标记字符串应用到 DOM span 的 inline style 上
+ */
+function applyFormatting(span: HTMLElement, fmtToken: string) {
+  const bold = fmtToken.includes('strong')
+  const italic = fmtToken.includes('em')
+  const code = fmtToken.includes('code')
+  const link = fmtToken.includes('link')
+  const del = fmtToken.includes('del')
+
+  span.style.fontWeight = bold ? '700' : ''
+  span.style.fontStyle = italic ? 'italic' : ''
+
+  if (code) {
+    span.style.fontFamily = "'JetBrains Mono','Fira Code',monospace"
+    span.style.background = 'var(--surface-2)'
+    span.style.border = '1px solid var(--hairline)'
+    span.style.borderRadius = '3px'
+    span.style.padding = '0 0.25em'
+    span.style.margin = '0 1px'
+  } else {
+    span.style.fontFamily = ''
+    span.style.background = ''
+    span.style.border = ''
+    span.style.borderRadius = ''
+    span.style.padding = ''
+    span.style.margin = ''
+  }
+
+  if (link) {
+    span.style.textDecoration = 'underline'
+    span.style.textUnderlineOffset = '3px'
+    span.style.textDecorationThickness = '1.5px'
+    span.style.textDecorationColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
+    span.style.cursor = 'pointer'
+  } else if (!code) {
+    span.style.textDecoration = ''
+    span.style.textDecorationColor = ''
+    span.style.cursor = ''
+  }
+
+  if (del) {
+    span.style.textDecoration = span.style.textDecoration
+      ? span.style.textDecoration + ' line-through'
+      : 'line-through'
+  }
+}
+
+// ── Streaming: v-html 渲染完整 markdown + nextTick 加动画 ──────────────────
+
+const streamEl = ref<HTMLElement | null>(null)
+
+/**
+ * 用 marked.lexer() token 树建立"渲染后字符位置 → 原文字符位置"映射
+ * 返回一个数组，mapping[渲染pos] = 原文pos
+ */
+function buildRenderToContentPos(text: string): number[] {
+  const map: number[] = []
+  let pos = 0
+  try {
+    function walk(toks: marked.Token[]) {
+      for (const t of toks) {
+        const raw = (t as any).raw || ''
+        const start = pos
+        switch (t.type) {
+          case 'text': {
+            const txt = (t as marked.Tokens.Text).text
+            for (let i = 0; i < txt.length; i++) map.push(pos + i)
+            pos += txt.length
+            break
+          }
+          case 'strong': {
+            pos += 2 // **
+            walk((t as any).tokens || [])
+            pos += 2 // **
+            break
+          }
+          case 'em': {
+            pos += 1
+            walk((t as any).tokens || [])
+            pos += 1
+            break
+          }
+          case 'del': {
+            pos += 2
+            walk((t as any).tokens || [])
+            pos += 2
+            break
+          }
+          case 'codespan': {
+            const cd = t as marked.Tokens.CodeSpan
+            const delimLen = raw.length - cd.text.length
+            const openLen = Math.ceil(delimLen / 2)
+            pos += openLen
+            for (let i = 0; i < cd.text.length; i++) map.push(pos + i)
+            pos += cd.text.length
+            pos += delimLen - openLen
+            break
+          }
+          case 'code': {
+            const cd = t as marked.Tokens.Code
+            // raw: ```lang\n + code + \n```
+            const openingLen = cd.lang ? cd.lang.length + 4 : 3
+            for (let i = 0; i < cd.text.length; i++) map.push(pos + openingLen + i)
+            break
+          }
+          case 'link': {
+            const lnk = t as marked.Tokens.Link
+            pos += 1 // [
+            walk(lnk.tokens || [])
+            pos += 1 // ]
+            pos += 1 // (
+            pos += lnk.href.length
+            if (lnk.title) pos += lnk.title.length + 3
+            pos += 1 // )
+            break
+          }
+          case 'image': { pos += raw.length; break }
+          default: {
+            if ((t as any).tokens) walk((t as any).tokens)
+            else pos += raw.length
+          }
+        }
+        pos = start + raw.length // 确保对齐 raw 长度
+      }
+    }
+    walk(marked.lexer(text))
+  } catch {}
+  return map
+}
+
+/**
+ * 遍历 DOM 文本节点，用 buildRenderToContentPos 映射找到每个渲染字符
+ * 在原文中的位置，从而拿到正确的时间戳计算 age
+ */
+function animateTextNodes(container: HTMLElement, text: string) {
+  const ts = props.streamTimestamps || []
+  const now = performance.now()
+  const glowMs = STREAM_CONFIG.GLOW_DURATION_MS
+  const glowRgb = getGlowRgb()
+  const isDark = document.documentElement.classList.contains('dark')
+  const contentLen = text.length
+
+  // 渲染位置 → 原文位置的映射
+  const posMap = buildRenderToContentPos(text)
+
+  // 收集所有 Text node
+  const textNodes: Text[] = []
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  let n: Text | null
+  while ((n = walker.nextNode() as Text | null)) textNodes.push(n)
+
+  let renderPos = 0
+  for (const textNode of textNodes) {
+    const str = textNode.textContent || ''
+    if (!str.length) continue
+    const parent = textNode.parentNode!
+    const frag = document.createDocumentFragment()
+
+    for (let i = 0; i < str.length; i++) {
+      const renderIdx = renderPos + i
+
+      // 通过映射找到该渲染字符对应原文的位置
+      const contentPos = renderIdx < posMap.length ? posMap[renderIdx] : contentLen - 1
+      const batchIdx = Math.floor(contentPos / STREAM_CONFIG.CHARS_PER_TICK)
+      const batchTime = ts[batchIdx]
+      const age = batchTime ? Math.min(now - batchTime, glowMs) : glowMs
+
+      const opacity = STREAM_CONFIG.INITIAL_OPACITY
+        + (1 - STREAM_CONFIG.INITIAL_OPACITY)
+        * Math.min(age / STREAM_CONFIG.ANIMATION_DURATION_MS, 1)
+
+      const gp = Math.min(age / glowMs, 1)
+      const ge = 1 - (1 - gp) * (1 - gp)
+      const ga = 0.9 * (1 - ge)
+
+      const span = document.createElement('span')
+      span.textContent = str[i] === ' ' ? ' ' : str[i]
+      span.style.opacity = String(opacity)
+      span.style.textShadow = isDark && ga > 0.01
+        ? `0 0 3px rgba(${glowRgb},${ga.toFixed(2)}), 0 0 8px rgba(${glowRgb},${(ga * 0.65).toFixed(2)}), 0 0 20px rgba(${glowRgb},${(ga * 0.35).toFixed(2)})`
+        : 'none'
+      frag.appendChild(span)
+    }
+
+    renderPos += str.length
+    parent.replaceChild(frag, textNode)
+  }
+}
+
+watch(
+  [() => props.content, () => props.streaming, () => props.streamTimestamps],
+  () => {
+    if (props.role !== 'assistant' || !props.content) return
+    const el = streamEl.value
+    if (!el) return
+
+    // 统一用 render() 渲染完整 markdown（含表格、代码块等全部特性）
+    el.innerHTML = render(props.content)
+
+    if (props.streaming) {
+      // streaming 态：在同一个微任务内把文本节点换成动画 span
+      // 此时浏览器尚未渲染，用户看不到"闪烁"
+      nextTick(() => animateTextNodes(el, props.content!))
+    }
+  },
+  { flush: 'post' },
+)
 </script>
 
 <template>
@@ -123,7 +444,8 @@ function handleTableExport(e: MouseEvent) {
     <div class="msg" :class="isUser ? 'user' : 'bot'">
       <div class="body">
         <div v-if="!content && !isUser" class="dots"><span /><span /><span /></div>
-        <div v-else-if="!isUser && content" class="text text-bot" v-html="render(content)" @click="handleTableExport" />
+        <div v-else-if="!isUser && content && streaming" ref="streamEl" class="text text-bot" @click="handleContentClick" />
+        <div v-else-if="!isUser && content" class="text text-bot" v-html="render(content)" @click="handleContentClick" />
         <div v-else class="text text-user" v-html="render(content || '')" />
       </div>
     </div>
@@ -201,6 +523,8 @@ function handleTableExport(e: MouseEvent) {
   transition: all .15s;
 }
 .tp-chevron:hover { background: var(--surface-2); color: var(--text-secondary); }
+.tp-chevron:active:not(.open) { transform: scale(0.88); }
+.tp-chevron.open:active { transform: rotate(180deg) scale(0.88); }
 
 .tp-icons { display: flex; gap: 1px; align-items: center; margin-left: 2px; }
 .tp-favicon { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; object-fit: contain; }
@@ -210,7 +534,8 @@ function handleTableExport(e: MouseEvent) {
   color: var(--accent-text); font-size: 11px; cursor: pointer;
   padding: 2px 6px; border-radius: 4px; margin-left: 2px;
 }
-.tp-expand:hover { background: rgba(128,128,128,.1); }
+.tp-expand:hover { background: var(--surface-2); }
+.tp-expand:active { transform: scale(0.88); }
 .tp-chevron.open { transform: rotate(180deg); }
 
 .tool-result-body {
@@ -256,6 +581,11 @@ function handleTableExport(e: MouseEvent) {
 
 .text-bot { padding: 0; }
 
+/* ── Streaming container ── */
+.stream-text {
+  white-space: pre-wrap;
+}
+
 /* ── Copy button ── */
 .copy-area {
   padding: 0 16px;
@@ -277,6 +607,7 @@ function handleTableExport(e: MouseEvent) {
   transition: all .12s;
 }
 .copy-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+.copy-btn:active { transform: scale(0.88); }
 .copy-btn.done { color: #22c55e; }
 
 /* typing dots */
@@ -297,14 +628,12 @@ function handleTableExport(e: MouseEvent) {
    Prose: Fumadocs-inspired (from simple-theme)
    ═══════════════════════════════════════════ */
 
-/* ── Paragraphs ── */
 .text-bot :deep(p) {
   margin: 1.25em 0;
 }
 .text-bot :deep(p:first-child) { margin-top: 0; }
 .text-bot :deep(p:last-child)  { margin-bottom: 0; }
 
-/* ── Headings ── */
 .text-bot :deep(h1),
 .text-bot :deep(h2),
 .text-bot :deep(h3),
@@ -321,7 +650,6 @@ function handleTableExport(e: MouseEvent) {
 .text-bot :deep(h3) { font-size: 1.15rem;  margin: 1.2em 0 0.4em; }
 .text-bot :deep(h4) { font-size: 1.05rem;  margin: 1em 0 0.3em;  }
 
-/* ── Lists ── */
 .text-bot :deep(ul) {
   list-style: disc outside;
   margin: 1em 0;
@@ -337,7 +665,6 @@ function handleTableExport(e: MouseEvent) {
 .text-bot :deep(li > ul),
 .text-bot :deep(li > ol) { margin: 0.4em 0; }
 
-/* ── Links ── */
 .text-bot :deep(a) {
   color: var(--text-primary);
   text-decoration: underline;
@@ -349,10 +676,8 @@ function handleTableExport(e: MouseEvent) {
 }
 .text-bot :deep(a:hover) { opacity: 0.8; }
 
-/* ── Bold ── */
 .text-bot :deep(strong) { font-weight: 600; color: var(--text-primary); }
 
-/* ── Blockquote ── */
 .text-bot :deep(blockquote) {
   font-style: italic;
   font-weight: 500;
@@ -367,7 +692,6 @@ function handleTableExport(e: MouseEvent) {
 .text-bot :deep(blockquote p:first-child) { margin-top: 0; }
 .text-bot :deep(blockquote p:last-child)  { margin-bottom: 0; }
 
-/* ── Code blocks (Fumadocs-style wrapper) ── */
 .text-bot :deep(.code-block-wrapper) {
   position: relative;
   margin: 1.5em 0;
@@ -391,6 +715,30 @@ function handleTableExport(e: MouseEvent) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.text-bot :deep(.code-block-header .code-copy-btn) {
+  margin-left: auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all .12s;
+  opacity: 0;
+}
+.text-bot :deep(.code-block-wrapper:hover .code-copy-btn) {
+  opacity: 1;
+}
+.text-bot :deep(.code-copy-btn:hover) {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.text-bot :deep(.code-copy-btn:active) {
+  transform: scale(0.88);
+}
 .text-bot :deep(.code-block-body) { overflow-x: auto; }
 .text-bot :deep(.code-block-body pre) {
   margin: 0;
@@ -412,7 +760,6 @@ function handleTableExport(e: MouseEvent) {
   color: var(--text-primary);
 }
 
-/* ── Inline code ── */
 .text-bot :deep(code) {
   font-family: 'JetBrains Mono','Fira Code',monospace;
   background: var(--surface-2);
@@ -430,7 +777,6 @@ function handleTableExport(e: MouseEvent) {
   color: inherit;
 }
 
-/* ── Horizontal rule ── */
 .text-bot :deep(hr) {
   margin: 1.5em 0;
   border: 0;
@@ -438,7 +784,6 @@ function handleTableExport(e: MouseEvent) {
   opacity: 0.3;
 }
 
-/* ── Tables ── */
 .text-bot :deep(.table-wrapper) {
   position: relative;
   margin: 1.5em 0;
@@ -472,7 +817,8 @@ function handleTableExport(e: MouseEvent) {
   cursor: pointer; padding: 0;
   transition: all .12s;
 }
-.text-bot :deep(.export-btn:hover) { background: rgba(128,128,128,.15); color: var(--text-primary); }
+.text-bot :deep(.export-btn:hover) { background: var(--surface-2); color: var(--text-primary); }
+.text-bot :deep(.export-btn:active) { transform: scale(0.88); }
 
 .text-bot :deep(table) {
   width: max-content;
@@ -503,14 +849,12 @@ function handleTableExport(e: MouseEvent) {
 .text-bot :deep(tbody tr:last-child td) { border-bottom: none; }
 .text-bot :deep(tbody tr:hover) { background: var(--surface-2); opacity: 0.9; }
 
-/* ── Images ── */
 .text-bot :deep(img) {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
 }
 
-/* ── Citation badges ── */
 .text-bot :deep(.cite) {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; border-radius: 50%;
@@ -520,4 +864,3 @@ function handleTableExport(e: MouseEvent) {
 }
 .text-bot :deep(.cite:hover) { background: var(--hairline-strong); color: var(--text-primary); }
 </style>
-
