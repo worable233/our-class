@@ -209,6 +209,46 @@ const TOOLS: ToolDef[] = [
       required: ['file_id'],
     },
   },
+  {
+    name: 'create_student',
+    description: '创建新学生账号。创建成功后返回学生的学号和初始登录信息。仅教师可用。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        username: { type: 'string', description: '登录用户名（唯一，小写英文字母）' },
+        display_name: { type: 'string', description: '显示姓名（中文真实姓名）' },
+        class: { type: 'string', description: '班级名，如"高三(2)班"' },
+        password: { type: 'string', description: '登录密码，留空默认为 123456' },
+      },
+      required: ['username', 'display_name'],
+    },
+  },
+  {
+    name: 'update_student',
+    description: '修改学生信息，如修改姓名、班级等。仅教师可用。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        student_id: { type: 'integer', description: '学生 ID' },
+        display_name: { type: 'string', description: '新的显示姓名' },
+        class: { type: 'string', description: '新的班级' },
+        password: { type: 'string', description: '新的登录密码' },
+      },
+      required: ['student_id'],
+    },
+  },
+  {
+    name: 'delete_student',
+    description: '删除学生账号及相关数据（成绩、积分、提交记录、评论等全部级联删除）。仅教师可用，操作不可撤销。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        student_id: { type: 'integer', description: '学生 ID' },
+        confirm: { type: 'boolean', description: '确认删除，必须设为 true 才会执行' },
+      },
+      required: ['student_id', 'confirm'],
+    },
+  },
 ]
 
 // ── Tool execution ────────────────────────────────────────────────────────
@@ -431,6 +471,57 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         }
       } catch {}
       return JSON.stringify({ error: '搜索不可用' })
+    }
+
+    case 'create_student': {
+      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以创建学生' })
+      const { username, display_name, class: stuClass, password } = input as any
+      if (!username || !display_name) return JSON.stringify({ error: '用户名和姓名不能为空' })
+      // Check duplicate username
+      const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username)
+      if (existing) return JSON.stringify({ error: `用户名「${username}」已存在` })
+      const maxId = db.prepare("SELECT MAX(id) as m FROM users").get() as any
+      const result = db.prepare(
+        'INSERT INTO users (username, display_name, role, class, password, group_id, student_no) VALUES (?, ?, ?, ?, ?, (SELECT id FROM permission_groups WHERE name = ?), ?)'
+      ).run(username, display_name, 'student', stuClass || '', password || '123456', '学生', `S${String(maxId.m + 1).padStart(7, '0')}`)
+      return JSON.stringify({
+        success: true,
+        id: result.lastInsertRowid,
+        username,
+        display_name,
+        class: stuClass || '',
+        message: `已创建学生「${display_name}」（用户名：${username}，默认密码：${password || '123456'}）`,
+      })
+    }
+
+    case 'update_student': {
+      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以修改学生信息' })
+      const updateId = input.student_id as number
+      const student = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(updateId) as any
+      if (!student) return JSON.stringify({ error: `未找到 ID 为 ${updateId} 的学生` })
+      const fields: string[] = []
+      const params: any[] = []
+      if (input.display_name) { fields.push('display_name = ?'); params.push(input.display_name) }
+      if (input.class) { fields.push('class = ?'); params.push(input.class) }
+      if (input.password) { fields.push('password = ?'); params.push(input.password) }
+      if (fields.length > 0) {
+        db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params, updateId)
+      }
+      const updated = db.prepare("SELECT id, username, display_name, class FROM users WHERE id = ?").get(updateId)
+      return JSON.stringify({ success: true, student: updated, message: `已更新学生信息` })
+    }
+
+    case 'delete_student': {
+      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以删除学生' })
+      if (!input.confirm) return JSON.stringify({ error: '请将 confirm 设为 true 以确认删除操作' })
+      const deleteId = input.student_id as number
+      const delStudent = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(deleteId) as any
+      if (!delStudent) return JSON.stringify({ error: `未找到 ID 为 ${deleteId} 的学生` })
+      db.prepare("DELETE FROM users WHERE id = ?").run(deleteId)
+      return JSON.stringify({
+        success: true,
+        message: `已删除学生「${delStudent.display_name}」（ID: ${deleteId}）及其所有相关数据`,
+      })
     }
 
     default:
@@ -893,6 +984,9 @@ function toolLabel(name: string, input: Record<string, unknown>): string {
     case 'get_current_time': return '获取当前时间'
     case 'get_class_list': return '查询班级列表'
     case 'random_pick': return input.class ? `从 ${input.class} 随机抽取` : '随机抽号'
+    case 'create_student': return `创建学生 ${input.display_name}`
+    case 'update_student': return `修改学生 #${input.student_id}`
+    case 'delete_student': return `删除学生 #${input.student_id}`
     default: return `调用 ${name}`
   }
 }

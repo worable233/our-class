@@ -49,6 +49,7 @@ function seedPermissionGroups(db: Database.Database) {
     'tool.get_score_rankings', 'tool.list_assignments', 'tool.get_submissions',
     'tool.get_weather', 'tool.web_search', 'tool.random_pick',
     'tool.get_current_time', 'tool.get_class_list', 'tool.view_file',
+    'tool.create_student', 'tool.update_student', 'tool.delete_student',
   ]
 
   const studentPermissions = [

@@ -41,6 +41,9 @@ const DEFAULT_TOOLS = [
   { tool_name: 'get_current_time', config_json: '{}', max_result_length: 200, enabled: true },
   { tool_name: 'get_class_list', config_json: '{}', max_result_length: 200, enabled: true },
   { tool_name: 'view_file', config_json: '{}', max_result_length: 5000, enabled: true },
+  { tool_name: 'create_student', config_json: '{}', max_result_length: 300, enabled: true },
+  { tool_name: 'update_student', config_json: '{}', max_result_length: 300, enabled: true },
+  { tool_name: 'delete_student', config_json: '{}', max_result_length: 200, enabled: true },
 ]
 
 // ── Routes ─────────────────────────────────────────────────────────────────

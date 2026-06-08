@@ -159,6 +159,9 @@ const toolFields: Record<string, ToolConfigField[]> = {
   get_current_time: [],
   get_class_list: [],
   view_file: [],
+  create_student: [],
+  update_student: [],
+  delete_student: [],
 }
 
 function getConfigData(tc: ToolConfig): Record<string, any> {
@@ -184,6 +187,9 @@ const toolLabels: Record<string, string> = {
   get_current_time: '🕐 当前时间',
   get_class_list: '🏫 班级列表',
   view_file: '📄 查看文件',
+  create_student: '👤 创建学生',
+  update_student: '✏️ 修改学生',
+  delete_student: '🗑️ 删除学生',
 }
 
 async function saveToolConfig(tc: ToolConfig) {
