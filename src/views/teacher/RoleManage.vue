@@ -5,10 +5,10 @@ import { api } from '@/api/client'
 import type { PermissionGroup, PermissionDef } from '@/types'
 import { useDialog, useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NForm, NFormItem, NInput,
+  NButton, NModal, NForm, NFormItem, NInput,
   NSpace, NTag, NSpin, NEmpty, NCheckbox, NCheckboxGroup,
-  NDivider, NGi, NGrid, NStatistic, NNumberAnimation, NAlert,
-  NBadge, NIcon, NPopconfirm, NScrollbar, NButtonGroup,
+  NGi, NGrid, NNumberAnimation, NAlert,
+  NBadge, NPopconfirm, NList, NListItem,
 } from 'naive-ui'
 
 const dialog = useDialog()
@@ -154,50 +154,53 @@ onMounted(load)
       </NGi>
     </NGrid>
 
-    <!-- 职位卡片网格 -->
+    <!-- 职位列表 -->
     <NSpin :show="loading" style="min-height: 200px">
       <template v-if="groups.length > 0">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
-          <NCard v-for="group in groups" :key="group.id" size="small" :bordered="true" hoverable>
-            <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
-              <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-glow);color:var(--accent-text);flex-shrink:0">
-                <Shield :size="20" />
+        <NList hoverable clickable style="background:transparent">
+          <NListItem v-for="group in groups" :key="group.id">
+            <template #prefix>
+              <div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-glow);color:var(--accent-text);flex-shrink:0">
+                <Shield :size="18" />
               </div>
-              <div style="flex:1;min-width:0">
-                <NText style="font-weight:600;font-size:15px;display:block">{{ group.name }}</NText>
-                <NText depth="3" style="font-size:12px;display:block">{{ group.description || '暂无描述' }}</NText>
+            </template>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;width:100%">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0">
+                <span style="font-weight:600;font-size:15px;color:var(--text-primary);white-space:nowrap">{{ group.name }}</span>
+                <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">{{ group.description || '暂无描述' }}</span>
+                <NTag size="tiny" :type="tagType(group.permissions.length)" round :bordered="false" style="flex-shrink:0">
+                  {{ group.permissions.length }} 项
+                </NTag>
               </div>
-              <NTag :type="tagType(group.permissions.length)" size="small" round :bordered="false">
-                {{ group.permissions.length }} 项权限
-              </NTag>
+              <div style="display:flex;gap:4px;flex-shrink:0">
+                <NButton quaternary size="tiny" @click.stop="openEdit(group)" round>
+                  <template #icon><Pencil :size="13" /></template>编辑
+                </NButton>
+                <NPopconfirm @positive-click="remove(group.id)">
+                  <template #trigger>
+                    <NButton quaternary size="tiny" type="error" round>
+                      <template #icon><Trash2 :size="13" /></template>删除
+                    </NButton>
+                  </template>
+                  确定删除职位「{{ group.name }}」？
+                </NPopconfirm>
+              </div>
             </div>
-
-            <NDivider style="margin:8px 0" />
-
-            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
-              <NTag v-for="code in group.permissions.slice(0, 5)" :key="code" size="tiny" :bordered="false" style="display:flex;align-items:center;gap:2px">
-                <template #icon><Check :size="10" /></template>
-                {{ allPermissions.find(p => p.code === code)?.label || code }}
-              </NTag>
-              <NText v-if="group.permissions.length > 5" depth="3" style="font-size:11px;padding:2px 4px">+{{ group.permissions.length - 5 }} 项</NText>
-              <NText v-if="group.permissions.length === 0" depth="3" style="font-size:11px;padding:2px 4px">暂无权限</NText>
-            </div>
-
-            <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--hairline)">
-              <NButton quaternary size="tiny" @click="openEdit(group)">
-                <template #icon><Pencil :size="14" /></template>编辑
-              </NButton>
-              <NPopconfirm @positive-click="remove(group.id)">
-                <template #trigger>
-                  <NButton quaternary size="tiny" type="error">
-                    <template #icon><Trash2 :size="14" /></template>删除
-                  </NButton>
+            <template #footer>
+              <div v-if="group.permissions.length > 0" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
+                <template v-for="code in group.permissions.slice(0, 8)" :key="code">
+                  <NTag size="tiny" :bordered="false" round style="font-size:11px">
+                    {{ allPermissions.find(p => p.code === code)?.label || code }}
+                  </NTag>
                 </template>
-                确定删除职位「{{ group.name }}」？
-              </NPopconfirm>
-            </div>
-          </NCard>
-        </div>
+                <NTag v-if="group.permissions.length > 8" size="tiny" :bordered="false" round style="font-size:11px">
+                  +{{ group.permissions.length - 8 }}
+                </NTag>
+              </div>
+              <div v-else style="font-size:11px;color:var(--text-muted);margin-top:4px">暂无权限</div>
+            </template>
+          </NListItem>
+        </NList>
       </template>
       <NEmpty v-else description="暂无职位，点击上方按钮创建" />
     </NSpin>
