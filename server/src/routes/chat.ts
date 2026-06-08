@@ -866,7 +866,13 @@ async function agentLoopOpenAI(
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authKey}` },
-        body: JSON.stringify({ model, max_tokens: 4096, messages: loopMessages, tools }),
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          messages: loopMessages,
+          tools,
+          ...(thinking ? { thinking: true } : {}),
+        }),
       })
       data = await response.json()
       if (!response.ok) throw new Error((typeof data?.error === 'string' ? data.error : data?.error?.message) || `HTTP ${response.status}`)
@@ -1111,7 +1117,7 @@ function detectProvider(apiUrl: string, model: string): 'anthropic' | 'openai' {
   if (apiUrl) {
     const lower = apiUrl.toLowerCase()
     // OpenAI-compatible APIs
-    if (lower.includes('openai.com') || lower.includes('deepseek') || lower.includes('bigmodel') || lower.includes('zhipu')) return 'openai'
+    if (lower.includes('openai.com') || lower.includes('deepseek') || lower.includes('bigmodel') || lower.includes('zhipu') || lower.includes('xiaomimimo') || lower.includes('mimo')) return 'openai'
     // URLs with /v1/ /v4/ path patterns are typically OpenAI-compatible
     if (/\/v\d+\//.test(lower)) return 'openai'
   }
