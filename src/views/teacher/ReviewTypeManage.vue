@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useDialog, useMessage } from 'naive-ui'
 import {
   NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
-  NSpin, NEmpty,
+  NSpin, NEmpty, NText, NCard, NTag,
 } from 'naive-ui'
 import { Plus, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
 
@@ -92,8 +92,8 @@ onMounted(load)
   <div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
-        <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:var(--text-primary)">点评类型</h2>
-        <p style="margin:0;font-size:14px;color:var(--text-muted)">管理加减分的点评项，可在积分管理中使用</p>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">点评类型</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理加减分的点评项，可在积分管理中使用</NText>
       </div>
       <NButton type="primary" @click="openNew" round>
         <template #icon><Plus :size="16" /></template>
@@ -103,35 +103,39 @@ onMounted(load)
 
     <NSpin :show="loading" style="min-height:200px">
       <template v-if="types.length > 0">
-        <div class="palette">
-          <div class="palette-col">
-            <div class="palette-header">
-              <ThumbsUp :size="16" style="color:#18a058" />
-              <span>正向加分</span>
-              <span class="palette-count">{{ addTypes.length }}</span>
-            </div>
-            <div class="matrix">
-              <div v-for="t in addTypes" :key="t.id" class="matrix-item" @click="openEdit(t)">
-                <span class="matrix-emoji">{{ t.emoji }}</span>
-                <span class="matrix-name">{{ t.name }}</span>
-                <span class="matrix-pts">+{{ t.amount }}</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <NCard size="small" :bordered="true">
+            <template #header>
+              <div style="display:flex;align-items:center;gap:8px">
+                <ThumbsUp :size="16" style="color:#18a058" />
+                <NText style="font-weight:600">正向加分</NText>
+                <NTag size="small" type="success" round :bordered="false">{{ addTypes.length }}</NTag>
               </div>
+            </template>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <NButton v-for="t in addTypes" :key="t.id" quaternary block style="padding:8px;height:auto" @click="openEdit(t)">
+                <span style="font-size:20px;line-height:1;margin-right:6px">{{ t.emoji }}</span>
+                <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
+                <span style="font-size:13px;font-weight:700;color:#18a058">+{{ t.amount }}</span>
+              </NButton>
             </div>
-          </div>
-          <div class="palette-col">
-            <div class="palette-header deduct">
-              <ShieldBan :size="16" style="color:#d03050" />
-              <span>负向约束</span>
-              <span class="palette-count">{{ deductTypes.length }}</span>
-            </div>
-            <div class="matrix">
-              <div v-for="t in deductTypes" :key="t.id" class="matrix-item deduct" @click="openEdit(t)">
-                <span class="matrix-emoji">{{ t.emoji }}</span>
-                <span class="matrix-name">{{ t.name }}</span>
-                <span class="matrix-pts deduct">-{{ t.amount }}</span>
+          </NCard>
+          <NCard size="small" :bordered="true">
+            <template #header>
+              <div style="display:flex;align-items:center;gap:8px">
+                <ShieldBan :size="16" style="color:#d03050" />
+                <NText style="font-weight:600">负向约束</NText>
+                <NTag size="small" type="error" round :bordered="false">{{ deductTypes.length }}</NTag>
               </div>
+            </template>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <NButton v-for="t in deductTypes" :key="t.id" quaternary block style="padding:8px;height:auto" @click="openEdit(t)">
+                <span style="font-size:20px;line-height:1;margin-right:6px">{{ t.emoji }}</span>
+                <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
+                <span style="font-size:13px;font-weight:700;color:#d03050">-{{ t.amount }}</span>
+              </NButton>
             </div>
-          </div>
+          </NCard>
         </div>
       </template>
       <NEmpty v-else description="暂无点评类型" />
@@ -144,7 +148,7 @@ onMounted(load)
       style="width:480px;max-width:92vw"
       :mask-closable="false"
       :segmented="{ content: true, footer: true }"
-      header-style="padding:20px 24px 0;font-size:18px;font-weight:600"
+      header-style="font-size:18px;font-weight:600"
       content-style="padding:20px 24px"
       footer-style="padding:12px 24px"
     >
@@ -168,12 +172,15 @@ onMounted(load)
           <NInputNumber v-model:value="form.amount" :min="1" :max="100" style="width:120px" />
         </NFormItem>
         <NFormItem label="图标" required>
-          <div class="emoji-grid">
-            <button
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            <NButton
               v-for="e in commonEmojis" :key="e"
-              class="emoji-btn" :class="{ selected: form.emoji === e }"
+              size="tiny"
+              :type="form.emoji === e ? 'primary' : 'default'"
+              :secondary="form.emoji === e"
               @click="form.emoji = e"
-            >{{ e }}</button>
+              style="font-size:16px;padding:2px 6px;min-width:32px"
+            >{{ e }}</NButton>
           </div>
         </NFormItem>
       </NForm>
@@ -194,73 +201,9 @@ onMounted(load)
 </template>
 
 <style scoped>
-.palette {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-.palette-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.palette-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  padding-bottom: 6px;
-  border-bottom: 2px solid rgba(24,160,88,0.2);
-}
-.palette-header.deduct {
-  border-bottom-color: rgba(208,48,80,0.2);
-}
-.palette-count {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-.matrix {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.matrix-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--hairline);
-  background: var(--surface-1);
-  cursor: pointer;
-  transition: border-color .12s, background .12s;
-}
-.matrix-item:hover { border-color: var(--accent); background: var(--surface-2); }
-.matrix-emoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
-.matrix-name { font-size: 12px; font-weight: 500; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.matrix-pts { font-size: 11px; font-weight: 700; color: #18a058; flex-shrink: 0; }
-.matrix-pts.deduct { color: #d03050; }
-
 @media (max-width: 768px) {
   .palette { grid-template-columns: 1fr; gap: 20px; }
   .matrix { grid-template-columns: 1fr 1fr; }
 }
 
-.emoji-grid {
-  display:flex; flex-wrap:wrap; gap:6px; max-height:200px; overflow-y:auto; padding:4px 0;
-}
-.emoji-btn {
-  width:38px; height:38px; font-size:20px; line-height:1; display:flex;
-  align-items:center; justify-content:center;
-  border-radius:8px; border:1px solid transparent;
-  background:var(--surface-2); cursor:pointer;
-  transition:all .1s;
-}
-.emoji-btn:hover { border-color:var(--accent); background:var(--surface-3); }
-.emoji-btn.selected { border-color:var(--accent); background:rgba(94,106,210,0.12); }
 </style>

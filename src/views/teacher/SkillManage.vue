@@ -4,7 +4,8 @@ import { api } from '@/api/client'
 import { useDialog, useMessage } from 'naive-ui'
 import {
   NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
-  NSpace, NSpin, NEmpty, NTag, NAlert, NPopconfirm, NSwitch,
+  NSpace, NSpin, NEmpty, NTag, NAlert, NPopconfirm, NSwitch, NText,
+  NList, NListItem,
 } from 'naive-ui'
 import { Plus, Pencil, Trash2, GripVertical, BookOpen, ArrowUp, ArrowDown } from '@lucide/vue'
 import type { Skill } from '@/types'
@@ -162,7 +163,7 @@ onMounted(load)
 <template>
   <div class="skill-page">
     <div class="skill-header">
-      <h2 class="skill-title">Skill 管理</h2>
+      <NText tag="h2" class="skill-title">Skill 管理</NText>
       <NButton type="primary" @click="openNew" round>
         <template #icon><Plus :size="16" /></template>
         新建 Skill
@@ -185,25 +186,28 @@ onMounted(load)
     <!-- List -->
     <NSpin :show="loading" style="min-height: 200px">
       <template v-if="skills.length > 0">
-        <div class="skill-list">
-          <div
+        <NList hoverable>
+          <NListItem
             v-for="(skill, index) in skills"
             :key="skill.id"
-            class="skill-card"
             :class="{ 'drag-over': dropIndex === index }"
-            draggable="true"
-            @dragstart="onDragStart($event, index)"
-            @dragover="onDragOver($event, index)"
-            @dragleave="onDragLeave"
-            @drop="onDrop($event, index)"
           >
-            <div class="skill-drag-handle" title="拖拽排序">
-              <GripVertical :size="16" />
-            </div>
+            <template #prefix>
+              <div class="skill-drag-handle" title="拖拽排序"
+                draggable="true"
+                @dragstart="onDragStart($event, index)"
+                @dragover="onDragOver($event, index)"
+                @dragleave="onDragLeave"
+                @drop="onDrop($event, index)"
+              >
+                <GripVertical :size="16" />
+              </div>
+            </template>
+
             <div class="skill-content">
-              <div class="skill-name-row">
-                <BookOpen :size="16" class="skill-icon" />
-                <span class="skill-name">{{ skill.name }}</span>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <BookOpen :size="16" style="color:var(--accent);flex-shrink:0" />
+                <NText style="font-weight:600;flex:1">{{ skill.name }}</NText>
                 <NSwitch
                   :value="skill.enabled"
                   size="small"
@@ -214,33 +218,38 @@ onMounted(load)
                   }"
                 />
               </div>
-              <div class="skill-preview">{{ skill.content?.slice(0, 120) || '（空）' }}{{ skill.content?.length > 120 ? '...' : '' }}</div>
-              <div class="skill-meta">
+              <NText depth="3" style="font-size:12px;line-height:1.5;display:block;margin-bottom:4px">
+                {{ skill.content?.slice(0, 120) || '（空）' }}{{ skill.content?.length > 120 ? '...' : '' }}
+              </NText>
+              <div style="display:flex;align-items:center;gap:8px">
                 <NTag size="tiny" :bordered="false">#{{ skill.sort_order + 1 }}</NTag>
-                <span class="skill-date">更新于 {{ skill.updated_at?.slice(0, 10) }}</span>
+                <NText depth="3" style="font-size:11px">更新于 {{ skill.updated_at?.slice(0, 10) }}</NText>
               </div>
             </div>
-            <div class="skill-actions">
-              <NButton quaternary size="tiny" @click="moveUp(index)" :disabled="index === 0">
-                <template #icon><ArrowUp :size="14" /></template>
-              </NButton>
-              <NButton quaternary size="tiny" @click="moveDown(index)" :disabled="index === skills.length - 1">
-                <template #icon><ArrowDown :size="14" /></template>
-              </NButton>
-              <NButton quaternary size="tiny" @click="openEdit(skill)">
-                <template #icon><Pencil :size="14" /></template>
-              </NButton>
-              <NPopconfirm @positive-click="remove(skill.id)">
-                <template #trigger>
-                  <NButton quaternary size="tiny" type="error">
-                    <template #icon><Trash2 :size="14" /></template>
-                  </NButton>
-                </template>
-                确定删除「{{ skill.name }}」？
-              </NPopconfirm>
-            </div>
-          </div>
-        </div>
+
+            <template #suffix>
+              <div style="display:flex;gap:2px;flex-shrink:0">
+                <NButton quaternary size="tiny" @click="moveUp(index)" :disabled="index === 0">
+                  <template #icon><ArrowUp :size="14" /></template>
+                </NButton>
+                <NButton quaternary size="tiny" @click="moveDown(index)" :disabled="index === skills.length - 1">
+                  <template #icon><ArrowDown :size="14" /></template>
+                </NButton>
+                <NButton quaternary size="tiny" @click="openEdit(skill)">
+                  <template #icon><Pencil :size="14" /></template>
+                </NButton>
+                <NPopconfirm @positive-click="remove(skill.id)">
+                  <template #trigger>
+                    <NButton quaternary size="tiny" type="error">
+                      <template #icon><Trash2 :size="14" /></template>
+                    </NButton>
+                  </template>
+                  确定删除「{{ skill.name }}」？
+                </NPopconfirm>
+              </div>
+            </template>
+          </NListItem>
+        </NList>
       </template>
       <NEmpty v-else description="暂无 Skill，点击上方按钮创建" />
     </NSpin>
@@ -253,7 +262,7 @@ onMounted(load)
       style="width: 780px; max-width: 94vw"
       :mask-closable="false"
       :segmented="{ content: true, footer: true }"
-      header-style="padding: 20px 24px 0; font-size: 18px; font-weight: 600"
+      header-style="font-size:18px;font-weight:600"
       content-style="padding: 16px 24px"
       footer-style="padding: 16px 24px"
     >
@@ -296,17 +305,6 @@ onMounted(load)
 }
 .skill-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
 
-.skill-list { display: flex; flex-direction: column; gap: 8px; }
-.skill-card {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px;
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  transition: all .15s;
-}
-.skill-card:hover { border-color: var(--accent); box-shadow: 0 1px 4px rgba(94,106,210,.08); }
-.skill-card.drag-over { border-color: var(--accent); background: var(--accent-glow); }
 .skill-drag-handle {
   cursor: grab; color: var(--text-muted);
   display: flex; padding: 4px;
@@ -315,14 +313,6 @@ onMounted(load)
 }
 .skill-drag-handle:hover { color: var(--text-secondary); background: var(--surface-2); }
 .skill-drag-handle:active { cursor: grabbing; }
-.skill-content { flex: 1; min-width: 0; }
-.skill-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.skill-icon { color: var(--accent); flex-shrink: 0; }
-.skill-name { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; }
-.skill-preview { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 4px; }
-.skill-meta { display: flex; align-items: center; gap: 8px; }
-.skill-date { font-size: 11px; color: var(--text-muted); }
-.skill-actions { display: flex; gap: 2px; flex-shrink: 0; }
 
 .cm-editor-wrap {
   border: 1px solid var(--hairline);
@@ -333,7 +323,6 @@ onMounted(load)
 .cm-editor-wrap :deep(.cm-scroller) { font-family: 'JetBrains Mono', 'Fira Code', monospace !important; font-size: 13px; }
 
 @media (max-width: 768px) {
-  .skill-card { flex-wrap: wrap; }
-  .skill-actions { width: 100%; justify-content: flex-end; padding-top: 4px; border-top: 1px solid var(--hairline); }
+  .skill-drag-handle { display: none; }
 }
 </style>

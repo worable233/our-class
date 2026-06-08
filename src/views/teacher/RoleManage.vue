@@ -129,98 +129,74 @@ onMounted(load)
     <!-- 统计卡片 -->
     <NGrid :cols="3" :x-gap="16" style="margin-bottom: 28px">
       <NGi>
-        <div class="stat-card">
-          <div class="stat-label">职位总数</div>
-          <div class="stat-value">
+        <NCard size="small" :bordered="true">
+          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">职位总数</NText>
+          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em">
             <NNumberAnimation :from="0" :to="groups.length" :duration="600" />
-          </div>
-        </div>
+          </NText>
+        </NCard>
       </NGi>
       <NGi>
-        <div class="stat-card">
-          <div class="stat-label">可分配权限</div>
-          <div class="stat-value accent">
+        <NCard size="small" :bordered="true">
+          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">可分配权限</NText>
+          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em;color:var(--accent-text)">
             <NNumberAnimation :from="0" :to="totalPermissions" :duration="600" />
-          </div>
-        </div>
+          </NText>
+        </NCard>
       </NGi>
       <NGi>
-        <div class="stat-card">
-          <div class="stat-label">已分配权限</div>
-          <div class="stat-value">
+        <NCard size="small" :bordered="true">
+          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">已分配权限</NText>
+          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em">
             <NNumberAnimation :from="0" :to="groupedCount" :duration="600" />
-          </div>
-        </div>
+          </NText>
+        </NCard>
       </NGi>
     </NGrid>
 
     <!-- 职位卡片网格 -->
     <NSpin :show="loading" style="min-height: 200px">
       <template v-if="groups.length > 0">
-        <div class="role-grid">
-          <div
-            v-for="group in groups"
-            :key="group.id"
-            class="role-card"
-          >
-            <!-- 卡片头部 -->
-            <div class="role-card-header">
-              <div class="role-icon">
-                <Shield :size="22" />
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+          <NCard v-for="group in groups" :key="group.id" size="small" :bordered="true" hoverable>
+            <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
+              <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-glow);color:var(--accent-text);flex-shrink:0">
+                <Shield :size="20" />
               </div>
-              <div class="role-info">
-                <div class="role-name">{{ group.name }}</div>
-                <div class="role-desc">{{ group.description || '暂无描述' }}</div>
+              <div style="flex:1;min-width:0">
+                <NText style="font-weight:600;font-size:15px;display:block">{{ group.name }}</NText>
+                <NText depth="3" style="font-size:12px;display:block">{{ group.description || '暂无描述' }}</NText>
               </div>
               <NTag :type="tagType(group.permissions.length)" size="small" round :bordered="false">
                 {{ group.permissions.length }} 项权限
               </NTag>
             </div>
 
-            <!-- 分隔线 -->
-            <div class="role-divider" />
+            <NDivider style="margin:8px 0" />
 
-            <!-- 权限列表 -->
-            <div class="role-perms">
-              <div
-                v-for="code in group.permissions.slice(0, 5)"
-                :key="code"
-                class="perm-chip"
-              >
-                <Check :size="12" class="perm-check" />
-                <span class="perm-label">{{ allPermissions.find(p => p.code === code)?.label || code }}</span>
-              </div>
-              <div v-if="group.permissions.length > 5" class="perm-more">
-                +{{ group.permissions.length - 5 }} 项更多权限
-              </div>
-              <div v-if="group.permissions.length === 0" class="perm-empty">
-                暂无权限
-              </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+              <NTag v-for="code in group.permissions.slice(0, 5)" :key="code" size="tiny" :bordered="false" style="display:flex;align-items:center;gap:2px">
+                <template #icon><Check :size="10" /></template>
+                {{ allPermissions.find(p => p.code === code)?.label || code }}
+              </NTag>
+              <NText v-if="group.permissions.length > 5" depth="3" style="font-size:11px;padding:2px 4px">+{{ group.permissions.length - 5 }} 项</NText>
+              <NText v-if="group.permissions.length === 0" depth="3" style="font-size:11px;padding:2px 4px">暂无权限</NText>
             </div>
 
-            <!-- 操作区 -->
-            <div class="role-actions">
-              <NButton
-                quaternary
-                size="tiny"
-                @click="openEdit(group)"
-                style="padding: 4px 12px; border-radius: 6px"
-              >
-                <template #icon><Pencil :size="14" /></template>
-                编辑
+            <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--hairline)">
+              <NButton quaternary size="tiny" @click="openEdit(group)">
+                <template #icon><Pencil :size="14" /></template>编辑
               </NButton>
-              <NButton
-                quaternary
-                size="tiny"
-                type="error"
-                @click="remove(group.id)"
-                style="padding: 4px 12px; border-radius: 6px"
-              >
-                <template #icon><Trash2 :size="14" /></template>
-                删除
-              </NButton>
+              <NPopconfirm @positive-click="remove(group.id)">
+                <template #trigger>
+                  <NButton quaternary size="tiny" type="error">
+                    <template #icon><Trash2 :size="14" /></template>删除
+                  </NButton>
+                </template>
+                确定删除职位「{{ group.name }}」？
+              </NPopconfirm>
             </div>
-          </div>
+          </NCard>
         </div>
       </template>
       <NEmpty v-else description="暂无职位，点击上方按钮创建" />
@@ -234,7 +210,7 @@ onMounted(load)
       style="width: 640px; max-width: 92vw"
       :mask-closable="false"
       :segmented="{ content: true, footer: true }"
-      header-style="padding: 24px 28px 0; font-size: 18px; font-weight: 600"
+      header-style="font-size:18px;font-weight:600"
       content-style="padding: 20px 28px"
       footer-style="padding: 16px 28px"
     >
@@ -323,148 +299,11 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stat-card {
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  padding: 18px 22px;
-  transition: border-color 0.2s;
-}
-.stat-card:hover {
-  border-color: var(--accent);
-}
-.stat-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-.stat-value.accent {
-  color: var(--accent);
-}
-
-/* ── 职位卡片网格 ── */
-.role-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-}
-
-.role-card {
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.2s, transform 0.2s;
-}
-.role-card:hover {
-  border-color: rgba(94, 106, 210, 0.3);
-  transform: translateY(-1px);
-}
-
-/* 卡片头部 */
-.role-card-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 18px 20px 14px;
-}
-.role-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: rgba(94, 106, 210, 0.12);
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.role-info {
-  flex: 1;
-  min-width: 0;
-}
-.role-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-.role-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 分隔线 */
-.role-divider {
-  height: 1px;
-  background: var(--hairline);
-  margin: 0 20px;
-}
-
-/* 权限列表 */
-.role-perms {
-  padding: 14px 20px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.perm-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.perm-check {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.perm-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.perm-more {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding: 2px 0;
-}
-.perm-empty {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* 操作区 */
-.role-actions {
-  display: flex;
-  gap: 6px;
-  padding: 10px 20px 16px;
-  justify-content: flex-end;
-}
-
-/* 响应式 */
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
-  }
-  .role-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

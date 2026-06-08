@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import jwt from 'jsonwebtoken'
 import { config } from './config/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requestLogger } from './middleware/requestLogger.js'
@@ -58,7 +59,19 @@ app.post('/api/analytics/pv', (req, res) => {
 })
 
 // ── Static files (uploads) ────────────────────────────────────────────────
-app.use('/uploads', express.static(join(__dirname, '..', 'uploads')))
+// Auth middleware that accepts both Authorization header and ?token= query param
+app.use('/uploads', (req, res, next) => {
+  const token = (req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : (req.query.token as string)) || ''
+  if (!token) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
+  try {
+    jwt.verify(token, config.jwtSecret)
+    next()
+  } catch {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
+  }
+}, express.static(join(__dirname, '..', 'uploads')))
 
 // ── Routes ────────────────────────────────────────────────────────────
 

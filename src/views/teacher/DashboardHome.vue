@@ -2,7 +2,7 @@
 import { ref, computed, shallowRef, watch, onMounted } from 'vue'
 import { BASE } from '@/api/client'
 import { useMessage } from 'naive-ui'
-import { NSpin, NEmpty, NButton } from 'naive-ui'
+import { NSpin, NEmpty, NButton, NCard, NNumberAnimation, NText, NIcon, NGi, NGrid } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -190,75 +190,56 @@ onMounted(load)
     <NSpin :show="loading" style="min-height: 400px">
       <template v-if="data">
         <!-- Stats Row -->
-        <div class="stats-row">
-          <div class="stat-card">
-            <div class="stat-icon user-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div>
-              <div class="stat-num">{{ data.users.total }}</div>
-              <div class="stat-label">注册用户</div>
-              <div class="stat-sub">{{ data.users.students }} 学生 · {{ data.users.teachers }} 教师</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon visit-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-            </div>
-            <div>
-              <div class="stat-num">{{ data.totalViews }}</div>
-              <div class="stat-label">网站流量</div>
-              <div class="stat-sub">30天访问 {{ data.visitTrend.reduce((s, p) => s + p.visits, 0) }}</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon msg-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            </div>
-            <div>
-              <div class="stat-num">{{ data.totalMessages }}</div>
-              <div class="stat-label">AI 消息总数</div>
-              <div class="stat-sub">{{ data.totalConversations }} 个对话</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon activity-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            </div>
-            <div>
-              <div class="stat-num">{{ data.totalPointRecords + data.totalSubmissions }}</div>
-              <div class="stat-label">总操作记录</div>
-              <div class="stat-sub">{{ data.totalPointRecords }} 积分 · {{ data.totalSubmissions }} 作业</div>
-            </div>
-          </div>
-        </div>
+        <NGrid :x-gap="14" :y-gap="14" responsive="screen" :cols="4" style="margin-bottom:20px">
+          <NGi v-for="s in [
+            { num: data.users.total, label: '注册用户', sub: `${data.users.students} 学生 · ${data.users.teachers} 教师`, color: '#5E6AD2', icon: 'users' },
+            { num: data.totalViews, label: '网站流量', sub: `30天访问 ${data.visitTrend.reduce((s, p) => s + p.visits, 0)}`, color: '#18a058', icon: 'chart' },
+            { num: data.totalMessages, label: 'AI 消息总数', sub: `${data.totalConversations} 个对话`, color: '#f0a020', icon: 'message' },
+            { num: data.totalPointRecords + data.totalSubmissions, label: '总操作记录', sub: `${data.totalPointRecords} 积分 · ${data.totalSubmissions} 作业`, color: '#d03050', icon: 'activity' },
+          ]" :key="s.label">
+            <NCard size="small" :bordered="true" style="display:flex;flex-direction:row;align-items:center;gap:14px;padding:18px 20px">
+              <div :style="{width:44,height:44,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.color+'1F',color:s.color}">
+                <NIcon :size="20"><svg v-if="s.icon==='users'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <svg v-else-if="s.icon==='chart'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                <svg v-else-if="s.icon==='message'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </NIcon>
+              </div>
+              <div>
+                <NNumberAnimation :from="0" :to="s.num" :duration="800" style="font-size:24px;font-weight:700;letter-spacing:-0.03em;line-height:1.2;color:var(--text-primary)" />
+                <NText depth="3" style="display:block;font-size:12px;margin-top:1px">{{ s.label }}</NText>
+                <NText depth="3" style="display:block;font-size:11px;opacity:0.7">{{ s.sub }}</NText>
+              </div>
+            </NCard>
+          </NGi>
+        </NGrid>
 
         <!-- Charts Row -->
         <div class="charts-row">
-          <div class="chart-card">
-            <div class="chart-header">
-              <div>
-                <div class="chart-title">访问趋势</div>
-                <div class="chart-sub">最近 30 天</div>
+          <NCard size="small" :bordered="true">
+            <template #header>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between">
+                <div>
+                  <div class="chart-title">访问趋势</div>
+                  <div class="chart-sub">最近 30 天</div>
+                </div>
+                <span class="chart-stat">峰值 {{ Math.max(...data.visitTrend.map(p => p.visits)) }}</span>
               </div>
-              <span class="chart-stat">峰值 {{ Math.max(...data.visitTrend.map(p => p.visits)) }}</span>
-            </div>
-            <div class="chart-body">
-              <VChart :option="visitChartOption" autoresize style="width:100%;height:200px" />
-            </div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-header">
-              <div>
-                <div class="chart-title">大模型 API 调用趋势</div>
-                <div class="chart-sub">最近 30 天</div>
+            </template>
+            <VChart :option="visitChartOption" autoresize style="width:100%;height:200px" />
+          </NCard>
+          <NCard size="small" :bordered="true">
+            <template #header>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between">
+                <div>
+                  <div class="chart-title">大模型 API 调用趋势</div>
+                  <div class="chart-sub">最近 30 天</div>
+                </div>
+                <span class="chart-stat">总计 {{ data.apiTrend.reduce((s, p) => s + p.calls, 0) }} 次</span>
               </div>
-              <span class="chart-stat">总计 {{ data.apiTrend.reduce((s, p) => s + p.calls, 0) }} 次</span>
-            </div>
-            <div class="chart-body">
-              <VChart :option="apiChartOption" autoresize style="width:100%;height:200px" />
-            </div>
-          </div>
+            </template>
+            <VChart :option="apiChartOption" autoresize style="width:100%;height:200px" />
+          </NCard>
         </div>
 
         <!-- Tech Stack -->
@@ -285,69 +266,14 @@ onMounted(load)
 </template>
 
 <style scoped>
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  padding: 18px 20px;
-}
-.stat-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.user-icon { background: rgba(94, 106, 210, 0.12); color: #5E6AD2; }
-.visit-icon { background: rgba(24, 160, 88, 0.12); color: #18a058; }
-.msg-icon { background: rgba(240, 160, 32, 0.12); color: #f0a020; }
-.activity-icon { background: rgba(208, 48, 80, 0.12); color: #d03050; }
-.stat-num {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-.stat-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
 .charts-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 28px;
 }
-.chart-card {
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.chart-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 16px 18px 0;
+@media (max-width: 768px) {
+  .charts-row { grid-template-columns: 1fr; }
 }
 .chart-title {
   font-size: 15px;
@@ -368,10 +294,6 @@ onMounted(load)
   border-radius: 6px;
   white-space: nowrap;
 }
-.chart-body {
-  padding: 8px 12px 12px;
-}
-
 .section-title {
   font-size: 15px;
   font-weight: 600;

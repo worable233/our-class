@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { History, Search } from '@lucide/vue'
-import Tooltip from '@/components/Tooltip.vue'
+import { NTooltip } from 'naive-ui'
 const props = defineProps<{ sidebarOpen?: boolean }>()
 const emit = defineEmits<{ history: []; search: [] }>()
 </script>
@@ -8,17 +8,23 @@ const emit = defineEmits<{ history: []; search: [] }>()
 <template>
   <!-- Left capsule — morphs into sidebar header when sidebar opens -->
   <div class="capsule-left" :class="{ merged: props.sidebarOpen }">
-    <Tooltip text="搜索对话" :placement="'bottom'">
-      <button class="capsule-btn" @click="emit('search')">
-        <Search :size="16" />
-      </button>
-    </Tooltip>
+    <NTooltip trigger="hover" placement="bottom">
+      <template #trigger>
+        <button class="capsule-btn" @click="emit('search')">
+          <Search :size="16" />
+        </button>
+      </template>
+      搜索对话
+    </NTooltip>
     <div class="capsule-divider" />
-    <Tooltip text="历史记录" :placement="'bottom'">
-      <button class="capsule-btn" @click="emit('history')">
-        <History :size="16" />
-      </button>
-    </Tooltip>
+    <NTooltip trigger="hover" placement="bottom">
+      <template #trigger>
+        <button class="capsule-btn" @click="emit('history')">
+          <History :size="16" />
+        </button>
+      </template>
+      历史记录
+    </NTooltip>
   </div>
 </template>
 

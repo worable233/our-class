@@ -4,8 +4,8 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Assignment, Submission, Student } from '@/types'
 import {
-  NButton, NCard, NModal, NInput, NSelect, NForm, NFormItem, NSpace,
-  NTag, NSpin, NEmpty, NText, NDatePicker, NInputNumber, NAvatar,
+  NButton, NCard, NModal, NInput, NSelect, NDatePicker, NForm, NFormItem, NSpace,
+  NTag, NSpin, NEmpty, NText, NInputNumber, NAvatar, NList, NListItem,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Plus } from '@lucide/vue'
@@ -91,16 +91,13 @@ onMounted(load)
           <n-select v-model:value="newForm.course" :options="courseOptions" />
         </n-form-item>
         <n-form-item label="截止日期">
-          <input
-            v-model="newForm.due_date"
+          <n-date-picker
+            v-model:formatted-value="newForm.due_date"
             type="date"
-            style="
-              width: 100%; padding: 10px 12px;
-              background: var(--surface-2); border: 1px solid var(--hairline);
-              border-radius: var(--radius-sm); color: var(--text-primary);
-              font-size: 14px; outline: none; font-family: inherit;
-              box-sizing: border-box;
-            "
+            value-format="yyyy-MM-dd"
+            placeholder="选择截止日期"
+            style="width:100%"
+            clearable
           />
         </n-form-item>
         <n-form-item label="描述">
@@ -149,50 +146,20 @@ onMounted(load)
 
           <n-empty v-if="assignments.length === 0" description="暂无数据" />
 
-          <div
-            v-else
-            style="display: flex; flex-direction: column; gap: 8px"
-          >
-            <div
+          <NList v-else hoverable clickable>
+            <NListItem
               v-for="a in assignments"
               :key="a.id"
+              :class="{ active: selectedAssignment === a.id }"
               @click="selectAssignment(a.id)"
-              :style="{
-                padding: '12px',
-                borderRadius: 'var(--radius-sm)',
-                background:
-                  selectedAssignment === a.id
-                    ? 'rgba(94, 106, 210, 0.05)'
-                    : 'var(--surface-2)',
-                border:
-                  selectedAssignment === a.id
-                    ? '1px solid var(--accent)'
-                    : '1px solid var(--hairline)',
-                cursor: 'pointer',
-                transition: 'all 150ms var(--ease-out)',
-              }"
             >
-              <div
-                style="
-                  font-size: 14px; font-weight: 500; color: var(--text-primary);
-                  margin-bottom: 4px; line-height: 1.3;
-                "
-              >
-                {{ a.title }}
+              <NText style="font-weight:500;display:block;margin-bottom:2px">{{ a.title }}</NText>
+              <div style="display:flex;gap:8px;align-items:center">
+                <NTag size="tiny" :bordered="false">{{ a.course }}</NTag>
+                <NText depth="3" style="font-size:12px">截止 {{ a.due_date }}</NText>
               </div>
-              <div style="display: flex; gap: 8px; font-size: 12px; color: var(--text-muted)">
-                <span
-                  style="
-                    padding: 1px 7px; border-radius: 100px;
-                    background: var(--surface-3); color: var(--text-secondary);
-                  "
-                >
-                  {{ a.course }}
-                </span>
-                <span>截止 {{ a.due_date }}</span>
-              </div>
-            </div>
-          </div>
+            </NListItem>
+          </NList>
         </n-card>
 
         <!-- Right Panel: Submissions -->
@@ -213,123 +180,44 @@ onMounted(load)
 
           <n-empty v-if="submissions.length === 0" description="暂无学生提交" />
 
-          <div
-            v-else
-            style="display: flex; flex-direction: column; gap: 16px"
-          >
-            <div
-              v-for="s in submissions"
-              :key="s.id"
-              style="
-                padding: 16px; border-radius: var(--radius-sm);
-                background: var(--surface-2); border: 1px solid var(--hairline);
-              "
-            >
-              <!-- Sub Header -->
-              <div
-                style="
-                  display: flex; justify-content: space-between;
-                  align-items: center; margin-bottom: 8px;
-                "
-              >
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <n-avatar
-                    :size="28"
-                    round
-                    style="background: var(--accent); color: #fff; font-size: 11px; font-weight: 600"
-                  >
+          <div v-else style="display:flex;flex-direction:column;gap:12px">
+            <NCard v-for="s in submissions" :key="s.id" size="small" :bordered="true">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <NAvatar :size="28" round style="background:var(--accent);color:#fff;font-size:11px;font-weight:600">
                     {{ s.student_name?.charAt(0) }}
-                  </n-avatar>
-                  <span style="font-size: 14px; font-weight: 500; color: var(--text-primary)">
-                    {{ s.student_name }}
-                  </span>
+                  </NAvatar>
+                  <NText style="font-weight:500">{{ s.student_name }}</NText>
                 </div>
-                <n-tag size="small" :type="s.status === 'graded' ? 'success' : 'warning'">
+                <NTag size="small" :type="s.status === 'graded' ? 'success' : 'warning'">
                   {{ s.status === 'graded' ? '已批改' : '待批改' }}
-                </n-tag>
+                </NTag>
               </div>
 
-              <!-- Content -->
-              <div
-                v-if="s.content"
-                style="
-                  font-size: 13px; color: var(--text-secondary);
-                  margin-bottom: 8px; line-height: 1.5;
-                "
-              >
-                {{ s.content }}
-              </div>
-              <div
-                v-else
-                style="
-                  font-size: 13px; font-style: italic; color: var(--text-muted);
-                  margin-bottom: 8px;
-                "
-              >
-                未提交内容
+              <NText v-if="s.content" depth="2" style="display:block;margin-bottom:8px;font-size:13px;line-height:1.5">{{ s.content }}</NText>
+              <NText v-else depth="3" style="display:block;margin-bottom:8px;font-size:13px;font-style:italic">未提交内容</NText>
+
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--hairline)">
+                <NText depth="3">提交于 {{ s.submitted_at?.slice(0, 10) || '—' }}</NText>
+                <NText v-if="s.status === 'graded' && s.score !== null" style="color:var(--accent-text);font-weight:500">得分：{{ s.score }}</NText>
               </div>
 
-              <!-- Footer -->
-              <div
-                style="
-                  display: flex; justify-content: space-between;
-                  font-size: 12px; color: var(--text-muted);
-                  margin-bottom: 16px; padding-bottom: 16px;
-                  border-bottom: 1px solid var(--hairline);
-                "
-              >
-                <span>提交于 {{ s.submitted_at?.slice(0, 10) || '—' }}</span>
-                <span
-                  v-if="s.status === 'graded' && s.score !== null"
-                  style="color: var(--accent-text); font-weight: 500"
-                >
-                  得分：{{ s.score }}
-                </span>
-              </div>
-
-              <!-- Grade Area -->
-              <div style="display: flex; gap: 8px; align-items: center">
-                <n-input-number
-                  size="small"
-                  :min="0"
-                  :max="100"
-                  style="width: 90px"
-                  placeholder="分数"
+              <div style="display:flex;gap:8px;align-items:center">
+                <NInputNumber size="small" :min="0" :max="100" style="width:90px" placeholder="分数"
                   :value="gradeInputs[s.id]?.score ?? null"
-                  @update:value="
-                    (val: number | null) => {
-                      gradeInputs[s.id] = {
-                        ...(gradeInputs[s.id] || { feedback: '' }),
-                        score: val,
-                      }
-                    }
-                  "
+                  @update:value="(val:number|null) => { gradeInputs[s.id] = { ...(gradeInputs[s.id] || { feedback: '' }), score: val } }"
                 />
-                <span style="font-size: 12px; color: var(--text-muted)">分</span>
-                <n-input
-                  size="small"
-                  placeholder="评语（可选）"
+                <NText depth="3" style="font-size:12px">分</NText>
+                <NInput size="small" placeholder="评语（可选）" style="flex:1"
                   :value="gradeInputs[s.id]?.feedback || ''"
-                  @update:value="
-                    (val: string) => {
-                      gradeInputs[s.id] = {
-                        ...(gradeInputs[s.id] || { score: null }),
-                        feedback: val,
-                      }
-                    }
-                  "
-                  style="flex: 1"
+                  @update:value="(val:string) => { gradeInputs[s.id] = { ...(gradeInputs[s.id] || { score: null }), feedback: val } }"
                 />
-                <n-button
-                  size="small"
-                  type="primary"
-                  :disabled="!gradeInputs[s.id]?.score && gradeInputs[s.id]?.score !== 0"
-                  @click="grade(s.id)"
-                >
-                  批改
-                </n-button>
+                <NButton size="small" type="primary"
+                  :disabled="!gradeInputs[s.id]?.score && gradeInputs[s.id]?.score !== 0" @click="grade(s.id)"
+                >批改
+                </NButton>
               </div>
-            </div>
+            </NCard>
           </div>
         </n-card>
       </div>

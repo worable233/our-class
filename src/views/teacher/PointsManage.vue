@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Student, PointRecord, PointSummary } from '@/types'
 import { useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NTag, NEmpty, NText,
+  NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NButtonGroup,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Shuffle, Star } from '@lucide/vue'
@@ -185,40 +185,42 @@ onMounted(refreshAll)
 <template>
   <div>
     <!-- Top Bar -->
-    <div
-      style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:32px;padding:16px 20px;background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--radius-md)"
-    >
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <n-text depth="3" style="font-size:13px;font-weight:500;margin-right:4px">班级</n-text>
-        <n-button v-for="cls in classes" :key="cls" size="small" :type="cls === currentClass ? 'primary' : 'default'" @click="switchClass(cls)">{{ cls }}</n-button>
+    <NCard size="small" :bordered="true" style="margin-bottom:24px;padding:4px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <NText depth="3" style="font-size:13px;font-weight:500;margin-right:4px">班级</NText>
+          <NButton v-for="cls in classes" :key="cls" size="small" :type="cls === currentClass ? 'primary' : 'default'" @click="switchClass(cls)">{{ cls }}</NButton>
+        </div>
+        <NButton @click="openRandomModal"><Shuffle :size="16" /> 抽号</NButton>
       </div>
-      <n-button @click="openRandomModal"><Shuffle :size="16" /> 抽号</n-button>
-    </div>
+    </NCard>
 
     <!-- Student Grid -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <n-text strong style="font-size:15px;letter-spacing:-0.01em">学生花名册</n-text>
-      <n-text depth="3" style="font-size:12px">{{ students.length }} 人</n-text>
+      <NText strong style="font-size:15px;letter-spacing:-0.01em">学生花名册</NText>
+      <NText depth="3" style="font-size:12px">{{ students.length }} 人</NText>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-bottom:32px">
-      <n-card v-for="s in students" :key="s.id" size="small" hoverable
+      <NCard v-for="s in students" :key="s.id" size="small" hoverable
         style="position:relative;overflow:hidden;cursor:pointer"
         @click="openScoreCard(s)"
         :class="{ 'has-anim': floatingAnim?.id === s.id }"
       >
         <div v-if="floatingAnim?.id === s.id" class="float-point" :class="floatingAnim.type">{{ floatingAnim.text }}</div>
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <div style="width:46px;height:46px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;margin-bottom:4px"
+          <NAvatar
             :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }"
-          >{{ s.display_name.charAt(0) }}</div>
-          <n-text style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</n-text>
-          <div style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
+            :size="46"
+            round
+          >{{ s.display_name.charAt(0) }}</NAvatar>
+          <NText style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</NText>
+          <NText style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
             <Star :size="16" /> {{ getPoints(s.id) }}
-          </div>
+          </NText>
         </div>
-      </n-card>
-      <n-empty v-if="students.length === 0" description="该班级暂无学生" />
+      </NCard>
+      <NEmpty v-if="students.length === 0" description="该班级暂无学生" />
     </div>
 
     <!-- Recent Activity -->
@@ -245,7 +247,7 @@ onMounted(refreshAll)
       preset="card"
       style="width:460px"
       :mask-closable="true"
-      header-style="padding:20px 24px 0;font-size:17px;font-weight:600"
+      header-style="font-size:17px;font-weight:600"
       content-style="padding:16px 24px 20px"
     >
       <template #header>
@@ -263,31 +265,39 @@ onMounted(refreshAll)
       <div style="display:flex;flex-direction:column;gap:16px">
         <!-- Add Types -->
         <div v-if="addTypes.length > 0">
-          <div style="font-size:12px;font-weight:600;color:#18a058;margin-bottom:8px">正向加分</div>
+          <NText :style="{fontSize:'12px',fontWeight:600,color:'#18a058',display:'block',marginBottom:'8px'}">正向加分</NText>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <button v-for="t in addTypes" :key="t.id"
-              class="review-btn add" :class="{ selected: selectedReview?.id === t.id }"
+            <NButton v-for="t in addTypes" :key="t.id"
+              :type="selectedReview?.id === t.id ? 'success' : 'default'"
+              :secondary="selectedReview?.id === t.id"
+              quaternary
+              block
+              style="padding:10px 12px;height:auto"
               @click="selectedReview = t; confirmQuick()"
             >
-              <span class="review-emoji">{{ t.emoji }}</span>
-              <span class="review-label">{{ t.name }}</span>
-              <span class="review-pts">+{{ t.amount }}</span>
-            </button>
+              <span style="font-size:20px;line-height:1;margin-right:8px">{{ t.emoji }}</span>
+              <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
+              <span style="font-size:13px;font-weight:700;color:#18a058">+{{ t.amount }}</span>
+            </NButton>
           </div>
         </div>
 
         <!-- Deduct Types -->
         <div v-if="deductTypes.length > 0">
-          <div style="font-size:12px;font-weight:600;color:#d03050;margin-bottom:8px">负向约束</div>
+          <NText :style="{fontSize:'12px',fontWeight:600,color:'#d03050',display:'block',marginBottom:'8px'}">负向约束</NText>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <button v-for="t in deductTypes" :key="t.id"
-              class="review-btn deduct" :class="{ selected: selectedReview?.id === t.id }"
+            <NButton v-for="t in deductTypes" :key="t.id"
+              :type="selectedReview?.id === t.id ? 'error' : 'default'"
+              :secondary="selectedReview?.id === t.id"
+              quaternary
+              block
+              style="padding:10px 12px;height:auto"
               @click="selectedReview = t; confirmQuick()"
             >
-              <span class="review-emoji">{{ t.emoji }}</span>
-              <span class="review-label">{{ t.name }}</span>
-              <span class="review-pts">-{{ t.amount }}</span>
-            </button>
+              <span style="font-size:20px;line-height:1;margin-right:8px">{{ t.emoji }}</span>
+              <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
+              <span style="font-size:13px;font-weight:700;color:#d03050">-{{ t.amount }}</span>
+            </NButton>
           </div>
         </div>
 
@@ -296,37 +306,53 @@ onMounted(refreshAll)
     </n-modal>
 
     <!-- Random Pick Modal -->
-    <Teleport to="body">
-      <div v-if="randomModalVisible" class="modal-mask" @click.self="closeRandomModal">
-        <div class="random-modal">
-          <div class="rm-header">
-            <h3 class="rm-title"><Shuffle :size="16" /> 随机抽号</h3>
-            <button class="rm-close" @click="closeRandomModal">✕</button>
-          </div>
-          <div class="rm-body">
-            <div class="rm-display" :class="{ randoming, hasResult: !!randomResult }">
-              <div class="rm-display-name">{{ randomResult ? randomResult.display_name : (randomDisplayName || '点击下方按钮开始') }}</div>
-              <div v-if="randoming" class="rm-spinner"></div>
-            </div>
-            <div class="rm-controls">
-              <button class="rm-start-btn" :class="{ randoming }" :disabled="randoming" @click="startRandomPick">
-                <Shuffle :size="20" />{{ randoming ? '抽选中...' : '开始抽选' }}
-              </button>
-            </div>
-            <Transition name="result-fade">
-              <div v-if="randomResult && !randoming" class="rm-result">
-                <div class="rm-result-label">为 <strong>{{ randomResult.display_name }}</strong> 快速操作：</div>
-                <div class="rm-result-btns">
-                  <button class="rm-qb add" @click="quickForRandom('add', 2)">+2</button>
-                  <button class="rm-qb add" @click="quickForRandom('add', 3)">+3</button>
-                  <button class="rm-qb deduct" @click="quickForRandom('deduct', 1)">-1</button>
-                </div>
-              </div>
-            </Transition>
-          </div>
+    <n-modal
+      :show="randomModalVisible"
+      @update:show="closeRandomModal"
+      preset="card"
+      style="width: 420px"
+      title="随机抽号"
+      :mask-closable="true"
+      :segmented="{ content: true }"
+      header-style="font-size:17px;font-weight:600"
+      content-style="padding: 20px 24px"
+    >
+      <template #header>
+        <div style="display:flex;align-items:center;gap:8px">
+          <Shuffle :size="16" />
+          <span>随机抽号</span>
         </div>
+      </template>
+
+      <div class="rm-body">
+        <div class="rm-display" :class="{ randoming, hasResult: !!randomResult }">
+          <div class="rm-display-name">{{ randomResult ? randomResult.display_name : (randomDisplayName || '点击下方按钮开始') }}</div>
+          <div v-if="randoming" class="rm-spinner"></div>
+        </div>
+        <div class="rm-controls">
+          <n-button
+            :disabled="randoming"
+            :type="randoming ? 'default' : 'primary'"
+            size="large"
+            round
+            @click="startRandomPick"
+          >
+            <template #icon><Shuffle :size="18" /></template>
+            {{ randoming ? '抽选中...' : '开始抽选' }}
+          </n-button>
+        </div>
+        <Transition name="result-fade">
+          <div v-if="randomResult && !randoming" class="rm-result">
+            <div class="rm-result-label">为 <strong>{{ randomResult.display_name }}</strong> 快速操作：</div>
+            <div class="rm-result-btns">
+              <n-button size="small" type="success" @click="quickForRandom('add', 2)">+2</n-button>
+              <n-button size="small" type="success" @click="quickForRandom('add', 3)">+3</n-button>
+              <n-button size="small" type="error" @click="quickForRandom('deduct', 1)">-1</n-button>
+            </div>
+          </div>
+        </Transition>
       </div>
-    </Teleport>
+    </n-modal>
   </div>
 </template>
 
@@ -344,59 +370,21 @@ onMounted(refreshAll)
   100% { opacity: 0; transform: translate(-50%, -140%) scale(0.9); }
 }
 
-.review-btn {
-  display:flex; align-items:center; gap:8px; padding:10px 12px;
-  border-radius:8px; border:1px solid var(--hairline);
-  background:var(--surface-1); cursor:pointer;
-  transition:all .12s; font-family:inherit; text-align:left;
-}
-.review-btn.add:hover { border-color:rgba(24,160,88,0.3); background:rgba(24,160,88,0.05); }
-.review-btn.add.selected { border-color:#18a058; background:rgba(24,160,88,0.1); }
-.review-btn.deduct:hover { border-color:rgba(208,48,80,0.3); background:rgba(208,48,80,0.05); }
-.review-btn.deduct.selected { border-color:#d03050; background:rgba(208,48,80,0.1); }
-.review-emoji { font-size:20px; line-height:1; flex-shrink:0; }
-.review-label { flex:1; font-size:13px; font-weight:500; color:var(--text-primary); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.review-pts { font-size:13px; font-weight:700; flex-shrink:0; }
-.review-btn.add .review-pts { color:#18a058; }
-.review-btn.deduct .review-pts { color:#d03050; }
-
-.modal-mask {
-  position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex;
-  align-items:center; justify-content:center; z-index:500; backdrop-filter:blur(4px);
-}
-.random-modal {
-  width:400px; max-height:90vh; overflow-y:auto; background:var(--surface-1);
-  border:1px solid var(--hairline-strong); border-radius:var(--radius-lg);
-  padding:var(--space-xl); animation:modalIn 200ms var(--ease-out);
-}
-@keyframes modalIn { from { opacity:0; transform:scale(0.96) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
-.rm-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-lg); padding-bottom:var(--space-lg); border-bottom:1px solid var(--hairline); }
-.rm-title { font-family:'Inter Tight',sans-serif; font-weight:700; font-size:18px; color:var(--text-primary); display:flex; align-items:center; gap:var(--space-sm); }
-.rm-close { width:32px; height:32px; border-radius:var(--radius-sm); border:none; background:transparent; color:var(--text-muted); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 150ms var(--ease-out); }
-.rm-close:hover { background:var(--surface-2); color:var(--text-primary); }
-.rm-body { display:flex; flex-direction:column; gap:var(--space-lg); }
+.rm-body { display:flex; flex-direction:column; gap:20px; }
 .rm-display { height:120px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); border:1px solid var(--hairline); border-radius:var(--radius-md); position:relative; overflow:hidden; transition:all 200ms var(--ease-out); }
 .rm-display.randoming { animation:rmPulse 0.3s ease-in-out infinite alternate; }
 .rm-display.hasResult { border-color:var(--accent); background:rgba(94,106,210,0.06); }
 @keyframes rmPulse { from { box-shadow:inset 0 0 0 0 rgba(167,139,250,0); } to { box-shadow:inset 0 0 30px 0 rgba(167,139,250,0.15); } }
-.rm-display-name { font-size:32px; font-weight:800; color:var(--text-primary); transition:all 80ms var(--ease-out); text-align:center; padding:0 var(--space-md); }
+.rm-display-name { font-size:32px; font-weight:800; color:var(--text-primary); transition:all 80ms var(--ease-out); text-align:center; padding:0 16px; }
 .randoming .rm-display-name { color:var(--accent-text); }
 .rm-spinner { position:absolute; bottom:0; left:0; right:0; height:3px; background:linear-gradient(90deg, transparent, var(--accent), transparent); background-size:200% 100%; animation:rmSlide 0.4s linear infinite; }
 @keyframes rmSlide { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
 .rm-controls { display:flex; justify-content:center; }
-.rm-start-btn { padding:10px 32px; border-radius:100px; border:1px solid var(--hairline-strong); background:var(--surface-2); color:var(--accent-text); font-size:15px; font-weight:600; cursor:pointer; transition:all 150ms var(--ease-out); display:flex; align-items:center; gap:var(--space-sm); }
-.rm-start-btn:hover { border-color:var(--accent); background:rgba(167,139,250,0.08); }
-.rm-start-btn.randoming { opacity:0.5; cursor:not-allowed; }
 .rm-result { text-align:center; animation:resultIn 400ms var(--ease-out); }
 @keyframes resultIn { from { opacity:0; transform:translateY(10px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
-.rm-result-label { font-size:14px; color:var(--text-secondary); margin-bottom:var(--space-md); }
+.rm-result-label { font-size:14px; color:var(--text-secondary); margin-bottom:8px; }
 .rm-result-label strong { color:var(--accent-text); }
-.rm-result-btns { display:flex; gap:var(--space-sm); justify-content:center; }
-.rm-qb { width:52px; height:36px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:15px; font-weight:700; transition:all 100ms var(--ease-out); }
-.rm-qb.add { background:rgba(34,197,94,0.12); color:#22c55e; }
-.rm-qb.add:hover { background:rgba(34,197,94,0.25); }
-.rm-qb.deduct { background:rgba(239,68,68,0.12); color:#ef4444; }
-.rm-qb.deduct:hover { background:rgba(239,68,68,0.25); }
+.rm-result-btns { display:flex; gap:8px; justify-content:center; }
 .result-fade-enter-active, .result-fade-leave-active { transition:all 400ms var(--ease-out); }
 .result-fade-enter-from, .result-fade-leave-to { opacity:0; transform:translateY(10px) scale(0.95); }
 

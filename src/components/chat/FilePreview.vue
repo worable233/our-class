@@ -13,6 +13,18 @@ const emit = defineEmits<{ 'update:show': [boolean] }>()
 const textContent = ref('')
 const loadingText = ref(false)
 
+// Get auth token from localStorage for authenticated file access
+function getAuthUrl(url: string): string {
+  try {
+    const user = JSON.parse(localStorage.getItem('ourclass_user') || '{}')
+    if (user.token) {
+      const sep = url.includes('?') ? '&' : '?'
+      return `${url}${sep}token=${encodeURIComponent(user.token)}`
+    }
+  } catch {}
+  return url
+}
+
 const isImage = (f: UploadedFileInfo) => f.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(f.name)
 const isPdf = (f: UploadedFileInfo) => f.mime_type === 'application/pdf' || f.name.endsWith('.pdf')
 const isText = (f: UploadedFileInfo) => /\.(txt|csv|md|json|xml|yaml|yml|log|js|ts|py|html|css|sql|sh|env)$/i.test(f.name)
@@ -20,7 +32,7 @@ const isText = (f: UploadedFileInfo) => /\.(txt|csv|md|json|xml|yaml|yml|log|js|
 async function loadText(url: string) {
   loadingText.value = true
   try {
-    const res = await fetch(url)
+    const res = await fetch(getAuthUrl(url))
     textContent.value = await res.text()
   } catch {
     textContent.value = '无法加载文件内容'
@@ -45,17 +57,17 @@ watch(() => props.show, (v) => {
     style="width: 800px; max-width: 92vw; height: 80vh; display: flex; flex-direction: column;"
     :mask-closable="true"
     :segmented="{ content: true }"
-    header-style="padding: 16px 20px; font-size: 16px; font-weight: 600"
+    header-style="font-size:16px;font-weight:600"
     content-style="flex: 1; overflow: auto; padding: 0; display: flex;"
   >
     <template v-if="file">
       <!-- Image -->
       <div v-if="isImage(file)" class="preview-img-wrap">
-        <img :src="file.url" :alt="file.name" class="preview-img" />
+        <img :src="getAuthUrl(file.url)" :alt="file.name" class="preview-img" />
       </div>
 
       <!-- PDF -->
-      <iframe v-else-if="isPdf(file)" :src="file.url" class="preview-pdf" />
+      <iframe v-else-if="isPdf(file)" :src="getAuthUrl(file.url)" class="preview-pdf" />
 
       <!-- Text -->
       <div v-else-if="isText(file)" class="preview-text-wrap">
@@ -69,7 +81,7 @@ watch(() => props.show, (v) => {
         <div class="preview-other-name">{{ file.name }}</div>
         <div class="preview-other-size">{{ (file.size / 1024).toFixed(1) }} KB</div>
         <div class="preview-other-type">{{ file.mime_type || '未知类型' }}</div>
-        <a :href="file.url" download :target="'_blank'" class="preview-download-link">
+        <a :href="getAuthUrl(file.url)" download :target="'_blank'" class="preview-download-link">
           <NButton type="primary" size="small">
             <template #icon><Download :size="14" /></template>
             下载文件

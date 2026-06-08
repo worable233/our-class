@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { existsSync, mkdirSync, unlinkSync, rmdirSync, readdirSync } from 'fs'
+import { existsSync, mkdirSync, unlinkSync, rmdirSync, readdirSync, renameSync } from 'fs'
 import { join, extname } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
@@ -27,13 +27,12 @@ function getMulter(userId: number): multer.Multer {
   const settings = db.prepare('SELECT max_file_size FROM chat_settings WHERE user_id = ?').get(userId) as any
   const maxSize = settings?.max_file_size || 10485760
 
+  // Save to a temp dir first — conversation_id isn't available until after multer processes the body
+  const TEMP_DIR = join(UPLOAD_ROOT, '_pending')
+  if (!existsSync(TEMP_DIR)) mkdirSync(TEMP_DIR, { recursive: true })
+
   const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      const convId = (_req.body as any).conversation_id
-      const dir = join(UPLOAD_ROOT, `conv_${convId}`)
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      cb(null, dir)
-    },
+    destination: (_req, _file, cb) => cb(null, TEMP_DIR),
     filename: (_req, file, cb) => {
       const ext = extname(file.originalname)
       const name = `${uuidv4()}${ext}`
@@ -45,6 +44,17 @@ function getMulter(userId: number): multer.Multer {
     storage,
     limits: { fileSize: maxSize },
   })
+}
+
+/** Move a pending file to per-conversation directory and return the relative stored path */
+function moveToConvDir(filename: string, convId: number): string {
+  const convDir = join(UPLOAD_ROOT, `conv_${convId}`)
+  if (!existsSync(convDir)) mkdirSync(convDir, { recursive: true })
+  const src = join(UPLOAD_ROOT, '_pending', filename)
+  const dest = join(convDir, filename)
+  try { unlinkSync(dest) } catch {}
+  renameSync(src, dest)
+  return `conv_${convId}/${filename}`
 }
 
 // Validation helper
@@ -66,26 +76,10 @@ router.post(
   (req: Request, res: Response) => {
     const db = getDb()
     const userId = req.user!.id
-    const convId = Number(req.body.conversation_id)
-    if (!convId || isNaN(convId)) return fail(res, 400, 'VALIDATION_ERROR', '需要 conversation_id')
-
-    // Verify conversation belongs to user
-    const conv = db.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?').get(convId, userId)
-    if (!conv) return fail(res, 404, 'NOT_FOUND', '对话不存在')
-
-    // Get settings
-    const settings = db.prepare('SELECT allowed_file_types, max_files_per_conversation FROM chat_settings WHERE user_id = ?').get(userId) as any
-    const allowedTypes = settings?.allowed_file_types || '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv,.md'
-    const maxFiles = settings?.max_files_per_conversation || 10
-
-    // Check file count
-    const count = db.prepare('SELECT COUNT(*) as c FROM uploaded_files WHERE conversation_id = ? AND user_id = ?').get(convId, userId) as any
-    if (count.c >= maxFiles) {
-      return fail(res, 400, 'FILE_LIMIT', `每对话最多上传 ${maxFiles} 个文件`)
-    }
 
     const upload = getMulter(userId)
     upload.single('file')(req, res, (err: any) => {
+      // ── Handle multer errors (file too large, etc.) ───────────────
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === 'LIMIT_FILE_SIZE') return fail(res, 400, 'FILE_TOO_LARGE', '文件大小超出限制')
@@ -96,15 +90,42 @@ router.post(
 
       if (!req.file) return fail(res, 400, 'NO_FILE', '请选择文件')
 
-      // Validate file type
+      // ── Now req.body is populated by multer — validate ──────────
+      const convId = Number(req.body.conversation_id)
+      if (!convId || isNaN(convId)) {
+        try { unlinkSync(req.file.path) } catch {}
+        return fail(res, 400, 'VALIDATION_ERROR', '需要 conversation_id')
+      }
+
+      // Verify conversation belongs to user
+      const conv = db.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?').get(convId, userId)
+      if (!conv) {
+        try { unlinkSync(req.file.path) } catch {}
+        return fail(res, 404, 'NOT_FOUND', '对话不存在')
+      }
+
+      // Get per-user settings
+      const settings = db.prepare('SELECT allowed_file_types, max_files_per_conversation FROM chat_settings WHERE user_id = ?').get(userId) as any
+      const allowedTypes = settings?.allowed_file_types || '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv,.md'
+      const maxFiles = settings?.max_files_per_conversation || 10
+
+      // Check file count in conversation
+      const count = db.prepare('SELECT COUNT(*) as c FROM uploaded_files WHERE conversation_id = ? AND user_id = ?').get(convId, userId) as any
+      if (count.c >= maxFiles) {
+        try { unlinkSync(req.file.path) } catch {}
+        return fail(res, 400, 'FILE_LIMIT', `每对话最多上传 ${maxFiles} 个文件`)
+      }
+
+      // Validate file type against allowed types
       const validationError = validateFile(req.file, allowedTypes)
       if (validationError) {
-        // Clean up uploaded file
         try { unlinkSync(req.file.path) } catch {}
         return fail(res, 400, 'INVALID_FILE_TYPE', validationError)
       }
 
-      const storedPath = `conv_${convId}/${req.file.filename}`
+      // Move file from temp dir to per-conversation dir
+      const storedPath = moveToConvDir(req.file.filename, convId)
+
       const result = db.prepare(`
         INSERT INTO uploaded_files (user_id, conversation_id, original_name, stored_path, mime_type, file_size)
         VALUES (?, ?, ?, ?, ?, ?)

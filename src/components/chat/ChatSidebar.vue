@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
 import { Plus, MessageSquare, Trash2, Search, Sun, Moon, LogOut, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
-import Tooltip from '@/components/Tooltip.vue'
+import { NTooltip } from 'naive-ui'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ selectedId?: number | null }>()
@@ -132,11 +132,14 @@ defineExpose({ load, toggleSearch, closeSearch })
     <div v-if="searchActive" class="search-bar">
       <Search :size="14" class="search-bar-icon" />
       <input ref="searchInputRef" v-model="searchQuery" placeholder="搜索对话..." class="search-bar-input" />
-      <Tooltip text="关闭搜索">
-        <button class="search-bar-close" @click="toggleSearch()">
-          <X :size="14" />
-        </button>
-      </Tooltip>
+      <NTooltip trigger="hover" placement="bottom">
+        <template #trigger>
+          <button class="search-bar-close" @click="toggleSearch()">
+            <X :size="14" />
+          </button>
+        </template>
+        关闭搜索
+      </NTooltip>
     </div>
     <button v-else class="new-btn" @click="emit('new')">
       <Plus :size="15" stroke-width="2.5" /> 新对话
@@ -185,17 +188,23 @@ defineExpose({ load, toggleSearch, closeSearch })
           </template>
         </div>
       </div>
-      <Tooltip text="退出登录">
-        <button v-if="auth.isLoggedIn" class="theme-btn" @click="handleLogout">
-          <LogOut :size="15" />
-        </button>
-      </Tooltip>
-      <Tooltip :text="isDark ? '浅色模式' : '深色模式'">
-        <button class="theme-btn" @click="toggleTheme">
-          <Sun v-if="isDark" :size="15" />
-          <Moon v-else :size="15" />
-        </button>
-      </Tooltip>
+      <NTooltip trigger="hover" placement="bottom">
+        <template #trigger>
+          <button v-if="auth.isLoggedIn" class="theme-btn" @click="handleLogout">
+            <LogOut :size="15" />
+          </button>
+        </template>
+        退出登录
+      </NTooltip>
+      <NTooltip trigger="hover" placement="bottom">
+        <template #trigger>
+          <button class="theme-btn" @click="toggleTheme">
+            <Sun v-if="isDark" :size="15" />
+            <Moon v-else :size="15" />
+          </button>
+        </template>
+        {{ isDark ? '浅色模式' : '深色模式' }}
+      </NTooltip>
     </div>
   </div>
 </template>

@@ -51,9 +51,10 @@ router.get(
   },
 )
 
-// GET /api/chat/skills/enabled — 获取所有启用的 skill（供 chat 流程注入，无需 chat.skills 权限）
+// GET /api/chat/skills/enabled — 获取所有启用的 skill（供 chat 流程注入，无需 chat.skills 权限但需要 chat.access）
 router.get(
   '/skills/enabled',
+  requirePermission('chat.access'),
   (req: Request, res: Response) => {
     const db = getDb()
     const rows = db

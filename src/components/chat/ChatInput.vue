@@ -2,7 +2,7 @@
 import { ref, nextTick, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { ArrowUp, Square, Paperclip, X, FileText, FileSpreadsheet, FileImage, File, Presentation, Loader2 } from '@lucide/vue'
-import Tooltip from '@/components/Tooltip.vue'
+import { NTooltip } from 'naive-ui'
 
 const emit = defineEmits<{
   send: [content: string, deepThink: boolean, webSearch: boolean, fileIds?: number[]]
@@ -232,42 +232,54 @@ watch(input, () => { nextTick(autoResize) })
       />
       <div class="input-bottom">
         <div class="input-bottom-left">
-          <Tooltip v-if="enableDeepThink" text="深度思考模式（Anthropic 下无法使用工具）">
-            <button
-              class="toolbar-btn mode-btn"
-              :class="{ active: deepThink }"
-              @click="$emit('update:deepThink', !deepThink)"
-            >
-              深度思考
-            </button>
-          </Tooltip>
-          <Tooltip v-if="true" text="联网搜索实时信息">
-            <button
-              class="toolbar-btn mode-btn"
-              :class="{ active: webSearch }"
-              @click="$emit('update:webSearch', !webSearch)"
-            >
-              联网搜索
-            </button>
-          </Tooltip>
-          <Tooltip v-if="enableFileUpload && auth.isLoggedIn" text="上传文件">
-            <button class="toolbar-btn" @click="pickFiles" :disabled="!convId && attachments.length === 0">
-              <Paperclip :size="15" />
-            </button>
-          </Tooltip>
+          <NTooltip v-if="enableDeepThink" trigger="hover" placement="top">
+            <template #trigger>
+              <button
+                class="toolbar-btn mode-btn"
+                :class="{ active: deepThink }"
+                @click="$emit('update:deepThink', !deepThink)"
+              >
+                深度思考
+              </button>
+            </template>
+            深度思考模式（Anthropic 下无法使用工具）
+          </NTooltip>
+          <NTooltip v-if="true" trigger="hover" placement="top">
+            <template #trigger>
+              <button
+                class="toolbar-btn mode-btn"
+                :class="{ active: webSearch }"
+                @click="$emit('update:webSearch', !webSearch)"
+              >
+                联网搜索
+              </button>
+            </template>
+            联网搜索实时信息
+          </NTooltip>
+          <NTooltip v-if="enableFileUpload && auth.isLoggedIn" trigger="hover" placement="top">
+            <template #trigger>
+              <button class="toolbar-btn" @click="pickFiles" :disabled="!convId && attachments.length === 0">
+                <Paperclip :size="15" />
+              </button>
+            </template>
+            上传文件
+          </NTooltip>
         </div>
         <div class="input-bottom-right">
-          <Tooltip :text="!allUploaded ? '文件上传中...' : '发送'">
-            <button
-              class="send-btn"
-              :class="{ on: input.trim() && !loading && allUploaded, stop: loading }"
-              :disabled="(!input.trim() && !loading) || !allUploaded"
-              @click="handleSend"
-            >
-              <ArrowUp v-if="!loading" :size="18" />
-              <Square v-else :size="14" :fill="'currentColor'" />
-            </button>
-          </Tooltip>
+          <NTooltip trigger="hover" placement="top">
+            <template #trigger>
+              <button
+                class="send-btn"
+                :class="{ on: input.trim() && !loading && allUploaded, stop: loading }"
+                :disabled="(!input.trim() && !loading) || !allUploaded"
+                @click="handleSend"
+              >
+                <ArrowUp v-if="!loading" :size="18" />
+                <Square v-else :size="14" :fill="'currentColor'" />
+              </button>
+            </template>
+            {{ !allUploaded ? '文件上传中...' : '发送' }}
+          </NTooltip>
         </div>
       </div>
     </div>

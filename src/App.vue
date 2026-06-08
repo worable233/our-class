@@ -20,6 +20,21 @@ const baseOverrides: GlobalThemeOverrides = {
     primaryColorPressed: '#4D59C2',
     primaryColorSuppl: '#5E6AD2',
   },
+  Menu: {
+    itemHeight: '36px',
+    borderRadius: '6px',
+    itemFontSize: '14px',
+    itemTextColor: 'rgb(102, 107, 113)',
+    itemTextColorHover: 'rgb(51, 54, 57)',
+    itemTextColorActive: 'var(--accent-text)',
+    itemColorHover: 'rgb(243, 243, 245)',
+    itemColorActive: 'rgba(94, 106, 210, 0.1)',
+    itemColorActiveHover: 'rgba(94, 106, 210, 0.1)',
+    itemIconColor: 'rgb(102, 107, 113)',
+    itemIconColorHover: 'rgb(51, 54, 57)',
+    itemIconColorActive: 'var(--accent-text)',
+    groupTextColor: 'rgb(153, 155, 159)',
+  },
 }
 
 const darkOverrides: GlobalThemeOverrides = {
@@ -41,6 +56,18 @@ const darkOverrides: GlobalThemeOverrides = {
     inputColor: '#0a0b0d',
     inputColorDisabled: '#121314',
     railColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  Menu: {
+    itemTextColor: '#a6aab5',
+    itemTextColorHover: '#f5f9fe',
+    itemTextColorActive: 'var(--accent-text)',
+    itemColorHover: 'rgba(255, 255, 255, 0.06)',
+    itemColorActive: 'rgba(94, 106, 210, 0.15)',
+    itemColorActiveHover: 'rgba(94, 106, 210, 0.15)',
+    itemIconColor: '#787d87',
+    itemIconColorHover: '#a6aab5',
+    itemIconColorActive: 'var(--accent-text)',
+    groupTextColor: '#787d87',
   },
 }
 

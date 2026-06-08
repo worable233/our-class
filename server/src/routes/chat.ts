@@ -1231,28 +1231,32 @@ async function streamOpenAI(
 
 // ── Routes ───────────────────────────────────────────────────────────────
 
-router.get('/config', (req: Request, res: Response) => {
-  const db = getDb()
-  const keyRecord = db
-    .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
-    .get(req.user!.id) as ApiKeyRow | undefined
+router.get(
+  '/config',
+  requirePermission('chat.config'),
+  (req: Request, res: Response) => {
+    const db = getDb()
+    const keyRecord = db
+      .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
+      .get(req.user!.id) as ApiKeyRow | undefined
 
-  if (!keyRecord) {
-    return ok(res, null)
-  }
+    if (!keyRecord) {
+      return ok(res, null)
+    }
 
-  ok(res, {
-    id: keyRecord.id,
-    provider: keyRecord.provider,
-    has_key: !!keyRecord.api_key,
-    api_key: keyRecord.api_key || '',
-    api_url: keyRecord.api_url || '',
-    model: keyRecord.model,
-    search_api_url: keyRecord.search_api_url || '',
-    has_search_key: !!keyRecord.search_api_key,
-    created_at: keyRecord.created_at,
-  })
-})
+    ok(res, {
+      id: keyRecord.id,
+      provider: keyRecord.provider,
+      has_key: !!keyRecord.api_key,
+      api_key: keyRecord.api_key ? maskApiKey(keyRecord.api_key) : '',
+      api_url: keyRecord.api_url || '',
+      model: keyRecord.model,
+      search_api_url: keyRecord.search_api_url || '',
+      has_search_key: !!keyRecord.search_api_key,
+      created_at: keyRecord.created_at,
+    })
+  },
+)
 
 router.post(
   '/config',
@@ -1442,6 +1446,7 @@ router.post(
 
     // Build personalized system prompt with user info (at end for cache optimization)
     const userInfo = `\n当前用户: ${req.user!.display_name}, 角色: ${req.user!.role === 'teacher' ? '教师' : '学生'}, 班级: ${req.user!.class || '无'}`
+    const personalizedPrompt = SYSTEM_PROMPT + userInfo
 
     // Load enabled skills and append to system prompt
     const skills = db.prepare("SELECT content FROM skills WHERE user_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC").all(req.user!.id) as any[]
