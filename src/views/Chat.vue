@@ -430,6 +430,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
 
     const decoder = new TextDecoder()
     let buf = ''
+    let _thinkingAccum = ''
 
     while (true) {
       const { done: d, value } = await reader.read()
@@ -450,6 +451,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
             }
           } else if (data.type === 'thinking') {
             if (currentConvId.value === convId) {
+              _thinkingAccum += data.content
               for (let j = messages.value.length - 1; j >= 0; j--) {
                 const m = messages.value[j] as any
                 if (m.role === "tool" && m.content === "深度思考中...") {
@@ -464,7 +466,8 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
                 const m = messages.value[j] as any
                 if (m.role === "tool" && m.toolStatus === "running" && m.content?.includes("思考")) {
                   m.toolStatus = "done"
-                  m.toolResult = "深度思考完成"
+                  m.content = "深度思考"
+                  m.toolResult = _thinkingAccum
                   break
                 }
               }
