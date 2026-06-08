@@ -112,7 +112,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
   auth.loadFromStorage()
 
@@ -124,6 +124,9 @@ router.beforeEach((to, _from, next) => {
   if (!auth.isLoggedIn) {
     next('/'); return
   }
+
+  // Ensure permissions are loaded (handles localStorage cache miss after code update)
+  await auth.ensurePermissions()
 
   // Check role
   const requiredRole = to.meta.role as string | undefined

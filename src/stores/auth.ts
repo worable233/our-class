@@ -23,14 +23,45 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(code)
   }
 
+  // Tracks in-flight permission refresh
+  let _permPromise: Promise<void> | null = null
+
   function loadFromStorage() {
     const stored = localStorage.getItem('ourclass_user')
     if (stored) {
       try {
         const data = JSON.parse(stored)
         user.value = data
+        // If stored data lacks permissions but has a token, refresh from server
+        if (data.token && (!data.permissions || data.permissions.length === 0)) {
+          refreshPermissions()
+        }
       } catch { localStorage.removeItem('ourclass_user') }
     }
+  }
+
+  async function refreshPermissions(): Promise<void> {
+    if (_permPromise) return _permPromise // deduplicate concurrent calls
+    _permPromise = (async () => {
+      try {
+        const perms = await api.get<string[]>('/auth/permissions')
+        if (user.value) {
+          user.value = { ...user.value, permissions: perms }
+          localStorage.setItem('ourclass_user', JSON.stringify(user.value))
+        }
+      } catch {} // Silently fail — user will see restricted UI
+    })()
+    await _permPromise
+    _permPromise = null
+  }
+
+  /** Call in router guard when route requires permissions that may not be loaded yet */
+  function ensurePermissions(): Promise<void> {
+    if (!user.value?.token) return Promise.resolve()
+    // If we already have permissions, return immediately
+    if (user.value.permissions && user.value.permissions.length > 0) return Promise.resolve()
+    // Otherwise wait for refresh
+    return refreshPermissions()
   }
 
   async function login(username: string, password: string) {
@@ -60,5 +91,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('ourclass_user')
   }
 
-  return { user, loading, isLoggedIn, isTeacher, isStudent, displayName, userClass, permissions, hasPermission, loadFromStorage, login, logout }
+  return { user, loading, isLoggedIn, isTeacher, isStudent, displayName, userClass, permissions, hasPermission, loadFromStorage, login, logout, ensurePermissions, refreshPermissions }
 })
