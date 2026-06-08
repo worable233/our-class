@@ -7,9 +7,8 @@ import { ok, fail } from '../lib/response.js'
 import { NotFoundError } from '../lib/errors.js'
 import { writeAuditLog } from './audit.js'
 
-router.use(authMiddleware)
-
 const router = Router()
+router.use(authMiddleware)
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
