@@ -827,7 +827,7 @@ async function agentLoopOpenAI(
   apiUrl: string, apiKey: string, model: string,
   contextHistory: MessageRow[], newContent: string,
   personalizedPrompt: string, res: Response, convId: number, db: any, userId: number, userRole: string,
-  isContinue = false, _thinking = false, webSearch = true, userPermissions: string[] = [],
+  isContinue = false, thinking = false, webSearch = true, userPermissions: string[] = [],
 ) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
   const hasVersion = /\/v\d+$/.test(base)
@@ -945,6 +945,15 @@ async function agentLoopOpenAI(
     } else {
       // Final text response
       const text = msg?.content || ''
+
+      // Handle reasoning_content (DeepSeek R1 etc.) when thinking is enabled
+      const reasoning = msg?.reasoning_content || ''
+      if (reasoning) {
+        res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`)
+        res.write(`data: ${JSON.stringify({ type: 'thinking', content: reasoning.slice(0, 500) })}\n\n`)
+        res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
+      }
+
       fullResponse += text
       if (text) res.write(`data: ${JSON.stringify({ type: 'text', content: text })}\n\n`)
       break
