@@ -693,6 +693,9 @@ async function agentLoopAnthropic(
         const cb = chunk.content_block
         if (cb.type === 'tool_use') {
           blocks.push({ type: 'tool_use', content: '', id: cb.id || '', name: cb.name || '', input: '' })
+        } else if (cb.type === 'thinking') {
+          blocks.push({ type: 'thinking', content: cb.thinking || '', id: '', name: '', input: '' })
+          res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`)
         } else {
           blocks.push({ type: 'text', content: cb.text || '', id: '', name: '', input: '' })
         }
@@ -705,6 +708,10 @@ async function agentLoopAnthropic(
         if (d.text_delta?.text) {
           blocks[curIdx].content += d.text_delta.text
         }
+        if (d.thinking_delta?.thinking) {
+          blocks[curIdx].content += d.thinking_delta.thinking
+          res.write(`data: ${JSON.stringify({ type: 'thinking', content: d.thinking_delta.thinking })}\n\n`)
+        }
         if (d.input_json_delta?.partial_json) {
           blocks[curIdx].input += d.input_json_delta.partial_json
         }
@@ -714,6 +721,10 @@ async function agentLoopAnthropic(
     // Check for tool calls
     const toolCalls = blocks.filter(b => b.type === 'tool_use')
     const textParts = blocks.filter(b => b.type === 'text').map(b => b.content).join('')
+    const thinkingParts = blocks.filter(b => b.type === 'thinking').map(b => b.content).join('')
+    if (thinkingParts) {
+      res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
+    }
 
     if (toolCalls.length > 0) {
       fullResponse += textParts
