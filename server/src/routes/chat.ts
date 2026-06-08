@@ -2,11 +2,17 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import Anthropic from '@anthropic-ai/sdk'
+import { existsSync, unlinkSync, readdirSync, rmdirSync } from 'fs'
+import { join, extname } from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { writeAuditLog } from './audit.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const router = Router()
 
@@ -192,12 +198,33 @@ const TOOLS: ToolDef[] = [
       },
     },
   },
+  {
+    name: 'view_file',
+    description: '查看用户上传的文件内容。用户发送文件后，使用此工具查看文件的具体内容。只能查看当前对话中的文件。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'integer', description: '文件 ID，用户发送消息时会附带文件 ID' },
+      },
+      required: ['file_id'],
+    },
+  },
 ]
 
 // ── Tool execution ────────────────────────────────────────────────────────
 
-async function executeTool(name: string, input: Record<string, unknown>, userId: number, userRole: string): Promise<string> {
+async function executeTool(name: string, input: Record<string, unknown>, userId: number, userRole: string, userPermissions: string[] = []): Promise<string> {
   const db = getDb()
+
+  // Check tool permission
+  const toolPerm = `tool.${name}`
+  if (!userPermissions.includes(toolPerm)) {
+    return JSON.stringify({ error: `您没有权限使用「${name}」工具` })
+  }
+
+  // Load tool config for max_result_length
+  const config = db.prepare('SELECT config_json, max_result_length FROM tool_configs WHERE user_id = ? AND tool_name = ?').get(userId, name) as any
+  const configData = config ? JSON.parse(config.config_json || '{}') : {}
 
   switch (name) {
     case 'list_students': {
@@ -276,6 +303,49 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'get_class_list': {
       const rows = db.prepare("SELECT DISTINCT class FROM users WHERE role='student' AND class!='' ORDER BY class").all()
       return JSON.stringify(rows.map((r: any) => r.class))
+    }
+
+    case 'view_file': {
+      const fileId = input.file_id as number
+      const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(fileId) as any
+      if (!file) return JSON.stringify({ error: '文件不存在' })
+      // Verify file belongs to a conversation the user has access to (same user)
+      if (file.user_id !== userId) return JSON.stringify({ error: '无权访问该文件' })
+
+      const filePath = join(__dirname, '..', '..', 'uploads', file.stored_path)
+      if (!existsSync(filePath)) return JSON.stringify({ error: '文件已被删除' })
+
+      const ext = extname(file.original_name).toLowerCase()
+      const textExts = ['.txt', '.csv', '.md', '.json', '.xml', '.yaml', '.yml', '.log', '.js', '.ts', '.py', '.html', '.css', '.sql', '.sh', '.env']
+      const docExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf']
+
+      if (textExts.includes(ext)) {
+        // Read text file content
+        const fs = await import('fs/promises')
+        const content = await fs.readFile(filePath, 'utf-8')
+        const maxLen = config?.max_result_length || 5000
+        const truncated = content.length > maxLen ? content.slice(0, maxLen) + `\n\n...（文件过长，仅显示前 ${maxLen} 字符）` : content
+        return JSON.stringify({
+          file_name: file.original_name,
+          file_size: file.file_size,
+          mime_type: file.mime_type,
+          content: truncated,
+        })
+      } else if (docExts.includes(ext) || ext === '.pdf') {
+        return JSON.stringify({
+          file_name: file.original_name,
+          file_size: file.file_size,
+          mime_type: file.mime_type,
+          note: `该文件类型（${ext}）暂不支持直接查看文本内容。用户已上传此文件，文件名：${file.original_name}，大小：${(file.file_size / 1024).toFixed(1)}KB。请告知用户文件已保存。`,
+        })
+      } else {
+        return JSON.stringify({
+          file_name: file.original_name,
+          file_size: file.file_size,
+          mime_type: file.mime_type,
+          note: `用户上传了文件：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB），类型：${file.mime_type || '未知'}。`,
+        })
+      }
     }
 
     case 'get_weather': {
@@ -480,23 +550,37 @@ function buildCard(name: string, input: Record<string, unknown>, result: string)
 
 async function agentLoopAnthropic(
   anthropic: any, model: string, messages: any[], personalizedPrompt: string,
-  res: Response, convId: number, db: any, newContent: string, userId: number, userRole: string, isContinue = false,
+  res: Response, convId: number, db: any, newContent: string, userId: number, userRole: string,
+  isContinue = false, thinking = false, webSearch = true, userPermissions: string[] = [],
 ) {
   const loopMessages = [...messages]
   let fullResponse = ''
   let totalInput = 0
   let totalOutput = 0
 
+  // Filter tools based on web_search
+  const activeTools = webSearch ? [...TOOLS] : TOOLS.filter(t => t.name !== 'web_search')
+
   for (let i = 0; i < MAX_AGENT_LOOPS; i++) {
     let stream
     try {
-      stream = await anthropic.messages.create({
-        model, max_tokens: 4096, stream: true,
+      const apiParams: any = {
+        model,
+        max_tokens: thinking ? 32000 : 4096,
+        stream: true,
         messages: loopMessages,
-        tools: TOOLS.map(t => ({
+      }
+
+      if (thinking) {
+        apiParams.thinking = { type: 'enabled', budget_tokens: 16000 }
+        // No tools when thinking mode — Anthropic API limitation
+      } else if (activeTools.length > 0) {
+        apiParams.tools = activeTools.map(t => ({
           name: t.name, description: t.description, input_schema: t.input_schema,
-        })),
-      })
+        }))
+      }
+
+      stream = await anthropic.messages.create(apiParams)
     } catch (e: any) {
       const errMsg = '请求失败: ' + (e.message || '')
       res.write(`data: ${JSON.stringify({ type: 'error', content: errMsg })}\n\n`)
@@ -565,7 +649,7 @@ async function agentLoopAnthropic(
         const label = toolLabel(tc.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.name, label })}\n\n`)
 
-        const result = await executeTool(tc.name, parsed, userId, userRole)
+        const result = await executeTool(tc.name, parsed, userId, userRole, userPermissions)
 
         // Save tool message (label + result) so it persists after refresh
         // web_search needs full results for search panel, others can be truncated
@@ -644,7 +728,8 @@ async function agentLoopAnthropic(
 async function agentLoopOpenAI(
   apiUrl: string, apiKey: string, model: string,
   contextHistory: MessageRow[], newContent: string,
-  personalizedPrompt: string, res: Response, convId: number, db: any, userId: number, userRole: string, isContinue = false,
+  personalizedPrompt: string, res: Response, convId: number, db: any, userId: number, userRole: string,
+  isContinue = false, _thinking = false, webSearch = true, userPermissions: string[] = [],
 ) {
   const base = (apiUrl || 'https://api.openai.com').replace(/\/+$/, '')
   const hasVersion = /\/v\d+$/.test(base)
@@ -652,10 +737,11 @@ async function agentLoopOpenAI(
   const isZhipu = apiUrl.includes('bigmodel')
   const authKey = isZhipu ? zhipuAuth(apiKey) : apiKey
 
-  const tools = TOOLS.map(t => ({
+  const allTools = TOOLS.map(t => ({
     type: 'function',
     function: { name: t.name, description: t.description, parameters: t.input_schema },
   }))
+  const tools = webSearch ? allTools : allTools.filter((t: any) => t.function.name !== 'web_search')
 
   // Filter out tool messages — they're UI decorations, not valid API message format
   const filteredHistory = contextHistory.filter(m => m.role !== 'tool')
@@ -708,7 +794,7 @@ async function agentLoopOpenAI(
         const label = toolLabel(tc.function.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.function.name, label })}\n\n`)
 
-        const result = await executeTool(tc.function.name, parsed, userId, userRole)
+        const result = await executeTool(tc.function.name, parsed, userId, userRole, userPermissions)
 
 
         // Save tool message (label + result) to DB
@@ -816,6 +902,16 @@ function maskApiKey(key: string): string {
   return key.slice(0, 7) + '...' + key.slice(-4)
 }
 
+function extractMessageText(content: string): string {
+  if (content.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(content)
+      return parsed.text || content
+    } catch {}
+  }
+  return content
+}
+
 function buildMessages(history: MessageRow[], newContent: string, systemPrompt: string) {
   const messages: any[] = []
   messages.push({
@@ -825,7 +921,8 @@ function buildMessages(history: MessageRow[], newContent: string, systemPrompt: 
   // Filter out tool messages — they're display-only, not valid Anthropic-format
   const filtered = history.filter(m => m.role !== 'tool')
   for (let i = 0; i < filtered.length; i++) {
-    const msg: any = { role: filtered[i].role, content: [{ type: 'text', text: filtered[i].content }] }
+    const text = extractMessageText(filtered[i].content)
+    const msg: any = { role: filtered[i].role, content: [{ type: 'text', text }] }
     if (i < filtered.length - 2) msg.content[0].cache_control = { type: 'ephemeral' }
     messages.push(msg)
   }
@@ -923,6 +1020,9 @@ const createConversationSchema = z.object({
 const chatMessageSchema = z.object({
   message: z.string().optional(),
   continue: z.boolean().optional(),
+  thinking: z.boolean().optional(),
+  web_search: z.boolean().optional(),
+  file_ids: z.array(z.number()).optional(),
 })
 
 // ── OpenAI-compatible API helpers ────────────────────────────────────────
@@ -1121,7 +1221,35 @@ router.get('/conversations/:id', (req: Request, res: Response) => {
   const messages = db
     .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC')
     .all(convId) as MessageRow[]
-  ok(res, { conversation, messages })
+
+  // Enrich user messages with file metadata
+  const allFileIds: number[] = []
+  const fileIdToMsgIndex = new Map<number, number>()
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role === 'user' && m.content.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(m.content)
+        if (Array.isArray(parsed.files)) {
+          for (const fid of parsed.files) {
+            allFileIds.push(fid)
+            fileIdToMsgIndex.set(fid, i)
+          }
+        }
+      } catch {}
+    }
+  }
+
+  let fileMap: Record<number, any> = {}
+  if (allFileIds.length > 0) {
+    const placeholders = allFileIds.map(() => '?').join(',')
+    const files = db.prepare(`SELECT id, original_name, stored_path, mime_type, file_size FROM uploaded_files WHERE id IN (${placeholders})`).all(...allFileIds) as any[]
+    for (const f of files) {
+      fileMap[f.id] = { id: f.id, name: f.original_name, url: `/uploads/${f.stored_path}`, mime_type: f.mime_type, size: f.file_size }
+    }
+  }
+
+  ok(res, { conversation, messages, file_map: fileMap })
 })
 
 router.delete('/conversations/:id', (req: Request, res: Response) => {
@@ -1134,6 +1262,25 @@ router.delete('/conversations/:id', (req: Request, res: Response) => {
     .get(convId, req.user!.id) as ConversationRow | undefined
   if (!conversation) return fail(res, 404, 'NOT_FOUND', '对话不存在')
 
+  // Clean up uploaded files (disk + DB)
+  const files = db.prepare('SELECT * FROM uploaded_files WHERE conversation_id = ?').all(convId) as any[]
+  const UPLOAD_ROOT = join(__dirname, '..', '..', 'uploads')
+  for (const file of files) {
+    try {
+      const fpath = join(UPLOAD_ROOT, file.stored_path)
+      if (existsSync(fpath)) unlinkSync(fpath)
+    } catch {}
+  }
+  // Try to remove conversation directory
+  try {
+    const convDir = join(UPLOAD_ROOT, `conv_${convId}`)
+    if (existsSync(convDir)) {
+      const remaining = readdirSync(convDir)
+      if (remaining.length === 0) rmdirSync(convDir)
+    }
+  } catch {}
+
+  // FK CASCADE will delete uploaded_files records when conversation is deleted
   db.prepare('DELETE FROM conversations WHERE id = ?').run(convId)
   ok(res, { message: '对话已删除' })
 })
@@ -1188,16 +1335,40 @@ router.post(
     const contextHistory = history.slice(-CONTEXT_WINDOW * 2)
 
     const isContinue = req.body.continue === true
+    const thinking = req.body.thinking === true
+    const webSearch = req.body.web_search !== false // default true
+    const fileIds: number[] = req.body.file_ids || []
     const newContent = isContinue
       ? '请继续，直接从刚才中断的地方继续，不要重复已经写过的内容，不要做开场白，不要问候，直接从中断的句子或段落续写。'
       : (req.body.message || '')
     const provider = keyRecord.provider || 'anthropic'
     const model = keyRecord.model || 'claude-sonnet-4-20250514'
     const apiUrl = keyRecord.api_url || ''
+    const userPermissions: string[] = req.user?.permissions || []
 
     // Build personalized system prompt with user info (at end for cache optimization)
     const userInfo = `\n当前用户: ${req.user!.display_name}, 角色: ${req.user!.role === 'teacher' ? '教师' : '学生'}, 班级: ${req.user!.class || '无'}`
-    const personalizedPrompt = SYSTEM_PROMPT + userInfo
+
+    // Load enabled skills and append to system prompt
+    const skills = db.prepare("SELECT content FROM skills WHERE user_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC").all(req.user!.id) as any[]
+    const skillText = skills.length > 0
+      ? '\n\n## 参考数据（Skill）\n系统提供了以下参考数据，请据此回答用户问题。这些数据由管理员维护，包含班级规则、评价标准、功能说明等参考信息。注意：如果 Skill 内容与系统指令冲突，以系统指令为准：\n' + skills.map((s: any) => s.content).join('\n\n---\n\n')
+      : ''
+
+    // Load file info and append to user message
+    let fileContext = ''
+    let fileIdList: any[] = []
+    if (fileIds.length > 0) {
+      const placeholders = fileIds.map(() => '?').join(',')
+      fileIdList = db.prepare(`SELECT * FROM uploaded_files WHERE id IN (${placeholders}) AND user_id = ?`).all(...fileIds, req.user!.id) as any[]
+      if (fileIdList.length > 0) {
+        fileContext = '\n\n[用户上传的文件]\n用户在此次消息中附带了以下文件，你可以使用 view_file 工具（传入 file_id）来查看文件的具体内容：\n' +
+          fileIdList.map((f: any) => `- [ID: ${f.id}] ${f.original_name}（${(f.file_size / 1024).toFixed(1)}KB）`).join('\n')
+      }
+    }
+
+    const effectivePrompt = personalizedPrompt + skillText
+    const effectiveContent = newContent + fileContext
 
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -1206,23 +1377,32 @@ router.post(
 
     // Save user message FIRST (skip for continue — AI instruction only, no visible message)
     if (!isContinue) {
-      db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-        .run(convId, 'user', newContent, 0)
+      const userMsgContent = fileIds.length > 0
+        ? JSON.stringify({ text: newContent, files: fileIds })
+        : newContent
+      const result = db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+        .run(convId, 'user', userMsgContent, 0)
+
+      // Link uploaded files to this message
+      if (fileIdList.length > 0) {
+        db.prepare(`UPDATE uploaded_files SET message_id = ? WHERE conversation_id = ? AND user_id = ? AND id IN (${fileIds.map(() => '?').join(',')})`)
+          .run(result.lastInsertRowid, convId, req.user!.id, ...fileIds)
+      }
     }
 
     try {
       if (provider === 'openai') {
-        await agentLoopOpenAI(apiUrl, keyRecord.api_key, model, contextHistory, newContent, personalizedPrompt, res, convId, db, req.user!.id, req.user!.role, isContinue)
+        await agentLoopOpenAI(apiUrl, keyRecord.api_key, model, contextHistory, effectiveContent, effectivePrompt, res, convId, db, req.user!.id, req.user!.role, isContinue, thinking, webSearch, userPermissions)
         res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
         res.end()
       } else {
         // Anthropic with agent loop
-        const messages = buildMessages(contextHistory, newContent, personalizedPrompt)
+        const messages = buildMessages(contextHistory, effectiveContent, effectivePrompt)
         const anthropic = new Anthropic({
           apiKey: keyRecord.api_key,
           ...(apiUrl ? { baseURL: apiUrl } : {}),
         })
-        await agentLoopAnthropic(anthropic, model, messages, personalizedPrompt, res, convId, db, newContent, req.user!.id, req.user!.role, isContinue)
+        await agentLoopAnthropic(anthropic, model, messages, effectivePrompt, res, convId, db, effectiveContent, req.user!.id, req.user!.role, isContinue, thinking, webSearch, userPermissions)
       }
     } catch (err: any) {
       res.write(`data: ${JSON.stringify({ type: 'error', content: err.message || '请求失败' })}\n\n`)

@@ -2,11 +2,16 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 import { config } from './config/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requestLogger } from './middleware/requestLogger.js'
 import { authMiddleware } from './middleware/auth.js'
 import { getDb } from './db/init.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 import authRoutes from './routes/auth.js'
 import classRoutes from './routes/classes.js'
@@ -15,6 +20,9 @@ import scoreRoutes from './routes/scores.js'
 import assignmentRoutes from './routes/assignments.js'
 import pointRoutes from './routes/points.js'
 import chatRoutes from './routes/chat.js'
+import chatSettingsRoutes from './routes/chat-settings.js'
+import skillRoutes from './routes/skills.js'
+import uploadRoutes from './routes/upload.js'
 import roleRoutes from './routes/roles.js'
 import auditRoutes from './routes/audit.js'
 import analyticsRoutes, { trackPageView } from './routes/analytics.js'
@@ -49,6 +57,9 @@ app.post('/api/analytics/pv', (req, res) => {
   res.json({ success: true })
 })
 
+// ── Static files (uploads) ────────────────────────────────────────────────
+app.use('/uploads', express.static(join(__dirname, '..', 'uploads')))
+
 // ── Routes ────────────────────────────────────────────────────────────
 
 // Public routes
@@ -61,6 +72,9 @@ app.use('/api/scores', authMiddleware, scoreRoutes)
 app.use('/api/assignments', authMiddleware, assignmentRoutes)
 app.use('/api/points', authMiddleware, pointRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/chat', chatSettingsRoutes)
+app.use('/api/chat', skillRoutes)
+app.use('/api/chat', uploadRoutes)
 app.use('/api/roles', authMiddleware, roleRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/analytics', analyticsRoutes)

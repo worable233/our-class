@@ -2,7 +2,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { computed, ref } from 'vue'
-import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/vue'
+import { Star, List, Users, MessageSquare, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -39,6 +39,7 @@ const menuGroups = computed(() => {
           { icon: Shield, label: '职位管理', path: '/teacher/roles' },
           { icon: Settings, label: '站点设置', expandable: true, children: [
             { icon: Bot, label: 'AI 配置', path: '/teacher/settings' },
+            { icon: BookOpen, label: 'Skill 管理', path: '/teacher/skills' },
             { icon: History, label: '操作日志', path: '/teacher/logs' },
             { icon: Globe, label: '流量监控', path: '/teacher/traffic' },
           ]},

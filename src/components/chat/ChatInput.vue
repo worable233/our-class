@@ -1,55 +1,123 @@
 <script setup lang="ts">
-import { ref, nextTick, watch } from 'vue'
+import { ref, nextTick, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ArrowUp, Square, Paperclip, X, FileText, FileSpreadsheet, FileImage, File, Presentation } from '@lucide/vue'
+import { ArrowUp, Square, Paperclip, X, FileText, FileSpreadsheet, FileImage, File, Presentation, Loader2 } from '@lucide/vue'
 import Tooltip from '@/components/Tooltip.vue'
 
-const emit = defineEmits<{ send: [content: string]; stop: []; login: [] }>()
-const props = defineProps<{ loading?: boolean; disabled?: boolean }>()
+const emit = defineEmits<{
+  send: [content: string, deepThink: boolean, webSearch: boolean, fileIds?: number[]]
+  stop: []
+  login: []
+  'update:deepThink': [value: boolean]
+  'update:webSearch': [value: boolean]
+}>()
+
+const props = defineProps<{
+  loading?: boolean
+  disabled?: boolean
+  enableDeepThink?: boolean
+  enableFileUpload?: boolean
+  convId?: number | null
+  deepThink?: boolean
+  webSearch?: boolean
+}>()
+
 const auth = useAuthStore()
 const input = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
+// ── File upload state ─────────────────────────────────────────────────────
 interface Attachment {
   id: string
   file: File
   url: string
   name: string
+  uploading: boolean
+  uploaded: boolean
+  uploadId?: number
+  error?: string
 }
+
 const attachments = ref<Attachment[]>([])
+const allUploaded = computed(() => attachments.value.length === 0 || attachments.value.every(a => a.uploaded || a.error))
 
 function pickFiles() {
   fileInputRef.value?.click()
 }
 
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = input.files
+async function onFileChange(e: Event) {
+  const inputEl = e.target as HTMLInputElement
+  const files = inputEl.files
   if (!files?.length) return
   for (const file of Array.from(files)) {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-    attachments.value.push({
+    const att: Attachment = {
       id,
       file,
       url: URL.createObjectURL(file),
       name: file.name,
-    })
+      uploading: true,
+      uploaded: false,
+    }
+    attachments.value.push(att)
+    // Start upload
+    uploadFile(att).catch(() => {})
   }
-  input.value = '' // reset so same file can be picked again
+  inputEl.value = ''
+}
+
+async function uploadFile(att: Attachment) {
+  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  const convId = props.convId
+
+  if (!convId) {
+    att.uploading = false
+    att.error = '请先发送一条消息创建对话后再上传文件'
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('file', att.file)
+  formData.append('conversation_id', String(convId))
+
+  try {
+    const res = await fetch('/api/chat/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    })
+    const body = await res.json()
+    if (!res.ok || body.success === false) {
+      throw new Error(body.error?.message || '上传失败')
+    }
+    att.uploading = false
+    att.uploaded = true
+    att.uploadId = body.data.id
+  } catch (e: any) {
+    att.uploading = false
+    att.error = e.message || '上传失败'
+  }
 }
 
 function removeAttachment(id: string) {
   const att = attachments.value.find(a => a.id === id)
-  if (att) URL.revokeObjectURL(att.url)
+  if (att) {
+    URL.revokeObjectURL(att.url)
+    // Delete from server if already uploaded
+    if (att.uploadId) {
+      const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+      fetch(`/api/chat/upload/${att.uploadId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
+  }
   attachments.value = attachments.value.filter(a => a.id !== id)
 }
 
-const deepThink = ref(false)
-const webSearch = ref(false)
-
+// ── File type icons ───────────────────────────────────────────────────────
 function isImage(file: File) { return file.type.startsWith('image/') }
-
 function fileIcon(file: File) {
   const name = file.name.toLowerCase()
   if (name.endsWith('.doc') || name.endsWith('.docx')) return FileText
@@ -59,23 +127,18 @@ function fileIcon(file: File) {
   if (name.endsWith('.csv') || name.endsWith('.txt')) return FileText
   return FileImage
 }
-
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+// ── Input handling ────────────────────────────────────────────────────────
 function autoResize() {
   const el = textareaRef.value
   if (!el) return
   el.style.height = 'auto'
-  const h = el.scrollHeight
-  if (h > 30) {
-    el.style.height = h + 'px'
-  } else {
-    el.style.height = ''
-  }
+  el.style.height = Math.max(30, Math.min(el.scrollHeight, 300)) + 'px'
 }
 
 function handleSend() {
@@ -84,22 +147,21 @@ function handleSend() {
   if (!auth.isLoggedIn) { emit('login'); return }
   const c = input.value.trim()
   if (!c) return
-  // Attach file info if any
-  const fileInfo = attachments.value.length
-    ? attachments.value.map(a => `[附件: ${a.name}]`).join(' ') + '\n'
-    : ''
-  emit('send', fileInfo + c)
+  if (!allUploaded.value) return // wait for uploads
+
+  const fileIds = attachments.value.filter(a => a.uploadId).map(a => a.uploadId!);
+  const dt = props.deepThink ?? false;
+  const ws = props.webSearch ?? false;
+
+  emit('send', c, dt, ws, fileIds.length > 0 ? fileIds : undefined)
   input.value = ''
   attachments.value = []
   nextTick(autoResize)
 }
 
-function onInput() {
-  autoResize()
-}
-
+function onInput() { autoResize() }
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSend()
   }
@@ -111,13 +173,13 @@ watch(input, () => { nextTick(autoResize) })
 
 <template>
   <div class="input-section">
-    <!-- Photo wall: uploaded attachments -->
+    <!-- Photo wall -->
     <div v-if="attachments.length" class="photo-wall">
       <div
         v-for="att in attachments"
         :key="att.id"
         class="photo-item"
-        :class="{ 'is-doc': !isImage(att.file) }"
+        :class="{ 'is-doc': !isImage(att.file), uploading: att.uploading, error: att.error }"
         :title="att.name"
       >
         <template v-if="isImage(att.file)">
@@ -132,7 +194,14 @@ watch(input, () => { nextTick(autoResize) })
             <span class="doc-size">{{ formatSize(att.file.size) }}</span>
           </div>
         </template>
-        <div class="photo-overlay" @click="removeAttachment(att.id)">
+        <!-- Upload spinner / error -->
+        <div v-if="att.uploading" class="photo-uploading">
+          <Loader2 :size="18" class="spin" />
+        </div>
+        <div v-else-if="att.error" class="photo-error">
+          <span class="photo-error-text">{{ att.error }}</span>
+        </div>
+        <div v-else class="photo-overlay" @click="removeAttachment(att.id)">
           <X :size="14" />
         </div>
       </div>
@@ -140,11 +209,12 @@ watch(input, () => { nextTick(autoResize) })
         <span class="photo-add-icon">+</span>
       </label>
     </div>
+
     <input
       ref="fileInputRef"
       type="file"
       multiple
-      accept="image/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv"
+      accept="*/*"
       style="display: none"
       @change="onFileChange"
     />
@@ -154,7 +224,7 @@ watch(input, () => { nextTick(autoResize) })
         ref="textareaRef"
         v-model="input"
         rows="1"
-        placeholder="输入消息，Shift+Enter 发送，Enter 换行"
+        placeholder="输入消息，Enter 发送，Shift+Enter 换行"
         :disabled="loading || disabled"
         class="input-area"
         @input="onInput"
@@ -162,36 +232,36 @@ watch(input, () => { nextTick(autoResize) })
       />
       <div class="input-bottom">
         <div class="input-bottom-left">
-          <Tooltip text="深度思考模式">
+          <Tooltip v-if="enableDeepThink" text="深度思考模式（Anthropic 下无法使用工具）">
             <button
               class="toolbar-btn mode-btn"
               :class="{ active: deepThink }"
-              @click="deepThink = !deepThink"
+              @click="$emit('update:deepThink', !deepThink)"
             >
               深度思考
             </button>
           </Tooltip>
-          <Tooltip text="联网搜索实时信息">
+          <Tooltip v-if="true" text="联网搜索实时信息">
             <button
               class="toolbar-btn mode-btn"
               :class="{ active: webSearch }"
-              @click="webSearch = !webSearch"
+              @click="$emit('update:webSearch', !webSearch)"
             >
               联网搜索
             </button>
           </Tooltip>
-        </div>
-        <div class="input-bottom-right">
-          <Tooltip text="上传文件">
-            <button class="toolbar-btn" @click="pickFiles">
+          <Tooltip v-if="enableFileUpload && auth.isLoggedIn" text="上传文件">
+            <button class="toolbar-btn" @click="pickFiles" :disabled="!convId && attachments.length === 0">
               <Paperclip :size="15" />
             </button>
           </Tooltip>
-          <Tooltip text="发送">
+        </div>
+        <div class="input-bottom-right">
+          <Tooltip :text="!allUploaded ? '文件上传中...' : '发送'">
             <button
               class="send-btn"
-              :class="{ on: input.trim() && !loading, stop: loading }"
-              :disabled="!input.trim() && !loading"
+              :class="{ on: input.trim() && !loading && allUploaded, stop: loading }"
+              :disabled="(!input.trim() && !loading) || !allUploaded"
               @click="handleSend"
             >
               <ArrowUp v-if="!loading" :size="18" />
@@ -201,7 +271,6 @@ watch(input, () => { nextTick(autoResize) })
         </div>
       </div>
     </div>
-
     <p class="hint">AI 生成内容仅供参考，请核实重要信息</p>
   </div>
 </template>
@@ -211,7 +280,6 @@ watch(input, () => { nextTick(autoResize) })
   padding: 0 16px 8px 16px;
   background: var(--ground);
 }
-
 .input-wrapper {
   max-width: 768px;
   margin: 0 auto;
@@ -228,24 +296,13 @@ watch(input, () => { nextTick(autoResize) })
   border-radius: inherit;
   pointer-events: none;
   border: 1px solid var(--hairline);
-  transition: border-color .3s cubic-bezier(.4,0,.2,1),
-              box-shadow .3s cubic-bezier(.4,0,.2,1);
+  transition: border-color .3s cubic-bezier(.4,0,.2,1), box-shadow .3s cubic-bezier(.4,0,.2,1);
 }
-html.dark .input-wrapper::before {
-  border-color: transparent;
-}
-.input-wrapper > * + * {
-  margin-top: 4px;
-}
-.input-wrapper:hover::before {
-  border-color: #7C7FDC;
-}
-html:not(.dark) .input-wrapper:hover::before {
-  border-color: var(--hairline-strong);
-}
-.input-wrapper:focus-within {
-  background-color: rgba(94, 106, 210, 0.08);
-}
+html.dark .input-wrapper::before { border-color: transparent; }
+.input-wrapper > * + * { margin-top: 4px; }
+.input-wrapper:hover::before { border-color: #7C7FDC; }
+html:not(.dark) .input-wrapper:hover::before { border-color: var(--hairline-strong); }
+.input-wrapper:focus-within { background-color: rgba(94, 106, 210, 0.08); }
 .input-wrapper:focus-within::before {
   border-color: #7C7FDC;
   box-shadow: 0 0 8px 0 rgba(94, 106, 210, 0.3);
@@ -261,16 +318,8 @@ html:not(.dark) .input-wrapper:focus-within::before {
   min-height: 32px;
   gap: 6px;
 }
-.input-bottom-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.input-bottom-right {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
+.input-bottom-left { display: flex; align-items: center; gap: 6px; }
+.input-bottom-right { display: flex; align-items: center; gap: 2px; }
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
@@ -286,32 +335,19 @@ html:not(.dark) .input-wrapper:focus-within::before {
   transition: all .12s;
   line-height: 1;
 }
-.toolbar-btn {
-  transition: background .15s, color .15s;
-}
-.toolbar-btn:hover {
-  background: var(--surface-2);
-  color: var(--text-secondary);
-}
-.toolbar-btn:active {
-  transform: scale(0.92);
-}
-.toolbar-btn.active {
-  color: var(--accent-text);
-  background: var(--accent-glow);
-}
+.toolbar-btn { transition: background .15s, color .15s; }
+.toolbar-btn:hover { background: var(--surface-2); color: var(--text-secondary); }
+.toolbar-btn:active { transform: scale(0.92); }
+.toolbar-btn.active { color: var(--accent-text); background: var(--accent-glow); }
+.toolbar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .mode-btn {
   border: 1px solid var(--hairline);
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 12px;
 }
-.mode-btn.active {
-  border-color: var(--accent);
-}
-.mode-btn:active {
-  transform: scale(0.96);
-}
+.mode-btn.active { border-color: var(--accent); }
+.mode-btn:active { transform: scale(0.96); }
 
 .input-area {
   display: block;
@@ -330,9 +366,7 @@ html:not(.dark) .input-wrapper:focus-within::before {
   max-height: 300px;
   margin: 0;
 }
-.input-area::placeholder {
-  color: var(--text-muted);
-}
+.input-area::placeholder { color: var(--text-muted); }
 
 .send-btn {
   width: 32px; height: 32px;
@@ -345,37 +379,15 @@ html:not(.dark) .input-wrapper:focus-within::before {
   background: var(--surface-3);
   color: var(--text-muted);
 }
-.send-btn:hover:not(:disabled) {
-  background: var(--surface-2);
-  color: var(--text-secondary);
-}
-.send-btn:active:not(:disabled) {
-  transform: scale(0.92);
-}
-.send-btn.on {
-  background: var(--accent);
-  color: #fff;
-}
-.send-btn.on:hover:not(:disabled) {
-  filter: brightness(1.15);
-}
-.send-btn.on:active:not(:disabled) {
-  filter: brightness(0.9);
-  transform: scale(0.92);
-}
-.send-btn.stop {
-  background: var(--surface-2);
-  color: var(--text-secondary);
-}
-.send-btn.stop:hover:not(:disabled) {
-  background: var(--surface-3);
-  color: var(--text-primary);
-}
-.send-btn.stop:active:not(:disabled) {
-  transform: scale(0.92);
-}
+.send-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text-secondary); }
+.send-btn:active:not(:disabled) { transform: scale(0.92); }
+.send-btn.on { background: var(--accent); color: #fff; }
+.send-btn.on:hover:not(:disabled) { filter: brightness(1.15); }
+.send-btn.on:active:not(:disabled) { filter: brightness(0.9); transform: scale(0.92); }
+.send-btn.stop { background: var(--surface-2); color: var(--text-secondary); }
+.send-btn.stop:hover:not(:disabled) { background: var(--surface-3); color: var(--text-primary); }
+.send-btn.stop:active:not(:disabled) { transform: scale(0.92); }
 
-/* ── Photo wall ── */
 .photo-wall {
   max-width: 768px;
   margin: 0 auto 8px;
@@ -401,6 +413,7 @@ html:not(.dark) .input-wrapper:focus-within::before {
   gap: 2px;
   background: var(--surface-2);
 }
+.photo-item.error { border-color: #e74c3c; }
 .doc-icon-wrap {
   display: flex;
   align-items: center;
@@ -409,13 +422,7 @@ html:not(.dark) .input-wrapper:focus-within::before {
   width: 28px;
   height: 28px;
 }
-.doc-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  max-width: 60px;
-}
+.doc-info { display: flex; flex-direction: column; align-items: center; gap: 1px; max-width: 60px; }
 .doc-name {
   font-size: 9px;
   color: var(--text-primary);
@@ -425,17 +432,8 @@ html:not(.dark) .input-wrapper:focus-within::before {
   line-height: 1.2;
   max-width: 100%;
 }
-.doc-size {
-  font-size: 8px;
-  color: var(--text-muted);
-  line-height: 1;
-}
-.photo-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
+.doc-size { font-size: 8px; color: var(--text-muted); line-height: 1; }
+.photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-overlay {
   position: absolute;
   inset: 0;
@@ -448,8 +446,29 @@ html:not(.dark) .input-wrapper:focus-within::before {
   cursor: pointer;
   transition: opacity .15s;
 }
-.photo-item:hover .photo-overlay {
-  opacity: 1;
+.photo-item:hover .photo-overlay { opacity: 1; }
+.photo-uploading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.35);
+  color: #fff;
+}
+.photo-uploading .spin { animation: tpSpin 1s linear infinite; }
+@keyframes tpSpin { to { transform: rotate(360deg); } }
+.photo-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.6);
+  color: #e74c3c;
+  font-size: 9px;
+  padding: 2px;
+  text-align: center;
 }
 .photo-add {
   width: 64px;
@@ -463,18 +482,9 @@ html:not(.dark) .input-wrapper:focus-within::before {
   transition: all .15s;
   flex-shrink: 0;
 }
-.photo-add:hover {
-  border-color: var(--accent);
-  background: var(--accent-glow);
-}
-.photo-add-icon {
-  font-size: 22px;
-  color: var(--text-muted);
-  line-height: 1;
-}
-.photo-add:hover .photo-add-icon {
-  color: var(--accent-text);
-}
+.photo-add:hover { border-color: var(--accent); background: var(--accent-glow); }
+.photo-add-icon { font-size: 22px; color: var(--text-muted); line-height: 1; }
+.photo-add:hover .photo-add-icon { color: var(--accent-text); }
 
 .hint {
   text-align: center;

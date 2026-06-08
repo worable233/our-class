@@ -56,6 +56,11 @@ const router = createRouter({
           component: () => import('@/views/teacher/SettingsPage.vue'),
         },
         {
+          path: 'skills',
+          name: 'teacher-skills',
+          component: () => import('@/views/teacher/SkillManage.vue'),
+        },
+        {
           path: 'logs',
           name: 'teacher-logs',
           component: () => import('@/views/teacher/AuditLogs.vue'),

@@ -22,6 +22,7 @@ interface ChatMessage {
   card?: any
   _morphing?: boolean
   _streamTimestamps?: number[]
+  fileInfo?: Array<{ id: number; name: string; url: string; size: number; mime_type: string }>
 }
 
 function mapToolMsg(m: any): any {
@@ -64,6 +65,12 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 auth.loadFromStorage()
+
+// AI feature settings
+const settings = ref({ enable_deep_think: false, enable_file_upload: false })
+const deepThink = ref(false)
+const webSearch = ref(true)
+const fileMap = ref<Record<number, any>>({})
 
 const sidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null)
 const currentConvId = ref<number | null>(null)
@@ -141,6 +148,9 @@ onMounted(async () => {
   if (loadSeq !== seq) return
   if (!hasConfig.value) { router.push('/teacher/settings'); return }
 
+  // Load AI feature settings
+  try { const s = await api.get<any>('/chat/settings'); if (s && loadSeq === seq) settings.value = s } catch {}
+
   try {
     const id = parseInt(atob((encoded as string).replace(/-/g, '+').replace(/_/g, '/')))
     if (!isNaN(id)) {
@@ -148,11 +158,21 @@ onMounted(async () => {
       const res = await api.get<any>(`/chat/conversations/${id}`)
       if (loadSeq !== seq) return
       currentConvId.value = id
+      fileMap.value = res?.file_map || {}
       if (res?.messages) {
         const raw = res.messages
         const flat: any[] = []
         for (const m of raw) {
           const msg = mapToolMsg(m)
+          // Parse user messages with file JSON
+          if (m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(m.content)
+              msg.content = parsed.text || ''
+              const files: any[] = (parsed.files || []).map((fid: number) => fileMap.value[fid]).filter(Boolean)
+              if (files.length > 0) msg.fileInfo = files
+            } catch {}
+          }
           flat.push(msg)
           // If a tool message has embedded card data, emit a card message after the tool pill
           if (m.role === 'tool' && msg.card) {
@@ -180,11 +200,20 @@ async function selectConversation(id: number) {
   try {
     const res = await api.get<any>(`/chat/conversations/${id}`)
     if (loadSeq !== seq) return  // stale
+    fileMap.value = res?.file_map || {}
     if (res?.messages) {
       const raw = res.messages
       const flat: any[] = []
       for (const m of raw) {
         const msg = mapToolMsg(m)
+        if (m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(m.content)
+            msg.content = parsed.text || ''
+            const files: any[] = (parsed.files || []).map((fid: number) => fileMap.value[fid]).filter(Boolean)
+            if (files.length > 0) msg.fileInfo = files
+          } catch {}
+        }
         flat.push(msg)
         if (m.role === 'tool' && msg.card) {
           flat.push({ role: 'card', card: msg.card })
@@ -299,7 +328,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
 
 let sending = false
 
-async function sendMessage(content: string) {
+async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?: boolean, fileIds?: number[]) {
   if (streaming.value || sending || terminated.value) return
   pendingPickCard.value = null  // Dismiss any pending pick modal
   sending = true
@@ -370,7 +399,12 @@ async function sendMessage(content: string) {
     const response = await fetch(`/api/chat/conversations/${currentConvId.value}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ message: content }),
+      body: JSON.stringify({
+        message: content,
+        thinking: isDeepThink ?? deepThink.value,
+        web_search: isWebSearch ?? webSearch.value,
+        ...(fileIds?.length ? { file_ids: fileIds } : {}),
+      }),
       signal: abortCtrl.signal,
     })
 
@@ -659,6 +693,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             :card="m.card"
             :_morphing="(m as any)._morphing"
             :stream-timestamps="(m as any)._streamTimestamps"
+            :file-info="(m as any).fileInfo"
           />
         </div>
         </div>
@@ -669,7 +704,20 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
           <button class="continue-btn" @click="continueGeneration">继续生成</button>
         </div>
       </div>
-      <ChatInput :loading="streaming" :disabled="terminated" @send="sendMessage" @stop="stopStream" @login="emit('login')" />
+      <ChatInput
+        :loading="streaming"
+        :disabled="terminated"
+        :enable-deep-think="settings.enable_deep_think"
+        :enable-file-upload="settings.enable_file_upload"
+        :conv-id="currentConvId"
+        :deep-think="deepThink"
+        :web-search="webSearch"
+        @update:deep-think="deepThink = $event"
+        @update:web-search="webSearch = $event"
+        @send="sendMessage"
+        @stop="stopStream"
+        @login="emit('login')"
+      />
         </div>
         <SearchPanel class="search-sidebar" />
       </div>

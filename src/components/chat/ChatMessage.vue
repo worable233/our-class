@@ -14,13 +14,23 @@ function safeHost2(url: string): string {
   try { return new URL(url).hostname } catch { return '' }
 }
 import ToolCard from './ToolCard.vue'
+import FilePreview from './FilePreview.vue'
 import { marked } from 'marked'
 
 marked.use({ breaks: true, gfm: true })
 
-const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string; _morphing?: boolean; streamTimestamps?: number[] }>()
+const props = defineProps<{ role: 'user' | 'assistant' | 'tool' | 'card'; content?: string; streaming?: boolean; noCopy?: boolean; toolStatus?: string; card?: Record<string, unknown>; toolResult?: string; _morphing?: boolean; streamTimestamps?: number[]; fileInfo?: Array<{ id: number; name: string; url: string; size: number; mime_type: string }> }>()
 const toolExpanded = ref(false)
 const copied = ref(false)
+
+// File preview
+const previewFile = ref<{ id: number; name: string; url: string; size: number; mime_type: string } | null>(null)
+const showPreview = ref(false)
+
+function openFilePreview(file: { id: number; name: string; url: string; size: number; mime_type: string }) {
+  previewFile.value = file
+  showPreview.value = true
+}
 const isUser = computed(() => props.role === 'user')
 const isTool = computed(() => props.role === 'tool')
 const isCard = computed(() => props.role === 'card')
@@ -446,7 +456,23 @@ watch(
         <div v-if="!content && !isUser" class="dots"><span /><span /><span /></div>
         <div v-else-if="!isUser && content && streaming" ref="streamEl" class="text text-bot" @click="handleContentClick" />
         <div v-else-if="!isUser && content" class="text text-bot" v-html="render(content)" @click="handleContentClick" />
-        <div v-else class="text text-user" v-html="render(content || '')" />
+        <div v-else class="text text-user">
+          <!-- File attachments -->
+          <div v-if="fileInfo?.length" class="file-attachments">
+            <div
+              v-for="f in fileInfo"
+              :key="f.id"
+              class="file-chip"
+              @click="openFilePreview(f)"
+              :title="f.name"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              {{ f.name }}
+            </div>
+          </div>
+          <!-- Message text -->
+          <div v-html="render(content || '')" />
+        </div>
       </div>
     </div>
     <div v-if="!isUser && content && !streaming && !noCopy" class="copy-area">
@@ -456,6 +482,9 @@ watch(
       </button>
     </div>
   </div>
+
+  <!-- File preview modal -->
+  <FilePreview :file="previewFile" :show="showPreview" @update:show="showPreview = $event" />
 </template>
 
 <style scoped>
@@ -577,6 +606,36 @@ watch(
   background: var(--surface-2);
   border-radius: 8px 8px 3px 8px;
   padding: 8px 14px;
+}
+
+/* File attachments in user messages */
+.file-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: all .12s;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-glow);
 }
 
 .text-bot { padding: 0; }

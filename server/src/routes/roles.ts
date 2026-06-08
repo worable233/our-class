@@ -25,9 +25,23 @@ const ALL_PERMISSIONS = [
   { code: 'assignments.grade', label: '批改作业', category: '作业管理' },
   { code: 'chat.access', label: '使用AI助手', category: 'AI助手' },
   { code: 'chat.config', label: '配置API Key', category: 'AI助手' },
+  { code: 'chat.skills', label: '管理 Skill', category: 'AI助手' },
   { code: 'roles.manage', label: '管理权限组', category: '系统设置' },
   { code: 'audit_logs.read', label: '查看操作日志', category: '系统设置' },
   { code: 'classes.read', label: '查看班级列表', category: '系统设置' },
+  // AI 工具权限（tool. 前缀统一管理）
+  { code: 'tool.list_students', label: '查询学生列表', category: 'AI 工具' },
+  { code: 'tool.get_student_points', label: '查询学生积分', category: 'AI 工具' },
+  { code: 'tool.add_points', label: '加减积分', category: 'AI 工具' },
+  { code: 'tool.get_score_rankings', label: '成绩排名', category: 'AI 工具' },
+  { code: 'tool.list_assignments', label: '作业列表', category: 'AI 工具' },
+  { code: 'tool.get_submissions', label: '提交情况', category: 'AI 工具' },
+  { code: 'tool.get_weather', label: '天气查询', category: 'AI 工具' },
+  { code: 'tool.web_search', label: '联网搜索', category: 'AI 工具' },
+  { code: 'tool.random_pick', label: '随机抽取', category: 'AI 工具' },
+  { code: 'tool.get_current_time', label: '当前时间', category: 'AI 工具' },
+  { code: 'tool.get_class_list', label: '班级列表', category: 'AI 工具' },
+  { code: 'tool.view_file', label: '查看文件', category: 'AI 工具' },
 ]
 
 // ── Zod Schemas ────────────────────────────────────────────────────────────

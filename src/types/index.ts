@@ -97,3 +97,38 @@ export interface PermissionGroup {
   permissions: string[]
   created_at?: string
 }
+
+// ── AI 功能 ───────────────────────────────────────────────────────────────
+
+export interface ChatSettings {
+  enable_deep_think: boolean
+  enable_file_upload: boolean
+  allowed_file_types: string
+  max_file_size: number
+  max_files_per_conversation: number
+}
+
+export interface Skill {
+  id: number
+  name: string
+  content: string
+  sort_order: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ToolConfig {
+  tool_name: string
+  config_json: string
+  max_result_length: number
+  enabled: boolean
+}
+
+export interface UploadedFileInfo {
+  id: number
+  url: string
+  name: string
+  size: number
+  mime_type: string
+}
