@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
+import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError } from '../lib/errors.js'
 import { writeAuditLog } from './audit.js'
+
+router.use(authMiddleware)
 
 const router = Router()
 
@@ -108,7 +111,7 @@ router.get('/groups/:id', (req: Request, res: Response) => {
 })
 
 // POST /api/roles/groups — create a new permission group
-router.post('/groups', validate(createGroupSchema), (req: Request, res: Response) => {
+router.post('/groups', requirePermission('roles.manage'), validate(createGroupSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { name, description, permissions } = req.body
 
@@ -132,7 +135,7 @@ router.post('/groups', validate(createGroupSchema), (req: Request, res: Response
 })
 
 // PUT /api/roles/groups/:id — update permission group
-router.put('/groups/:id', validate(updateGroupSchema), (req: Request, res: Response) => {
+router.put('/groups/:id', requirePermission('roles.manage'), validate(updateGroupSchema), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) {
@@ -174,7 +177,7 @@ router.put('/groups/:id', validate(updateGroupSchema), (req: Request, res: Respo
 })
 
 // DELETE /api/roles/groups/:id
-router.delete('/groups/:id', (req: Request, res: Response) => {
+router.delete('/groups/:id', requirePermission('roles.manage'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) {
