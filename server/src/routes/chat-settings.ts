@@ -90,7 +90,10 @@ router.put(
       for (const key of allowed) {
         if ((req.body as any)[key] !== undefined) {
           fields.push(`${key} = ?`)
-          params.push((req.body as any)[key])
+          // Convert booleans to integers for SQLite compatibility
+          let val = (req.body as any)[key]
+          if (typeof val === 'boolean') val = val ? 1 : 0
+          params.push(val)
         }
       }
       if (fields.length > 0) {
@@ -103,8 +106,8 @@ router.put(
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(
         userId,
-        req.body.enable_deep_think ?? 0,
-        req.body.enable_file_upload ?? 0,
+        req.body.enable_deep_think ? 1 : 0,
+        req.body.enable_file_upload ? 1 : 0,
         req.body.allowed_file_types ?? '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv,.md',
         req.body.max_file_size ?? 10485760,
         req.body.max_files_per_conversation ?? 10,
