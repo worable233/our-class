@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Pencil, Trash2, Key, Filter } from '@lucide/vue'
+import { Plus, Pencil, Trash2, Filter } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useDialog, useMessage } from 'naive-ui'
@@ -155,7 +155,6 @@ onMounted(() => { load() })
           >
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
               <span v-if="s.nickname">📛 {{ s.nickname }}</span>
-              <span><Key :size="13" style="vertical-align: middle;" /> {{ s.password || '******' }}</span>
             </div>
           </n-thing>
           <template #suffix>
