@@ -132,6 +132,11 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 })
 
 onMounted(async () => {
+  // Load AI feature settings early (needed on homepage too)
+  if (auth.isLoggedIn) {
+    try { const s = await api.get<any>('/chat/settings'); if (s) settings.value = s } catch {}
+  }
+
   // Only load conversation if URL has an encoded ID
   const encoded = props.encodedId || route.params.encodedId
   if (!encoded) return  // homepage — just show welcome, no redirect
@@ -147,9 +152,6 @@ onMounted(async () => {
   } catch {}
   if (loadSeq !== seq) return
   if (!hasConfig.value) { router.push('/teacher/settings'); return }
-
-  // Load AI feature settings
-  try { const s = await api.get<any>('/chat/settings'); if (s && loadSeq === seq) settings.value = s } catch {}
 
   try {
     const id = parseInt(atob((encoded as string).replace(/-/g, '+').replace(/_/g, '/')))
