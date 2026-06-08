@@ -3,7 +3,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { computed, h, ref } from 'vue'
 import type { MenuOption } from 'naive-ui'
-import { NLayoutSider, NMenu, NIcon } from 'naive-ui'
+import { NLayoutSider, NMenu, NIcon, NTooltip } from 'naive-ui'
 import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
@@ -25,10 +25,11 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/dashboard': ['students.read'],
   '/teacher/points': ['points.read'],
   '/teacher/assignments': ['assignments.read'],
-  '/teacher/students': ['students.read'],
+  '/teacher/users': ['students.read'],
   '/teacher/review-types': ['points.write'],
   '/teacher/roles': ['roles.manage'],
   '/teacher/settings': ['chat.config'],
+  '/teacher/site-data': ['students.read'],
   '/teacher/skills': ['chat.skills', 'chat.config'],
   '/teacher/logs': ['audit_logs.read'],
 }
@@ -63,12 +64,12 @@ const menuOptions = computed<MenuOption[]>(() => {
       },
       {
         type: 'group',
-        label: '学生管理',
+        label: '用户管理',
         key: 'students',
         children: [
           { key: '/teacher/points', label: '积分管理', icon: renderIcon(Star) },
           { key: '/teacher/assignments', label: '作业管理', icon: renderIcon(List) },
-          { key: '/teacher/students', label: '学生管理', icon: renderIcon(Users) },
+          { key: '/teacher/users', label: '用户管理', icon: renderIcon(Users) },
           { key: '/teacher/review-types', label: '点评类型', icon: renderIcon(Star) },
         ],
       },
@@ -87,6 +88,7 @@ const menuOptions = computed<MenuOption[]>(() => {
               { key: '/teacher/skills', label: 'Skill 管理', icon: renderIcon(BookOpen) },
               { key: '/teacher/logs', label: '操作日志', icon: renderIcon(History) },
               { key: '/teacher/traffic', label: '流量监控', icon: renderIcon(Globe) },
+              { key: '/teacher/site-data', label: '站点数据', icon: renderIcon(LayoutDashboard) },
             ],
           },
         ],
@@ -135,32 +137,63 @@ function handleUpdateValue(key: string) {
     @collapse="emit('update:collapsed', true)"
     @expand="emit('update:collapsed', false)"
     style="background:var(--surface-1)"
+    class="sidebar-sider"
   >
-    <!-- Logo -->
-    <div class="sidebar-logo" :class="{ collapsed }" @click="router.push('/')">
-      <div class="sidebar-logo-inner">
-        <Logo :size="28" :theme="isDark ? 'dark' : 'light'" class="shrink-0" />
-        <div v-show="!collapsed" class="logo-text-area grid">
-          <span class="text-swap-item active">OurClass</span>
-          <span class="text-swap-item">返回首页</span>
+    <div class="sidebar-inner">
+      <!-- Logo -->
+      <div class="sidebar-logo" :class="{ collapsed }" @click="router.push('/')">
+        <div class="sidebar-logo-inner">
+          <Logo :size="28" :theme="isDark ? 'dark' : 'light'" class="shrink-0" />
+          <div v-show="!collapsed" class="logo-text-area grid">
+            <span class="text-swap-item active">OurClass</span>
+            <span class="text-swap-item">返回首页</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Nav -->
-    <NMenu
-      :collapsed="collapsed"
-      :collapsed-width="52"
-      :collapsed-icon-size="20"
-      :options="menuOptions"
-      :value="activeKey"
-      @update:value="handleUpdateValue"
-      :indent="14"
-    />
+      <!-- Nav -->
+      <NMenu
+        :collapsed="collapsed"
+        :collapsed-width="52"
+        :collapsed-icon-size="20"
+        :options="menuOptions"
+        :value="activeKey"
+        @update:value="handleUpdateValue"
+        :indent="14"
+        class="sidebar-menu"
+      />
+
+      <!-- Footer / Copyright -->
+      <div v-show="!collapsed" class="sidebar-footer">
+        <n-tooltip trigger="hover" placement="top">
+          <template #trigger>
+            <a href="https://github.com/worable233/our-class" target="_blank" class="sidebar-footer-link">
+              <span class="sidebar-footer-copy">©</span>
+              <span>OurClass</span>
+              <span class="sidebar-footer-mit">MIT</span>
+            </a>
+          </template>
+          github.com/worable233/our-class
+        </n-tooltip>
+      </div>
+    </div>
   </NLayoutSider>
 </template>
 
 <style scoped>
+.sidebar-sider {
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.sidebar-menu {
+  flex: 1;
+}
+
 /* ── Logo ─────────────────────────────── */
 
 .sidebar-logo {
@@ -247,5 +280,35 @@ function handleUpdateValue(key: string) {
 /* 折叠时菜单项图标居中 */
 .n-layout-sider--collapsed .n-menu-item-content {
   padding: 0 16px !important;
+}
+
+/* Sidebar footer */
+.sidebar-footer {
+  padding: 8px 16px 16px;
+  text-align: center;
+}
+.sidebar-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.sidebar-footer-link:hover {
+  color: var(--accent-text);
+}
+.sidebar-footer-copy {
+  font-size: 13px;
+}
+.sidebar-footer-mit {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
 }
 </style>

@@ -12,11 +12,11 @@ interface UserRow {
   id: number
   username: string
   display_name: string
-  role: 'teacher' | 'student'
   class: string
   avatar: string | null
   student_no: string | null
   nickname: string | null
+  group_id: number | null
 }
 
 const loginSchema = z.object({
@@ -32,19 +32,19 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
 
   // Try finding by student_no, then username, then display_name
   let user = db
-    .prepare('SELECT * FROM users WHERE student_no = ?')
-    .get(username) as (UserRow & { password: string }) | undefined
+    .prepare('SELECT u.*, pg.name as group_name FROM users u LEFT JOIN permission_groups pg ON u.group_id = pg.id WHERE u.student_no = ?')
+    .get(username) as (UserRow & { password: string; group_name: string | null }) | undefined
 
   if (!user) {
     user = db
-      .prepare('SELECT * FROM users WHERE username = ?')
-      .get(username) as (UserRow & { password: string }) | undefined
+      .prepare('SELECT u.*, pg.name as group_name FROM users u LEFT JOIN permission_groups pg ON u.group_id = pg.id WHERE u.username = ?')
+      .get(username) as (UserRow & { password: string; group_name: string | null }) | undefined
   }
 
   if (!user) {
     user = db
-      .prepare('SELECT * FROM users WHERE display_name = ?')
-      .get(username) as (UserRow & { password: string }) | undefined
+      .prepare('SELECT u.*, pg.name as group_name FROM users u LEFT JOIN permission_groups pg ON u.group_id = pg.id WHERE u.display_name = ?')
+      .get(username) as (UserRow & { password: string; group_name: string | null }) | undefined
   }
 
   if (!user) {
@@ -55,7 +55,9 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
     return fail(res, 401, 'AUTH_ERROR', '密码错误')
   }
 
-  const token = signToken({ id: user.id, role: user.role })
+  // 从权限组名称推导角色
+  const role = user.group_name === '教师' ? 'teacher' as const : user.group_name === '学生' ? 'student' as const : 'student' as const
+  const token = signToken({ id: user.id, role })
 
   // Load user permissions from group
   const db2 = getDb()
@@ -72,7 +74,7 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
       id: user.id,
       username: user.username,
       display_name: user.display_name,
-      role: user.role,
+      role,
       class: user.class,
       avatar: user.avatar,
       student_no: user.student_no,

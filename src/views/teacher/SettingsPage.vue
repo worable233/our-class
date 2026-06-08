@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import {
   NButton, NInput, NAlert, NSpace, NSpin, NSelect, NTabs, NTabPane,
@@ -11,7 +11,7 @@ import type { ChatSettings, ToolConfig } from '@/types'
 
 const message = useMessage()
 
-// ── Tab 1: API Config ────────────────────────────────────────────────────
+// ── Tab 1: API Config ────────────────────────────────────────
 
 const apiUrl = ref('')
 const apiKey = ref('')
@@ -23,7 +23,7 @@ const testing = ref(false)
 const testResult = ref<null | { ok: boolean; model?: string; latency?: number; tokens?: number; error?: string }>(null)
 const loaded = ref(false)
 
-// ── Tab 2: Feature Toggles ───────────────────────────────────────────────
+// ── Tab 2: Feature Toggles ──────────────────────────────────
 
 const settings = ref<ChatSettings>({
   enable_deep_think: false,
@@ -55,13 +55,13 @@ const selectedFileTypes = computed({
 
 const settingsSaving = ref(false)
 
-// ── Tab 3: Tool Config ───────────────────────────────────────────────────
+// ── Tab 3: Tool Config ───────────────────────────────────────
 
 const toolConfigs = ref<ToolConfig[]>([])
 const toolsLoading = ref(false)
 const toolsSaving = ref(false)
 
-// ── Load ─────────────────────────────────────────────────────────────────
+// ── Load ─────────────────────────────────────────────────────
 
 async function load() {
   loaded.value = true
@@ -87,7 +87,7 @@ async function load() {
   }
 }
 
-// ── Tab 1 Save ───────────────────────────────────────────────────────────
+// ── Tab 1 Save ──────────────────────────────────────────────
 
 async function saveApiConfig() {
   if (!apiKey.value.trim() && !hasKey.value) return
@@ -127,7 +127,7 @@ async function test() {
   }
 }
 
-// ── Tab 2 Save ───────────────────────────────────────────────────────────
+// ── Tab 2 Save ──────────────────────────────────────────────
 
 async function saveSettings() {
   settingsSaving.value = true
@@ -141,9 +141,8 @@ async function saveSettings() {
   }
 }
 
-// ── Tab 3 ────────────────────────────────────────────────────────────────
+// ── Tab 3 ───────────────────────────────────────────────────
 
-// Tool-specific config fields
 interface ToolConfigField { key: string; label: string; type: 'text' | 'number'; placeholder?: string }
 
 const toolFields: Record<string, ToolConfigField[]> = {
@@ -209,12 +208,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="max-width: 700px; margin: 0 auto">
+  <div>
     <n-spin :show="!loaded">
       <n-tabs type="line" animated>
         <!-- Tab 1: API Config -->
         <n-tab-pane name="api" tab="API 配置">
-          <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px">
+          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px">
             <div>
               <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">接口格式</div>
               <n-select
@@ -269,8 +268,7 @@ onMounted(load)
 
         <!-- Tab 2: Feature Toggles -->
         <n-tab-pane name="features" tab="功能开关">
-          <div style="display: flex; flex-direction: column; gap: 20px; padding-top: 8px">
-            <!-- Deep Think -->
+          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 20px; padding-top: 8px">
             <n-card size="small" :bordered="true">
               <div style="display: flex; align-items: center; justify-content: space-between">
                 <div>
@@ -284,7 +282,6 @@ onMounted(load)
               </div>
             </n-card>
 
-            <!-- File Upload -->
             <n-card size="small" :bordered="true">
               <div style="display: flex; align-items: center; justify-content: space-between">
                 <div>
@@ -297,7 +294,6 @@ onMounted(load)
               </div>
             </n-card>
 
-            <!-- File settings (visible when upload enabled) -->
             <template v-if="settings.enable_file_upload">
               <n-card size="small" title="文件上传设置" :bordered="true">
                 <n-form label-placement="top" style="display: flex; flex-direction: column; gap: 14px">
@@ -333,70 +329,66 @@ onMounted(load)
 
         <!-- Tab 3: Tool Config -->
         <n-tab-pane name="tools" tab="工具管理">
-          <n-spin :show="toolsLoading" style="min-height: 200px">
-            <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 8px">
-              <n-alert type="info" :bordered="false">
-                配置每个 AI 工具的参数。工具权限在「职位管理」页面中为每个权限组独立配置。
-              </n-alert>
-              <n-card
-                v-for="tc in toolConfigs"
-                :key="tc.tool_name"
-                size="small"
-                :bordered="true"
-                style="transition: opacity .2s"
-                :style="{ opacity: tc.enabled ? 1 : 0.5 }"
-              >
-                <div style="display: flex; align-items: flex-start; gap: 16px">
-                  <div style="flex: 1; min-width: 0">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-                      <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ toolLabels[tc.tool_name] || tc.tool_name }}</span>
-                      <n-switch v-model:value="tc.enabled" size="small" />
-                      <n-tag v-if="tc.enabled" size="tiny" type="success" :bordered="false">已启用</n-tag>
-                      <n-tag v-else size="tiny" type="warning" :bordered="false">已禁用</n-tag>
-                    </div>
+          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 12px; padding-top: 8px">
+            <n-alert type="info" :bordered="false">
+              配置每个 AI 工具的参数。工具权限在「职位管理」页面中为每个权限组独立配置。
+            </n-alert>
+            <n-card
+              v-for="tc in toolConfigs"
+              :key="tc.tool_name"
+              size="small"
+              :bordered="true"
+              style="transition: opacity .2s"
+              :style="{ opacity: tc.enabled ? 1 : 0.5 }"
+            >
+              <div style="display: flex; align-items: flex-start; gap: 16px">
+                <div style="flex: 1; min-width: 0">
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
+                    <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ toolLabels[tc.tool_name] || tc.tool_name }}</span>
+                    <n-switch v-model:value="tc.enabled" size="small" />
+                    <n-tag v-if="tc.enabled" size="tiny" type="success" :bordered="false">已启用</n-tag>
+                    <n-tag v-else size="tiny" type="warning" :bordered="false">已禁用</n-tag>
+                  </div>
 
-                    <div v-if="toolFields[tc.tool_name]?.length" style="display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px">
-                      <div v-for="field in toolFields[tc.tool_name]" :key="field.key" style="display: flex; align-items: center; gap: 6px">
-                        <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap">{{ field.label }}:</span>
-                        <n-input
-                          v-if="field.type === 'text'"
-                          :value="getConfigData(tc)[field.key] || ''"
-                          @update:value="v => updateConfigData(tc, field.key, v)"
-                          :placeholder="field.placeholder"
-                          size="small"
-                          style="width: 140px"
-                        />
-                        <n-input-number
-                          v-if="field.type === 'number'"
-                          :value="Number(getConfigData(tc)[field.key]) || 0"
-                          @update:value="v => updateConfigData(tc, field.key, v)"
-                          :placeholder="field.placeholder"
-                          size="small"
-                          style="width: 100px"
-                          :min="1"
-                        />
-                      </div>
-                    </div>
-
-                    <div style="display: flex; align-items: center; gap: 8px">
-                      <span style="font-size: 12px; color: var(--text-muted)">最大返回长度:</span>
-                      <n-input-number v-model:value="tc.max_result_length" size="small" style="width: 100px" :min="100" :max="10000" :step="100" />
-                      <span style="font-size: 11px; color: var(--text-muted)">字符</span>
+                  <div v-if="toolFields[tc.tool_name]?.length" style="display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px">
+                    <div v-for="field in toolFields[tc.tool_name]" :key="field.key" style="display: flex; align-items: center; gap: 6px">
+                      <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap">{{ field.label }}:</span>
+                      <n-input
+                        v-if="field.type === 'text'"
+                        :value="getConfigData(tc)[field.key] || ''"
+                        @update:value="v => updateConfigData(tc, field.key, v)"
+                        :placeholder="field.placeholder"
+                        size="small"
+                        style="width: 140px"
+                      />
+                      <n-input-number
+                        v-if="field.type === 'number'"
+                        :value="Number(getConfigData(tc)[field.key]) || 0"
+                        @update:value="v => updateConfigData(tc, field.key, v)"
+                        :placeholder="field.placeholder"
+                        size="small"
+                        style="width: 100px"
+                        :min="1"
+                      />
                     </div>
                   </div>
-                  <n-button size="tiny" type="primary" quaternary @click="saveToolConfig(tc)" style="flex-shrink: 0; margin-top: 4px">保存</n-button>
+
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span style="font-size: 12px; color: var(--text-muted)">最大返回长度:</span>
+                    <n-input-number v-model:value="tc.max_result_length" size="small" style="width: 100px" :min="100" :max="10000" :step="100" />
+                    <span style="font-size: 11px; color: var(--text-muted)">字符</span>
+                  </div>
                 </div>
-              </n-card>
-            </div>
-          </n-spin>
+                <n-button size="tiny" type="primary" quaternary @click="saveToolConfig(tc)" style="flex-shrink: 0; margin-top: 4px">保存</n-button>
+              </div>
+            </n-card>
+          </div>
         </n-tab-pane>
+
       </n-tabs>
     </n-spin>
   </div>
 </template>
 
 <style scoped>
-@media (max-width: 768px) {
-  .n-card { padding: 12px; }
-}
 </style>

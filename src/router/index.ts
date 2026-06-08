@@ -39,9 +39,9 @@ const router = createRouter({
           meta: { permissions: ['assignments.read'] },
         },
         {
-          path: 'students',
-          name: 'teacher-students',
-          component: () => import('@/views/teacher/StudentManage.vue'),
+          path: 'users',
+          name: 'teacher-users',
+          component: () => import('@/views/teacher/UserManage.vue'),
           meta: { permissions: ['students.read'] },
         },
         {
@@ -61,6 +61,12 @@ const router = createRouter({
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),
           meta: { permissions: ['chat.config'] },
+        },
+        {
+          path: 'site-data',
+          name: 'teacher-site-data',
+          component: () => import('@/views/teacher/SiteData.vue'),
+          meta: { permissions: ['students.read'] },
         },
         {
           path: 'skills',

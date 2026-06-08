@@ -66,6 +66,8 @@ const actionLabels: Record<string, string> = {
   update_skill: '编辑 Skill',
   delete_skill: '删除 Skill',
   reorder_skills: 'Skill 排序',
+  add_points: '加分',
+  deduct_points: '扣分',
 }
 
 const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
@@ -81,6 +83,8 @@ const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
   update_skill: 'info',
   delete_skill: 'error',
   reorder_skills: 'info',
+  add_points: 'success',
+  deduct_points: 'error',
 }
 
 const entityLabels: Record<string, string> = {
@@ -88,6 +92,7 @@ const entityLabels: Record<string, string> = {
   config: '系统设置',
   skill: 'Skill 管理',
   file: '文件管理',
+  point: '积分管理',
 }
 
 function formatTime(t: string) {
@@ -324,8 +329,12 @@ onMounted(() => {
 
 <template>
   <div>
-    <div style="margin-bottom: 16px; text-align: right;">
-      <NButton quaternary @click="reset" :disabled="loading">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">操作日志</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">查看所有用户的操作记录与系统变更</NText>
+      </div>
+      <NButton quaternary @click="reset" :disabled="loading" round>
         <template #icon><RefreshCw :size="15" /></template>
         刷新
       </NButton>

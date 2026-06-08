@@ -28,6 +28,7 @@ import roleRoutes from './routes/roles.js'
 import auditRoutes from './routes/audit.js'
 import analyticsRoutes, { trackPageView } from './routes/analytics.js'
 import reviewTypeRoutes from './routes/reviewTypes.js'
+import teacherRoutes from './routes/teachers.js'
 
 const app = express()
 
@@ -81,6 +82,7 @@ app.use('/api/auth', authRoutes)
 // Protected routes
 app.use('/api/classes', authMiddleware, classRoutes)
 app.use('/api/students', authMiddleware, studentRoutes)
+app.use('/api/teachers', authMiddleware, teacherRoutes)
 app.use('/api/scores', authMiddleware, scoreRoutes)
 app.use('/api/assignments', authMiddleware, assignmentRoutes)
 app.use('/api/points', authMiddleware, pointRoutes)

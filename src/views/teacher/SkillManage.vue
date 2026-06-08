@@ -162,8 +162,11 @@ onMounted(load)
 
 <template>
   <div class="skill-page">
-    <div class="skill-header">
-      <NText tag="h2" class="skill-title">Skill 管理</NText>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">Skill 管理</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理系统提示词，可在 AI 对话中作为预设指令使用</NText>
+      </div>
       <NButton type="primary" @click="openNew" round>
         <template #icon><Plus :size="16" /></template>
         新建 Skill
@@ -299,11 +302,6 @@ onMounted(load)
 
 <style scoped>
 .skill-page { max-width: 800px; margin: 0 auto; }
-.skill-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px;
-}
-.skill-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
 
 .skill-drag-handle {
   cursor: grab; color: var(--text-muted);

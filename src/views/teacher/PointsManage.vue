@@ -5,25 +5,38 @@ import { useAuthStore } from '@/stores/auth'
 import type { Student, PointRecord, PointSummary } from '@/types'
 import { useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NButtonGroup,
+  NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NGrid, NGi, NSpin, NIcon,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Shuffle, Star } from '@lucide/vue'
+import { Shuffle, Star, ArrowLeft, School, Users } from '@lucide/vue'
 
 interface ReviewType {
   id: number; name: string; emoji: string
   type: 'add' | 'deduct'; amount: number; is_active: number
 }
 
+interface ClassInfo {
+  id: number
+  name: string
+  student_count: number
+}
+
 const message = useMessage()
 const auth = useAuthStore()
-const classes = ref<string[]>([])
-const currentClass = ref('')
+const allClasses = ref<ClassInfo[]>([])
+const selectedClass = ref<ClassInfo | null>(null)
+
+// 教师只显示自己管理的班级
+const classList = computed(() => {
+  const myClasses = (auth.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+  if (myClasses.length === 0) return allClasses.value // 管理员看到全部
+  return allClasses.value.filter(c => myClasses.includes(c.name))
+})
 const students = ref<Student[]>([])
 const pointSummary = ref<PointSummary[]>([])
 const records = ref<PointRecord[]>([])
 const reviewTypes = ref<ReviewType[]>([])
-const loading = ref(true)
+const loading = ref(false)
 
 // Quick action state
 const quickAction = ref<{ student: Student; show: boolean } | null>(null)
@@ -43,22 +56,24 @@ function getRank(studentId: number): number {
 }
 
 async function loadClasses() {
-  classes.value = (await api.get<string[]>('/classes')) || []
-  const first = classes.value[0]; if (first) currentClass.value = first
+  allClasses.value = await api.get<ClassInfo[]>('/classes').catch(() => [])
 }
 
 async function loadStudents() {
-  const url = currentClass.value ? `/students?class=${encodeURIComponent(currentClass.value)}` : '/students'
+  if (!selectedClass.value) return
+  const url = `/students?class=${encodeURIComponent(selectedClass.value.name)}`
   students.value = await api.get<Student[]>(url)
 }
 
 async function loadPoints() {
-  const url = currentClass.value ? `/points/summary?class=${encodeURIComponent(currentClass.value)}` : '/points/summary'
+  if (!selectedClass.value) return
+  const url = `/points/summary?class=${encodeURIComponent(selectedClass.value.name)}`
   pointSummary.value = await api.get<PointSummary[]>(url)
 }
 
 async function loadRecords() {
-  const url = currentClass.value ? `/points?class=${encodeURIComponent(currentClass.value)}` : '/points'
+  if (!selectedClass.value) return
+  const url = `/points?class=${encodeURIComponent(selectedClass.value.name)}`
   records.value = await api.get<PointRecord[]>(url)
 }
 
@@ -72,9 +87,16 @@ async function loadAll() {
   loading.value = false
 }
 
-async function switchClass(cls: string) {
-  currentClass.value = cls
-  await loadAll()
+function enterClass(cls: ClassInfo) {
+  selectedClass.value = cls
+  loadAll()
+}
+
+function backToClasses() {
+  selectedClass.value = null
+  students.value = []
+  pointSummary.value = []
+  records.value = []
 }
 
 // Open quick action modal with review types
@@ -162,7 +184,6 @@ function quickForRandom(type: 'add' | 'deduct', amount: number) {
   if (!randomResult.value) return
   randomStop = true; randoming.value = false
   randomModalVisible.value = false
-  // Find matching review type, fall back to first of same type
   let rt = reviewTypes.value.find(t => t.type === type && t.amount === amount)
   if (!rt) rt = reviewTypes.value.find(t => t.type === type)
   if (rt) {
@@ -177,68 +198,101 @@ function openScoreCard(student: Student) {
   openQuick(student)
 }
 
-async function refreshAll() { await loadClasses(); await loadAll() }
+async function refreshAll() { await loadClasses() }
 useRefresh(refreshAll)
-onMounted(refreshAll)
+onMounted(loadClasses)
 </script>
 
 <template>
   <div>
-    <!-- Top Bar -->
-    <NCard size="small" :bordered="true" style="margin-bottom:24px;padding:4px 0">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <NText depth="3" style="font-size:13px;font-weight:500;margin-right:4px">班级</NText>
-          <NButton v-for="cls in classes" :key="cls" size="small" :type="cls === currentClass ? 'primary' : 'default'" @click="switchClass(cls)">{{ cls }}</NButton>
-        </div>
-        <NButton @click="openRandomModal"><Shuffle :size="16" /> 抽号</NButton>
+    <!-- ════ 班级内部视图 ════ -->
+    <template v-if="selectedClass">
+      <!-- 路径导航 -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <NButton quaternary size="tiny" @click="backToClasses" style="padding:0;font-size:13px;color:var(--text-muted);height:auto;min-height:0" :bordered="false">
+          积分管理
+        </NButton>
+        <span style="color:var(--text-muted);font-size:12px">/</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary)">{{ selectedClass.name }}</span>
+        <NTag size="tiny" type="info" round :bordered="false" style="margin-left:2px">{{ selectedClass.student_count }} 人</NTag>
+        <div style="flex:1" />
+        <NButton @click="openRandomModal" round size="small">
+          <template #icon><Shuffle :size="16" /></template>
+          抽号
+        </NButton>
       </div>
-    </NCard>
+    </template>
 
-    <!-- Student Grid -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <NText strong style="font-size:15px;letter-spacing:-0.01em">学生花名册</NText>
-      <NText depth="3" style="font-size:12px">{{ students.length }} 人</NText>
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">积分管理</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级后管理学生积分，支持加减分与随机抽取</NText>
+      </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-bottom:32px">
-      <NCard v-for="s in students" :key="s.id" size="small" hoverable
-        style="position:relative;overflow:hidden;cursor:pointer"
-        @click="openScoreCard(s)"
-        :class="{ 'has-anim': floatingAnim?.id === s.id }"
-      >
-        <div v-if="floatingAnim?.id === s.id" class="float-point" :class="floatingAnim.type">{{ floatingAnim.text }}</div>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <NAvatar
-            :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }"
-            :size="46"
-            round
-          >{{ s.display_name.charAt(0) }}</NAvatar>
-          <NText style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</NText>
-          <NText style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
-            <Star :size="16" /> {{ getPoints(s.id) }}
-          </NText>
-        </div>
-      </NCard>
-      <NEmpty v-if="students.length === 0" description="该班级暂无学生" />
-    </div>
-
-    <!-- Recent Activity -->
-    <n-card size="small" style="margin-bottom:24px">
-      <template #header><n-text strong style="font-size:15px">最近动态</n-text></template>
-      <div v-for="r in records.slice(0, 15)" :key="r.id"
-        style="display:flex;align-items:center;gap:12px;padding:8px;font-size:13px"
-      >
-        <n-tag :type="r.type === 'add' ? 'success' : 'error'" size="small" :bordered="false">{{ r.type === 'add' ? '+' : '−' }}</n-tag>
-        <div style="flex:1;display:flex;gap:8px;align-items:center;min-width:0">
-          <n-text style="font-weight:500;white-space:nowrap">{{ r.student_name }}</n-text>
-          <n-text depth="3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.reason }}</n-text>
-        </div>
-        <n-text :type="r.type === 'add' ? 'success' : 'error'" style="font-weight:700;font-size:14px;min-width:28px;text-align:right">{{ r.type === 'add' ? '+' : '' }}{{ r.amount }}</n-text>
-        <n-text depth="3" style="font-size:12px;min-width:80px;text-align:right;flex-shrink:0">{{ r.date }}</n-text>
+    <!-- ════ 班级选择视图 ════ -->
+    <template v-if="!selectedClass">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+        <School :size="20" style="color:var(--accent-text)" />
+        <NText style="font-size:17px;font-weight:700;color:var(--text-primary)">选择班级</NText>
+        <NText depth="3" style="font-size:13px">共 {{ classList.length }} 个班级</NText>
       </div>
-      <n-empty v-if="records.length === 0" description="暂无记录" />
-    </n-card>
+
+      <n-grid :cols="4" :x-gap="16" :y-gap="16">
+        <n-gi v-for="cls in classList" :key="cls.id">
+          <NCard
+            hoverable
+            size="small"
+            :bordered="true"
+            class="class-card"
+            @click="enterClass(cls)"
+          >
+            <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0">
+              <div class="class-card-icon">
+                <School :size="28" />
+              </div>
+              <NText style="font-size:16px;font-weight:700;color:var(--text-primary);text-align:center">{{ cls.name }}</NText>
+              <NTag size="small" type="info" round :bordered="false">
+                <template #icon><Users :size="12" /></template>
+                {{ cls.student_count }} 人
+              </NTag>
+            </div>
+          </NCard>
+        </n-gi>
+        <n-gi v-if="classList.length === 0">
+          <NEmpty description="暂无班级数据，请先创建班级" />
+        </n-gi>
+      </n-grid>
+    </template>
+
+    <!-- ════ 班级内部视图：内容 ════ -->
+    <template v-if="selectedClass">
+
+      <NSpin :show="loading" style="min-height:300px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-bottom:32px">
+          <NCard v-for="s in students" :key="s.id" size="small" hoverable
+            style="position:relative;overflow:hidden;cursor:pointer"
+            @click="openScoreCard(s)"
+            :class="{ 'has-anim': floatingAnim?.id === s.id }"
+          >
+            <div v-if="floatingAnim?.id === s.id" class="float-point" :class="floatingAnim.type">{{ floatingAnim.text }}</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <NAvatar
+                :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }"
+                :size="46"
+                round
+              >{{ s.display_name.charAt(0) }}</NAvatar>
+              <NText style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</NText>
+              <NText style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
+                <Star :size="16" /> {{ getPoints(s.id) }}
+              </NText>
+            </div>
+          </NCard>
+          <NEmpty v-if="students.length === 0" description="该班级暂无学生" />
+        </div>
+      </NSpin>
+    </template>
 
     <!-- Review Type Selection Modal -->
     <n-modal
@@ -262,43 +316,39 @@ onMounted(refreshAll)
         </div>
       </template>
 
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <!-- Add Types -->
+      <div style="display:flex;flex-direction:column;gap:20px">
         <div v-if="addTypes.length > 0">
-          <NText :style="{fontSize:'12px',fontWeight:600,color:'#18a058',display:'block',marginBottom:'8px'}">正向加分</NText>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <NButton v-for="t in addTypes" :key="t.id"
-              :type="selectedReview?.id === t.id ? 'success' : 'default'"
-              :secondary="selectedReview?.id === t.id"
-              quaternary
-              block
-              style="padding:10px 12px;height:auto"
-              @click="selectedReview = t; confirmQuick()"
-            >
-              <span style="font-size:20px;line-height:1;margin-right:8px">{{ t.emoji }}</span>
-              <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
-              <span style="font-size:13px;font-weight:700;color:#18a058">+{{ t.amount }}</span>
-            </NButton>
-          </div>
+          <NText :style="{fontSize:'14px',fontWeight:700,color:'#18a058',display:'block',marginBottom:'16px'}">
+            <span style="margin-right:6px">🎉</span>表扬
+          </NText>
+          <n-grid :cols="4" :x-gap="24" :y-gap="20">
+            <n-gi v-for="t in addTypes" :key="t.id">
+              <div class="review-option" :class="{ selected: selectedReview?.id === t.id }" @click="selectedReview = t; confirmQuick()">
+                <div class="review-option-circle add">
+                  <span class="review-option-emoji">{{ t.emoji }}</span>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:#18a058;color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">+{{ t.amount }}</n-tag>
+                </div>
+                <span class="review-option-name">{{ t.name }}</span>
+              </div>
+            </n-gi>
+          </n-grid>
         </div>
 
-        <!-- Deduct Types -->
         <div v-if="deductTypes.length > 0">
-          <NText :style="{fontSize:'12px',fontWeight:600,color:'#d03050',display:'block',marginBottom:'8px'}">负向约束</NText>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <NButton v-for="t in deductTypes" :key="t.id"
-              :type="selectedReview?.id === t.id ? 'error' : 'default'"
-              :secondary="selectedReview?.id === t.id"
-              quaternary
-              block
-              style="padding:10px 12px;height:auto"
-              @click="selectedReview = t; confirmQuick()"
-            >
-              <span style="font-size:20px;line-height:1;margin-right:8px">{{ t.emoji }}</span>
-              <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
-              <span style="font-size:13px;font-weight:700;color:#d03050">-{{ t.amount }}</span>
-            </NButton>
-          </div>
+          <NText :style="{fontSize:'14px',fontWeight:700,color:'#d03050',display:'block',marginBottom:'16px'}">
+            <span style="margin-right:6px">🔧</span>待改进
+          </NText>
+          <n-grid :cols="4" :x-gap="24" :y-gap="20">
+            <n-gi v-for="t in deductTypes" :key="t.id">
+              <div class="review-option" :class="{ selected: selectedReview?.id === t.id }" @click="selectedReview = t; confirmQuick()">
+                <div class="review-option-circle deduct">
+                  <span class="review-option-emoji">{{ t.emoji }}</span>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:#d03050;color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">-{{ t.amount }}</n-tag>
+                </div>
+                <span class="review-option-name">{{ t.name }}</span>
+              </div>
+            </n-gi>
+          </n-grid>
         </div>
 
         <n-empty v-if="addTypes.length === 0 && deductTypes.length === 0" description="暂无点评类型，请先在点评类型页面创建" />
@@ -357,6 +407,25 @@ onMounted(refreshAll)
 </template>
 
 <style scoped>
+.class-card {
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+.class-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent) !important;
+}
+.class-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent-glow);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .float-point {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 44px; font-weight: 800; pointer-events: none;
@@ -387,6 +456,57 @@ onMounted(refreshAll)
 .rm-result-btns { display:flex; gap:8px; justify-content:center; }
 .result-fade-enter-active, .result-fade-leave-active { transition:all 400ms var(--ease-out); }
 .result-fade-enter-from, .result-fade-leave-to { opacity:0; transform:translateY(10px) scale(0.95); }
+
+.review-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out);
+}
+.review-option:hover {
+  transform: translateY(-4px);
+}
+.review-option.selected .review-option-circle {
+  box-shadow: 0 0 0 3px var(--accent), 0 4px 16px rgba(94,106,210,0.25);
+}
+
+.review-option-circle {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.2s var(--ease-out);
+}
+.review-option:hover .review-option-circle {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+.review-option-circle.add {
+  background: linear-gradient(135deg, rgba(24,160,88,0.15), rgba(24,160,88,0.06));
+  border: 2px solid rgba(24,160,88,0.25);
+}
+.review-option-circle.deduct {
+  background: linear-gradient(135deg, rgba(208,48,80,0.15), rgba(208,48,80,0.06));
+  border: 2px solid rgba(208,48,80,0.25);
+}
+
+.review-option-emoji {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.review-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 80px;
+  line-height: 1.3;
+}
 
 @media (max-width:768px) {
   .page-header { flex-direction:column; align-items:flex-start; gap:12px; }

@@ -38,6 +38,7 @@ function closeSidebar() { sidebarOpen.value = false }
 <style>
 /* unscoped for sidebar z-index */
 .mobile-sidebar { z-index: 100 !important; }
+.n-layout { background-color: transparent !important; }
 @media (max-width: 768px) {
   main { padding: 16px !important; }
 }

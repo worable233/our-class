@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useDialog, useMessage } from 'naive-ui'
 import {
   NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
-  NSpin, NEmpty, NText, NCard, NTag,
+  NSpin, NEmpty, NText, NGrid, NGi, NTag, NAvatar, NIcon,
 } from 'naive-ui'
 import { Plus, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
 
@@ -90,6 +90,7 @@ onMounted(load)
 
 <template>
   <div>
+    <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">点评类型</NText>
@@ -101,42 +102,125 @@ onMounted(load)
       </NButton>
     </div>
 
-    <NSpin :show="loading" style="min-height:200px">
+    <NSpin :show="loading" style="min-height:300px">
       <template v-if="types.length > 0">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <NCard size="small" :bordered="true">
-            <template #header>
-              <div style="display:flex;align-items:center;gap:8px">
-                <ThumbsUp :size="16" style="color:#18a058" />
-                <NText style="font-weight:600">正向加分</NText>
-                <NTag size="small" type="success" round :bordered="false">{{ addTypes.length }}</NTag>
-              </div>
-            </template>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <NButton v-for="t in addTypes" :key="t.id" quaternary block style="padding:8px;height:auto" @click="openEdit(t)">
-                <span style="font-size:20px;line-height:1;margin-right:6px">{{ t.emoji }}</span>
-                <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
-                <span style="font-size:13px;font-weight:700;color:#18a058">+{{ t.amount }}</span>
-              </NButton>
+        <!-- 表扬区 -->
+        <section style="margin-bottom:40px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+            <div style="width:32px;height:32px;border-radius:50%;background:rgba(24,160,88,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <ThumbsUp :size="16" style="color:#18a058" />
             </div>
-          </NCard>
-          <NCard size="small" :bordered="true">
-            <template #header>
-              <div style="display:flex;align-items:center;gap:8px">
-                <ShieldBan :size="16" style="color:#d03050" />
-                <NText style="font-weight:600">负向约束</NText>
-                <NTag size="small" type="error" round :bordered="false">{{ deductTypes.length }}</NTag>
+            <NText style="font-size:18px;font-weight:700;color:var(--text-primary)">表扬</NText>
+            <NTag size="small" type="success" round :bordered="false">{{ addTypes.length }} 项</NTag>
+          </div>
+
+          <n-grid v-if="addTypes.length > 0" :cols="6" :x-gap="48" :y-gap="32">
+            <n-gi v-for="t in addTypes" :key="t.id">
+              <div class="review-item" @click="openEdit(t)" :title="'点击编辑'">
+                <div class="review-circle-wrap">
+                  <n-avatar
+                    :size="80"
+                    round
+                    :style="{
+                      background: 'linear-gradient(135deg, rgba(24,160,88,0.15), rgba(24,160,88,0.06))',
+                      border: '2px solid rgba(24,160,88,0.25)',
+                      fontSize: '32px',
+                      cursor: 'pointer',
+                      transition: 'box-shadow 0.2s var(--ease-out)',
+                    }"
+                    class="review-avatar"
+                  >
+                    {{ t.emoji }}
+                  </n-avatar>
+                  <n-tag
+                    size="tiny"
+                    round
+                    :bordered="false"
+                    class="review-badge"
+                    :style="{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-6px',
+                      background: '#18a058',
+                      color: '#fff',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '0 5px',
+                      lineHeight: '22px',
+                      minWidth: '28px',
+                      justifyContent: 'center',
+                    }"
+                  >
+                    +{{ t.amount }}
+                  </n-tag>
+                </div>
+                <n-text class="review-name" style="display:block;text-align:center;font-size:14px;font-weight:600;margin-top:10px;max-width:90px;line-height:1.3">
+                  {{ t.name }}
+                </n-text>
               </div>
-            </template>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <NButton v-for="t in deductTypes" :key="t.id" quaternary block style="padding:8px;height:auto" @click="openEdit(t)">
-                <span style="font-size:20px;line-height:1;margin-right:6px">{{ t.emoji }}</span>
-                <span style="flex:1;font-size:13px;font-weight:500;text-align:left">{{ t.name }}</span>
-                <span style="font-size:13px;font-weight:700;color:#d03050">-{{ t.amount }}</span>
-              </NButton>
+            </n-gi>
+          </n-grid>
+          <NEmpty v-else :description="'暂无表扬点评项'" style="padding:24px 0" />
+        </section>
+
+        <!-- 待改进区 -->
+        <section>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+            <div style="width:32px;height:32px;border-radius:50%;background:rgba(208,48,80,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <ShieldBan :size="16" style="color:#d03050" />
             </div>
-          </NCard>
-        </div>
+            <NText style="font-size:18px;font-weight:700;color:var(--text-primary)">待改进</NText>
+            <NTag size="small" type="error" round :bordered="false">{{ deductTypes.length }} 项</NTag>
+          </div>
+
+          <n-grid v-if="deductTypes.length > 0" :cols="6" :x-gap="48" :y-gap="32">
+            <n-gi v-for="t in deductTypes" :key="t.id">
+              <div class="review-item" @click="openEdit(t)" :title="'点击编辑'">
+                <div class="review-circle-wrap">
+                  <n-avatar
+                    :size="80"
+                    round
+                    :style="{
+                      background: 'linear-gradient(135deg, rgba(208,48,80,0.15), rgba(208,48,80,0.06))',
+                      border: '2px solid rgba(208,48,80,0.25)',
+                      fontSize: '32px',
+                      cursor: 'pointer',
+                      transition: 'box-shadow 0.2s var(--ease-out)',
+                    }"
+                    class="review-avatar"
+                  >
+                    {{ t.emoji }}
+                  </n-avatar>
+                  <n-tag
+                    size="tiny"
+                    round
+                    :bordered="false"
+                    class="review-badge"
+                    :style="{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-6px',
+                      background: '#d03050',
+                      color: '#fff',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      padding: '0 5px',
+                      lineHeight: '22px',
+                      minWidth: '28px',
+                      justifyContent: 'center',
+                    }"
+                  >
+                    -{{ t.amount }}
+                  </n-tag>
+                </div>
+                <n-text class="review-name" style="display:block;text-align:center;font-size:14px;font-weight:600;margin-top:10px;max-width:90px;line-height:1.3">
+                  {{ t.name }}
+                </n-text>
+              </div>
+            </n-gi>
+          </n-grid>
+          <NEmpty v-else :description="'暂无待改进点评项'" style="padding:24px 0" />
+        </section>
       </template>
       <NEmpty v-else description="暂无点评类型" />
     </NSpin>
@@ -201,9 +285,28 @@ onMounted(load)
 </template>
 
 <style scoped>
-@media (max-width: 768px) {
-  .palette { grid-template-columns: 1fr; gap: 20px; }
-  .matrix { grid-template-columns: 1fr 1fr; }
+.review-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out);
+}
+.review-item:hover {
+  transform: translateY(-4px);
+}
+.review-item:hover .review-avatar {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
 }
 
+.review-circle-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+@media (max-width: 768px) {
+  section :deep(.n-grid) {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
 </style>

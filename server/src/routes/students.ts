@@ -8,6 +8,8 @@ import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 const router = Router()
 
+const STUDENT_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE name = '学生')"
+
 const createSchema = z.object({
   display_name: z.string().min(1, '请输入学生姓名'),
   class: z.string().optional().default(''),
@@ -32,7 +34,7 @@ const updateSchema = z.object({
 router.get('/', requirePermission('students.read'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
-  let sql = `SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE role = 'student'`
+  let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
   const params: string[] = []
 
   if (className) {
@@ -54,12 +56,12 @@ router.post('/', requirePermission('students.write'), validate(createSchema), (r
   const pw = req.body.password
   // Default to "学生" permission group if none specified
   const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as any)?.id ?? null
-  const result = db.prepare('INSERT INTO users (username, display_name, role, class, password, group_id, student_no, nickname) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(uname, display_name, 'student', stuClass, pw, finalGroupId, studentNo, nickname ?? null)
+  const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, student_no, nickname) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(uname, display_name, stuClass, pw, finalGroupId, studentNo, nickname ?? null)
 
   const student = db
     .prepare(
-      'SELECT id, username, display_name, role, class, avatar, student_no, nickname FROM users WHERE id = ?',
+      'SELECT id, username, display_name, class, avatar, student_no, nickname FROM users WHERE id = ?',
     )
     .get(result.lastInsertRowid)
   ok(res, student)
@@ -70,7 +72,7 @@ router.get('/:id', requirePermission('students.read'), (req: Request, res: Respo
   const db = getDb()
   const student = db
     .prepare(
-      `SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE id = ? AND role = 'student'`,
+      `SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
     )
     .get(req.params.id)
 
@@ -119,13 +121,13 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
     values.push(req.body.nickname)
   }
 
-  values.push(req.params.id, 'student')
+  values.push(req.params.id)
 
-  db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND role = ?`).run(...values)
+  db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).run(...values)
 
   const updated = db
     .prepare(
-      'SELECT id, username, display_name, role, class, avatar, student_no, nickname, password FROM users WHERE id = ?',
+      'SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE id = ?',
     )
     .get(req.params.id)
 
@@ -139,7 +141,7 @@ router.delete('/:id', requirePermission('students.delete'), (req: Request, res: 
   const id = req.params.id
 
   // Check student exists
-  const student = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student'").get(id)
+  const student = db.prepare(`SELECT id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).get(id)
   if (!student) throw new NotFoundError('学生不存在')
 
   // Cascade delete all related data
@@ -151,7 +153,7 @@ router.delete('/:id', requirePermission('students.delete'), (req: Request, res: 
   db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(id)
   db.prepare('DELETE FROM scores WHERE student_id = ?').run(id)
   db.prepare('DELETE FROM point_records WHERE student_id = ?').run(id)
-  db.prepare('DELETE FROM users WHERE id = ? AND role = ?').run(id, 'student')
+  db.prepare(`DELETE FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).run(id)
 
   ok(res, { success: true })
 })

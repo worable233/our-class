@@ -2,7 +2,7 @@
 // @ts-nocheck - globe.gl and three.js types
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { BASE } from '@/api/client'
-import { NSpin, NEmpty, NButton } from 'naive-ui'
+import { NSpin, NEmpty, NButton, NText } from 'naive-ui'
 import { RotateCw } from '@lucide/vue'
 
 function getToken(): string {
@@ -137,8 +137,12 @@ onUnmounted(() => {
 
 <template>
   <div style="height:100%;display:flex;flex-direction:column;">
-    <div style="margin-bottom: 12px; text-align: right;">
-      <NButton quaternary size="small" @click="load" :disabled="loading">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">流量监控</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">实时监控网站访问流量与 API 调用情况</NText>
+      </div>
+      <NButton quaternary size="small" @click="load" :disabled="loading" round>
         <template #icon><RotateCw :size="15" /></template> 刷新
       </NButton>
     </div>

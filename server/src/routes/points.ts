@@ -5,6 +5,7 @@ import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { ValidationError } from '../lib/errors.js'
+import { writeAuditLog } from './audit.js'
 
 const router = Router()
 
@@ -53,7 +54,8 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
       COALESCE(SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE -p.amount END), 0) as total_points
     FROM users u
     LEFT JOIN point_records p ON u.id = p.student_id
-    WHERE u.role = 'student'`
+    JOIN permission_groups pg ON pg.name = '学生'
+    WHERE u.group_id = pg.id`
   const params: (string | number)[] = []
 
   if (className) {
@@ -72,6 +74,16 @@ router.post('/', requirePermission('points.write'), validate(createPointSchema),
   const result = db.prepare(
     `INSERT INTO point_records (student_id, reason, type, amount, created_by, date, review_type_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(student_id, reason, type, amount, req.user?.id ?? 1, date ?? new Date().toISOString().split('T')[0], review_type_id || null)
+  // 写入操作日志
+  const student = db.prepare('SELECT display_name FROM users WHERE id = ?').get(student_id) as { display_name: string } | undefined
+  writeAuditLog(
+    req.user!.id,
+    req.user!.display_name,
+    type === 'add' ? 'add_points' : 'deduct_points',
+    'point',
+    result.lastInsertRowid as number,
+    { student_id, student_name: student?.display_name || '', reason, amount, type },
+  )
   ok(res, { id: result.lastInsertRowid, ...req.body })
 })
 

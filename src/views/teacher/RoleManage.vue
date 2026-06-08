@@ -119,7 +119,11 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="margin-bottom: 16px; text-align: right;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">职位管理</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理权限组及其可访问的模块和功能</NText>
+      </div>
       <NButton type="primary" @click="openNew" round :disabled="allPermissions.length === 0">
         <template #icon><Plus :size="16" /></template>
         新建职位

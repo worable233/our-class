@@ -148,10 +148,16 @@ onMounted(load)
 
 <template>
   <div>
-    <n-space style="margin-bottom: 20px">
-      <n-select v-model:value="selectedCourse" :options="courseOptions" style="width: 160px" />
-      <n-select v-model:value="selectedExam" :options="examOptions" style="width: 160px" />
-    </n-space>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">成绩管理</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">录入和管理学生的考试成绩与排名</NText>
+      </div>
+      <n-space>
+        <n-select v-model:value="selectedCourse" :options="courseOptions" style="width: 160px" />
+        <n-select v-model:value="selectedExam" :options="examOptions" style="width: 160px" />
+      </n-space>
+    </div>
 
     <n-data-table
       :columns="columns"

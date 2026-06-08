@@ -69,9 +69,14 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="margin-bottom: 16px; text-align: right;">
-      <n-button type="primary" @click="showNew = true">
-        <Plus :size="16" /> 发布作业
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">作业管理</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">发布和查看各科作业及学生提交情况</NText>
+      </div>
+      <n-button type="primary" @click="showNew = true" round>
+        <template #icon><Plus :size="16" /></template>
+        发布作业
       </n-button>
     </div>
 

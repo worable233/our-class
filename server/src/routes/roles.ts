@@ -114,6 +114,12 @@ router.post('/groups', requirePermission('roles.manage'), validate(createGroupSc
   const db = getDb()
   const { name, description, permissions } = req.body
 
+  // 检查名称唯一性
+  const dup = db.prepare('SELECT id FROM permission_groups WHERE name = ?').get(name)
+  if (dup) {
+    return fail(res, 409, 'DUPLICATE_NAME', `权限组「${name}」已存在`)
+  }
+
   const result = db.prepare(
     'INSERT INTO permission_groups (name, description) VALUES (?, ?)'
   ).run(name, description)
@@ -144,8 +150,12 @@ router.put('/groups/:id', requirePermission('roles.manage'), validate(updateGrou
   const existing = db.prepare('SELECT * FROM permission_groups WHERE id = ?').get(id)
   if (!existing) throw new NotFoundError('权限组不存在')
 
-  // Update name and description if provided
+  // 检查名称唯一性（排除自身）
   if (req.body.name) {
+    const dup = db.prepare('SELECT id FROM permission_groups WHERE name = ? AND id != ?').get(req.body.name, id)
+    if (dup) {
+      return fail(res, 409, 'DUPLICATE_NAME', `权限组「${req.body.name}」已存在`)
+    }
     db.prepare('UPDATE permission_groups SET name = ? WHERE id = ?').run(req.body.name, id)
   }
   if (req.body.description !== undefined) {
