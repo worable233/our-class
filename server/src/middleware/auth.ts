@@ -47,19 +47,34 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as JwtPayload
     const db = getDb()
     const user = db.prepare(
-      'SELECT id, username, display_name, role, class FROM users WHERE id = ?',
-    ).get(payload.id) as Omit<Express.Request['user'], 'permissions'>
+      'SELECT id, username, display_name, role, class, group_id FROM users WHERE id = ?',
+    ).get(payload.id) as (Omit<Express.Request['user'], 'permissions'> & { group_id: number | null })
 
     if (!user) throw new AuthError()
 
-    const permRows = db.prepare(`
-      SELECT DISTINCT gp.permission_code
-      FROM group_permissions gp
-      JOIN users u ON u.group_id = gp.group_id
-      WHERE u.id = ?
-    `).all(payload.id) as { permission_code: string }[]
+    let permissions: string[] = []
+    if (user.group_id) {
+      const permRows = db.prepare(`
+        SELECT DISTINCT gp.permission_code
+        FROM group_permissions gp
+        WHERE gp.group_id = ?
+      `).all(user.group_id) as { permission_code: string }[]
+      permissions = permRows.map(r => r.permission_code)
+    } else {
+      // User has no group — assign to default group based on role
+      const defaultGroup = db.prepare(
+        "SELECT id FROM permission_groups WHERE name = ?"
+      ).get(user.role === 'teacher' ? '教师' : '学生') as { id: number } | undefined
+      if (defaultGroup) {
+        db.prepare("UPDATE users SET group_id = ? WHERE id = ? AND group_id IS NULL").run(defaultGroup.id, user.id)
+        const permRows = db.prepare(
+          "SELECT permission_code FROM group_permissions WHERE group_id = ?"
+        ).all(defaultGroup.id) as { permission_code: string }[]
+        permissions = permRows.map(r => r.permission_code)
+      }
+    }
 
-    req.user = { ...user, permissions: permRows.map(r => r.permission_code) }
+    req.user = { ...user, permissions }
     next()
   } catch (err) {
     if (err instanceof AuthError) throw err
