@@ -144,14 +144,16 @@ onMounted(async () => {
   if (!auth.isLoggedIn) { router.push('/login'); return }
 
   const seq = ++loadSeq
-  // Check config before loading conversation
-  try {
-    const config = await api.get<any>('/chat/config')
+  // Check config before loading conversation (only for teachers)
+  if (auth.isTeacher) {
+    try {
+      const config = await api.get<any>('/chat/config')
+      if (loadSeq !== seq) return
+      hasConfig.value = !!config
+    } catch {}
     if (loadSeq !== seq) return
-    hasConfig.value = !!config
-  } catch {}
-  if (loadSeq !== seq) return
-  if (!hasConfig.value) { router.push('/teacher/settings'); return }
+    if (!hasConfig.value) { router.push('/teacher/settings'); return }
+  }
 
   try {
     const id = parseInt(atob((encoded as string).replace(/-/g, '+').replace(/_/g, '/')))
@@ -347,8 +349,8 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
 
   // Lazy create conversation on first message
   if (!currentConvId.value) {
-    // Lazy config check
-    if (!hasConfig.value) {
+    // Lazy config check — only teachers need to verify AI is configured
+    if (auth.isTeacher && !hasConfig.value) {
       try {
         const config = await api.get<any>('/chat/config')
         hasConfig.value = !!config
@@ -568,6 +570,7 @@ async function continueGeneration() {
 
   let queue = ''
   let done = false
+  let _thinkingAccum = ''
 
   // Reuse tick for character animation
   const tick = () => {
@@ -603,7 +606,7 @@ async function continueGeneration() {
     const response = await fetch(`/api/chat/conversations/${currentConvId.value}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ continue: true }),
+      body: JSON.stringify({ continue: true, thinking: deepThink.value }),
       signal: abortCtrl.signal,
     })
     if (!response.ok) {
@@ -627,6 +630,33 @@ async function continueGeneration() {
           if (data.type === 'text') {
             queue += data.content
             if (!streamTimer) tick()
+          } else if (data.type === 'thinking_start') {
+            if (currentConvId.value === convId) {
+              messages.value.splice(messages.value.length - 1, 0, { role: "tool" as any, content: "深度思考中...", toolStatus: "running" } as any)
+            }
+          } else if (data.type === 'thinking') {
+            if (currentConvId.value === convId) {
+              _thinkingAccum += data.content
+              for (let j = messages.value.length - 1; j >= 0; j--) {
+                const m = messages.value[j] as any
+                if (m.role === "tool" && m.content === "深度思考中...") {
+                  m.content = "思考中 " + data.content.slice(0, 20) + "..."
+                  break
+                }
+              }
+            }
+          } else if (data.type === 'thinking_done') {
+            if (currentConvId.value === convId) {
+              for (let j = messages.value.length - 1; j >= 0; j--) {
+                const m = messages.value[j] as any
+                if (m.role === "tool" && m.toolStatus === "running" && m.content?.includes("思考")) {
+                  m.toolStatus = "done"
+                  m.content = "深度思考"
+                  m.toolResult = _thinkingAccum
+                  break
+                }
+              }
+            }
           } else if (data.type === 'tool_start') {
             messages.value.splice(messages.value.length - 1, 0, { role: 'tool' as any, content: data.label, toolStatus: 'running' } as any)
           } else if (data.type === 'tool_result') {
@@ -707,7 +737,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
     <template #main>
       <div class="chat-main-area">
       <div class="chat-thread-area">
-      <div ref="threadRef" class="flex-1 overflow-y-auto" style="background: var(--ground)" >
+      <div ref="threadRef" class="flex-1 overflow-y-auto chat-content-area" >
         <div class="chat-scroll-inner">
         <!-- Welcome empty state -->
         <div v-if="!currentConvId && messages.length === 0 && !streaming" class="welcome">
@@ -782,12 +812,20 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   flex: 1;
   min-width: 0;
   min-height: 0;
+  padding: 6px;
+  gap: 0;
 }
 .chat-thread-area {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  background: var(--surface-1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chat-content-area {
+  background: var(--ground);
 }
 .chat-scroll-inner {
   max-width: 768px;
@@ -798,11 +836,11 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .welcome {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  padding-top: 160px; text-align: center;
+  padding-top: 100px; padding-bottom: 40px;
+  text-align: center;
 }
 .welcome-label {
-  font-family: var(--font-orbix);
-  font-size: 12px; text-transform: uppercase;
+  font-size: 12px;
   letter-spacing: 1px; margin-bottom: 12px;
   display: flex; align-items: center; gap: 4px;
   color: var(--text-muted);
@@ -810,9 +848,10 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .welcome-label span { color: var(--accent); }
 .welcome-title {
   font-family: 'Inter Tight', sans-serif;
-  font-size: 40px; font-weight: 600;
+  font-size: 32px; font-weight: 500;
   color: var(--text-primary); margin-bottom: 32px;
   letter-spacing: -0.02em;
+  line-height: 1.125;
 }
 .welcome-btns {
   display: flex; flex-wrap: wrap; align-items: center;
@@ -820,21 +859,22 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 }
 .welcome-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 16px;
-  border-radius: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
   border: 1px solid var(--hairline);
   font-size: 13px; font-weight: 500;
+  line-height: 1.4;
   color: var(--text-secondary);
-  background: var(--surface-1);
+  background: var(--surface-2);
   cursor: pointer;
-  transition: all .12s;
+  transition: all .15s;
   font-family: inherit;
   user-select: none;
 }
 .welcome-btn:hover {
   color: var(--text-primary);
   border-color: var(--hairline-strong);
-  background: var(--surface-2);
+  background: var(--surface-3);
 }
 .welcome-btn:active {
   transform: scale(0.96);
@@ -842,8 +882,11 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   background: var(--accent-glow);
   color: var(--accent-text);
 }
-.welcome-btn {
-  transition: all .12s, transform .12s cubic-bezier(.4,0,.2,1);
+.welcome-btn svg {
+  opacity: 0.7;
+}
+.welcome-btn:hover svg {
+  opacity: 1;
 }
 
 .terminated-banner {

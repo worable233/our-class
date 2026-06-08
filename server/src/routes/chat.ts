@@ -821,7 +821,7 @@ async function agentLoopAnthropic(
 
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
   if (msgCount.c <= 2) {
-    const keyRec = db.prepare('SELECT * FROM api_keys WHERE user_id=? AND is_active=1').get(userId) as any
+    const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
     generateTitle(keyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
     })
@@ -993,7 +993,7 @@ async function agentLoopOpenAI(
 
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
   if (msgCount.c <= 2) {
-    const keyRec = db.prepare('SELECT * FROM api_keys WHERE user_id=? AND is_active=1').get(userId) as any
+    const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
     generateTitle(keyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
     })
@@ -1276,8 +1276,8 @@ router.get(
   (req: Request, res: Response) => {
     const db = getDb()
     const keyRecord = db
-      .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
-      .get(req.user!.id) as ApiKeyRow | undefined
+      .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
+      .get() as ApiKeyRow | undefined
 
     if (!keyRecord) {
       return ok(res, null)
@@ -1307,11 +1307,11 @@ router.post(
     const provider = explicitProvider || detectProvider(api_url || '', model || '')
     const userId = req.user!.id
 
-    const existing = db.prepare('SELECT * FROM api_keys WHERE user_id = ?').get(userId) as ApiKeyRow | undefined
+    const existing = db.prepare('SELECT * FROM api_keys ORDER BY id ASC LIMIT 1').get() as ApiKeyRow | undefined
     const finalKey = api_key || existing?.api_key || ''
     if (!finalKey) return fail(res, 400, 'NO_API_KEY', '请先输入 API Key')
 
-    db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM api_keys').run()
     db.prepare(
       'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
@@ -1451,8 +1451,8 @@ router.post(
     if (!conversation) return fail(res, 404, 'NOT_FOUND', '对话不存在')
 
     const keyRecord = db
-      .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
-      .get(req.user!.id) as ApiKeyRow | undefined
+      .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
+      .get() as ApiKeyRow | undefined
     if (!keyRecord) return fail(res, 400, 'NO_API_KEY', '请先配置 API Key')
 
     const history = db
@@ -1579,8 +1579,8 @@ router.put('/conversations/:id/title', (req: Request, res: Response) => {
 router.post('/test', requirePermission('chat.config'), async (req: Request, res: Response) => {
   const db = getDb()
   const keyRecord = db
-    .prepare('SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1')
-    .get(req.user!.id) as ApiKeyRow | undefined
+    .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
+    .get() as ApiKeyRow | undefined
 
   if (!keyRecord) {
     return fail(res, 400, 'NO_API_KEY', '请先配置 API')

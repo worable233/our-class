@@ -51,10 +51,10 @@ const DEFAULT_TOOLS = [
 // GET /api/chat/settings — 获取全局 AI 设置
 router.get(
   '/settings',
-  requirePermission('chat.config'),
+  authMiddleware,
   (_req: Request, res: Response) => {
     const db = getDb()
-    const row = db.prepare('SELECT * FROM chat_settings WHERE user_id = ?').get(_req.user!.id) as any
+    const row = db.prepare('SELECT * FROM chat_settings ORDER BY id ASC LIMIT 1').get() as any
 
     if (!row) {
       return ok(res, {

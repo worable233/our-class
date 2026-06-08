@@ -591,8 +591,8 @@ watch(
 .body { min-width: 0; max-width: 90%; position: relative; }
 
 .text {
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--text-primary);
   overflow-wrap: break-word;
   word-break: break-word;

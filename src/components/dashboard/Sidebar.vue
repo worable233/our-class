@@ -189,10 +189,15 @@ function handleUpdateValue(key: string) {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
 }
 .sidebar-menu {
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
+.sidebar-menu::-webkit-scrollbar { display: none; }
+.sidebar-menu { scrollbar-width: none; }
 
 /* ── Logo ─────────────────────────────── */
 

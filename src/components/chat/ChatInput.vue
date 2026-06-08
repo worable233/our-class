@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ArrowUp, Square, Paperclip, X, FileText, FileSpreadsheet, FileImage, File, Presentation, Loader2 } from '@lucide/vue'
+import { Square, X, FileText, FileSpreadsheet, FileImage, File, Presentation, Loader2 } from '@lucide/vue'
 import { NTooltip } from 'naive-ui'
 
 const emit = defineEmits<{
@@ -26,6 +26,16 @@ const auth = useAuthStore()
 const input = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const pendingSend = ref(false)
+
+watch(() => props.loading, (loading, prev) => {
+  if (loading && !prev) {
+    input.value = ''
+    pendingSend.value = false
+    attachments.value = []
+    nextTick(autoResize)
+  }
+})
 
 // ── File upload state ─────────────────────────────────────────────────────
 interface Attachment {
@@ -153,15 +163,13 @@ function handleSend() {
   const dt = props.deepThink ?? false;
   const ws = props.webSearch ?? false;
 
+  pendingSend.value = true
   emit('send', c, dt, ws, fileIds.length > 0 ? fileIds : undefined)
-  input.value = ''
-  attachments.value = []
-  nextTick(autoResize)
 }
 
 function onInput() { autoResize() }
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && e.shiftKey) {
     e.preventDefault()
     handleSend()
   }
@@ -256,16 +264,16 @@ watch(input, () => { nextTick(autoResize) })
             </template>
             联网搜索实时信息
           </NTooltip>
+        </div>
+        <div class="input-bottom-right">
           <NTooltip v-if="enableFileUpload && auth.isLoggedIn" trigger="hover" placement="top">
             <template #trigger>
-              <button class="toolbar-btn" @click="pickFiles" :disabled="!convId && attachments.length === 0">
-                <Paperclip :size="15" />
+              <button class="toolbar-btn add-btn" @click="pickFiles">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
               </button>
             </template>
             上传文件
           </NTooltip>
-        </div>
-        <div class="input-bottom-right">
           <NTooltip trigger="hover" placement="top">
             <template #trigger>
               <button
@@ -274,7 +282,7 @@ watch(input, () => { nextTick(autoResize) })
                 :disabled="(!input.trim() && !loading) || !allUploaded"
                 @click="handleSend"
               >
-                <ArrowUp v-if="!loading" :size="18" />
+                <svg v-if="!loading" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                 <Square v-else :size="14" :fill="'currentColor'" />
               </button>
             </template>
@@ -289,17 +297,18 @@ watch(input, () => { nextTick(autoResize) })
 
 <style scoped>
 .input-section {
-  padding: 0 16px 8px 16px;
+  padding: 0 24px 12px 24px;
   background: var(--ground);
 }
 .input-wrapper {
   max-width: 768px;
   margin: 0 auto;
   position: relative;
-  background: var(--ground);
-  border-radius: 6px;
-  padding: 0 12px;
-  transition: background-color .3s cubic-bezier(.4,0,.2,1);
+  background: var(--surface-1);
+  border-radius: var(--radius-xl);
+  padding: 10px 14px 8px;
+  box-shadow: var(--shadow-input);
+  transition: box-shadow .2s, background .2s;
 }
 .input-wrapper::before {
   content: '';
@@ -308,36 +317,36 @@ watch(input, () => { nextTick(autoResize) })
   border-radius: inherit;
   pointer-events: none;
   border: 1px solid var(--hairline);
-  transition: border-color .3s cubic-bezier(.4,0,.2,1), box-shadow .3s cubic-bezier(.4,0,.2,1);
+  transition: border-color .2s, box-shadow .2s;
 }
-html.dark .input-wrapper::before { border-color: transparent; }
-.input-wrapper > * + * { margin-top: 4px; }
-.input-wrapper:hover::before { border-color: #7C7FDC; }
-html:not(.dark) .input-wrapper:hover::before { border-color: var(--hairline-strong); }
-.input-wrapper:focus-within { background-color: rgba(94, 106, 210, 0.08); }
+html.dark .input-wrapper::before { border-color: rgba(255,255,255,0.06); }
+.input-wrapper:hover::before { border-color: var(--hairline-strong); }
+.input-wrapper:focus-within { background: var(--surface-1); }
 .input-wrapper:focus-within::before {
-  border-color: #7C7FDC;
-  box-shadow: 0 0 8px 0 rgba(94, 106, 210, 0.3);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 html:not(.dark) .input-wrapper:focus-within::before {
-  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .input-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 32px;
+  min-height: 28px;
   gap: 6px;
+  padding-top: 6px;
 }
 .input-bottom-left { display: flex; align-items: center; gap: 6px; }
-.input-bottom-right { display: flex; align-items: center; gap: 2px; }
+.input-bottom-right { display: flex; align-items: center; gap: 6px; }
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -346,6 +355,7 @@ html:not(.dark) .input-wrapper:focus-within::before {
   font-family: inherit;
   transition: all .12s;
   line-height: 1;
+  white-space: nowrap;
 }
 .toolbar-btn { transition: background .15s, color .15s; }
 .toolbar-btn:hover { background: var(--surface-2); color: var(--text-secondary); }
@@ -354,8 +364,8 @@ html:not(.dark) .input-wrapper:focus-within::before {
 .toolbar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .mode-btn {
   border: 1px solid var(--hairline);
-  border-radius: 6px;
-  padding: 4px 10px;
+  border-radius: 8px;
+  padding: 4px 12px;
   font-size: 12px;
 }
 .mode-btn.active { border-color: var(--accent); }
@@ -366,36 +376,42 @@ html:not(.dark) .input-wrapper:focus-within::before {
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  overflow-y: hidden;
+  overflow-y: auto;
   background: transparent;
   border: none;
   outline: none;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text-primary);
   font-family: inherit;
-  padding: 8px 0;
-  max-height: 300px;
+  padding: 4px 2px;
+  min-height: 40px;
+  max-height: 200px;
   margin: 0;
 }
-.input-area::placeholder { color: var(--text-muted); }
+.input-area::placeholder { color: var(--text-disabled); font-size: 14px; }
+html.dark .input-area::placeholder { color: rgba(255,255,255,0.25); }
+
+.input-area::-webkit-scrollbar { width: 4px; }
+.input-area::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 2px; }
 
 .send-btn {
   width: 32px; height: 32px;
-  border-radius: 8px;
+  border-radius: 50%;
   border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all .12s;
+  transition: all .15s;
   background: var(--surface-3);
   color: var(--text-muted);
 }
 .send-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text-secondary); }
 .send-btn:active:not(:disabled) { transform: scale(0.92); }
-.send-btn.on { background: var(--accent); color: #fff; }
-.send-btn.on:hover:not(:disabled) { filter: brightness(1.15); }
-.send-btn.on:active:not(:disabled) { filter: brightness(0.9); transform: scale(0.92); }
+.send-btn.on { background: rgba(0,0,0,0.85); color: #fff; }
+html.dark .send-btn.on { background: #fff; color: #1d1d1d; }
+.send-btn.on:hover:not(:disabled) { opacity: 0.85; }
+.send-btn.on:active:not(:disabled) { transform: scale(0.92); }
 .send-btn.stop { background: var(--surface-2); color: var(--text-secondary); }
 .send-btn.stop:hover:not(:disabled) { background: var(--surface-3); color: var(--text-primary); }
 .send-btn.stop:active:not(:disabled) { transform: scale(0.92); }
@@ -502,12 +518,13 @@ html:not(.dark) .input-wrapper:focus-within::before {
   text-align: center;
   font-size: 10px;
   color: var(--text-muted);
-  margin-top: 6px;
+  margin-top: 8px;
   margin-bottom: 0;
+  letter-spacing: 0.01em;
 }
 
 @media (max-width: 768px) {
-  .input-section { padding: 0 8px 8px 8px; }
+  .input-section { padding: 0 12px 10px 12px; }
   .input-wrapper { max-width: 100%; }
 }
 </style>

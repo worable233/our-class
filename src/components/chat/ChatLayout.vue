@@ -4,7 +4,7 @@ defineEmits<{ closeSidebar: [] }>()
 </script>
 
 <template>
-  <div class="flex-1 w-full flex min-h-0" style="background: var(--ground)">
+  <div class="flex-1 w-full flex min-h-0" style="background: var(--surface-2)">
     <div v-if="sidebarOpen !== false" class="sidebar-overlay" @click="$emit('closeSidebar')" />
     <aside
       class="sidebar-panel"

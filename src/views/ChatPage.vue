@@ -18,11 +18,19 @@ function toggleHistory() {
   if (wasOpen) chatRef.value?.closeSearch()
 }
 function toggleSearch() { chatRef.value?.toggleSearch() }
+function newChat() {
+  if (auth.isLoggedIn) {
+    chatRef.value?.newConversation()
+    if (!sidebarOpen.value) sidebarOpen.value = true
+  } else {
+    showLogin.value = true
+  }
+}
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-[#f8f9fa] dark:bg-[#0a0b0d] transition-colors">
-    <HomeHeader :sidebar-open="sidebarOpen" @history="toggleHistory" @search="toggleSearch" />
+  <div class="h-screen flex flex-col transition-colors" style="background: var(--ground)">
+    <HomeHeader :sidebar-open="sidebarOpen" @history="toggleHistory" @search="toggleSearch" @new-chat="newChat" />
     <div class="flex-1 min-h-0 flex">
       <ChatView ref="chatRef" :sidebar-open="sidebarOpen" @login="showLogin = true" @close-sidebar="sidebarOpen = false" />
     </div>

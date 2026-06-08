@@ -1,20 +1,26 @@
 :root {
   /* Light mode (default) */
-  --ground: #f8f9fa;
+  --ground: #fbf9f5;
   --surface-1: #ffffff;
-  --surface-2: #f1f3f5;
-  --surface-3: #e9ecef;
+  --surface-2: #f3f2ee;
+  --surface-3: #edece6;
+  --surface-4: #e5e3dd;
   --hairline: rgba(0, 0, 0, 0.08);
   --hairline-strong: rgba(0, 0, 0, 0.14);
-  --text-primary: #1a1b1e;
-  --text-secondary: #5c5f66;
-  --text-muted: #9a9da5;
+  --text-primary: rgba(0, 0, 0, 0.9);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --text-muted: rgba(0, 0, 0, 0.4);
+  --text-disabled: rgba(0, 0, 0, 0.15);
   --accent: #5E6AD2;
   --accent-glow: rgba(94, 106, 210, 0.1);
   --accent-text: #5E6AD2;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
+  --radius-xl: 16px;
+  --shadow-input: 0 0 30px 5px rgba(195, 212, 214, 0.2);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
   --space-xs: 4px;
@@ -30,18 +36,23 @@
 }
 
 html.dark {
-  --ground: #0a0b0d;
-  --surface-1: #121314;
-  --surface-2: #18191b;
-  --surface-3: #222326;
-  --hairline: rgba(255, 255, 255, 0.06);
-  --hairline-strong: rgba(255, 255, 255, 0.12);
-  --text-primary: #f5f9fe;
-  --text-secondary: #a6aab5;
-  --text-muted: #787d87;
+  --ground: #1d1d1d;
+  --surface-1: #212121;
+  --surface-2: #292929;
+  --surface-3: #303030;
+  --surface-4: #3b3b3b;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-disabled: rgba(255, 255, 255, 0.15);
   --accent: #5E6AD2;
   --accent-glow: rgba(94, 106, 210, 0.15);
   --accent-text: #A78BFA;
+  --shadow-input: 0 0 30px 5px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 html {

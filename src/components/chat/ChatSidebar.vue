@@ -188,13 +188,13 @@ defineExpose({ load, toggleSearch, closeSearch })
           </template>
         </div>
       </div>
-      <NTooltip trigger="hover" placement="bottom">
+      <NTooltip v-if="auth.isLoggedIn" trigger="hover" placement="bottom">
         <template #trigger>
-          <button v-if="auth.isLoggedIn" class="theme-btn" @click="handleLogout">
+          <button class="theme-btn" @click="handleLogout">
             <LogOut :size="15" />
           </button>
         </template>
-        退出登录
+退出登录
       </NTooltip>
       <NTooltip trigger="hover" placement="bottom">
         <template #trigger>
@@ -213,8 +213,7 @@ defineExpose({ load, toggleSearch, closeSearch })
 .sidebar {
   height: 100%;
   display: flex; flex-direction: column;
-  background: var(--surface-1);
-  border-right: 1px solid var(--hairline);
+  background: var(--surface-2);
   position: relative;
   min-width: 0;
 }
@@ -254,8 +253,8 @@ defineExpose({ load, toggleSearch, closeSearch })
   margin: 8px 12px 12px;
   padding: 0 4px 0 12px;
   height: 34px;
-  border-radius: 6px;
-  background: var(--ground);
+  border-radius: 8px;
+  background: var(--surface-1);
   transition: background-color .3s cubic-bezier(.4,0,.2,1);
 }
 .search-bar::before {
@@ -334,14 +333,13 @@ html:not(.dark) .search-bar:hover::before {
 /* ── Section label ──────────────────── */
 .section-label {
   color: var(--text-muted);
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 12px; font-weight: 500;
+  letter-spacing: 0.01em;
   padding: 8px 16px 6px;
-  line-height: 1;
+  line-height: 1.5;
   user-select: none;
   position: sticky; top: 0;
-  background: var(--surface-1);
+  background: var(--surface-2);
   z-index: 2;
 }
 
@@ -358,7 +356,7 @@ html:not(.dark) .search-bar:hover::before {
   width: 100%;
   padding: 8px 12px;
   border-radius: 6px;
-  font-size: 13px; color: var(--text-secondary);
+  font-size: 14px; color: var(--text-secondary);
   background: none; border: none;
   cursor: pointer;
   font-family: inherit;
@@ -394,7 +392,7 @@ html:not(.dark) .search-bar:hover::before {
   padding: 4px 8px;
   border-radius: 4px;
   border: 1px solid var(--accent);
-  background: var(--ground);
+  background: var(--surface-1);
   font-size: 13px; line-height: 1.5;
   color: var(--text-primary);
   outline: none; font-family: inherit;
@@ -427,7 +425,7 @@ html:not(.dark) .search-bar:hover::before {
   pointer-events: none;
   position: absolute; bottom: 56px; left: 0; right: 0;
   height: 48px;
-  background: linear-gradient(180deg, transparent 0%, var(--surface-1) 80%);
+  background: linear-gradient(180deg, transparent 0%, var(--surface-2) 80%);
 }
 
 /* ── User bar ───────────────────────── */
