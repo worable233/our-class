@@ -1,14 +1,22 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
-import { NotFoundError } from '../lib/errors.js'
+import { NotFoundError, ForbiddenError } from '../lib/errors.js'
 import { writeAuditLog } from './audit.js'
 
 const router = Router()
 router.use(authMiddleware)
+
+// Allow both chat.skills and chat.config (backward compat for existing installs)
+function requireSkillsOrConfig(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user?.permissions?.includes('chat.skills') && !req.user?.permissions?.includes('chat.config')) {
+    throw new ForbiddenError('权限不足')
+  }
+  next()
+}
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────
 
@@ -33,7 +41,7 @@ const reorderSchema = z.object({
 // GET /api/chat/skills — 获取所有 skill
 router.get(
   '/skills',
-  requirePermission('chat.skills'),
+  requireSkillsOrConfig,
   (req: Request, res: Response) => {
     const db = getDb()
     const rows = db
@@ -58,7 +66,7 @@ router.get(
 // POST /api/chat/skills — 新建 skill
 router.post(
   '/skills',
-  requirePermission('chat.skills'),
+  requireSkillsOrConfig,
   validate(createSkillSchema),
   (req: Request, res: Response) => {
     const db = getDb()
@@ -82,7 +90,7 @@ router.post(
 // PUT /api/chat/skills/:id — 更新 skill
 router.put(
   '/skills/:id',
-  requirePermission('chat.skills'),
+  requireSkillsOrConfig,
   validate(updateSkillSchema),
   (req: Request, res: Response) => {
     const db = getDb()
@@ -113,7 +121,7 @@ router.put(
 // DELETE /api/chat/skills/:id — 删除 skill
 router.delete(
   '/skills/:id',
-  requirePermission('chat.skills'),
+  requireSkillsOrConfig,
   (req: Request, res: Response) => {
     const db = getDb()
     const userId = req.user!.id
@@ -132,7 +140,7 @@ router.delete(
 // PUT /api/chat/skills/reorder — 批量重排序
 router.put(
   '/skills/reorder',
-  requirePermission('chat.skills'),
+  requireSkillsOrConfig,
   validate(reorderSchema),
   (req: Request, res: Response) => {
     const db = getDb()
