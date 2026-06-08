@@ -436,14 +436,14 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
             if (!streamTimer) tick()
           } else if (data.type === 'thinking_start') {
             if (currentConvId.value === convId) {
-              messages.value.splice(messages.value.length - 1, 0, { role: "tool" as any, content: "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad...", toolStatus: "running" } as any)
+              messages.value.splice(messages.value.length - 1, 0, { role: "tool" as any, content: "深度思考中...", toolStatus: "running" } as any)
             }
           } else if (data.type === 'thinking') {
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
                 const m = messages.value[j] as any
-                if (m.role === "tool" && m.content === "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad...") {
-                  m.content = "\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad " + data.content.slice(0, 20) + "..."
+                if (m.role === "tool" && m.content === "深度思考中...") {
+                  m.content = "思考中 " + data.content.slice(0, 20) + "..."
                   break
                 }
               }
@@ -452,9 +452,9 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
             if (currentConvId.value === convId) {
               for (let j = messages.value.length - 1; j >= 0; j--) {
                 const m = messages.value[j] as any
-                if (m.role === "tool" && m.toolStatus === "running" && m.content?.includes("\xe6\x80\x9d\xe8\x80\x83")) {
+                if (m.role === "tool" && m.toolStatus === "running" && m.content?.includes("思考")) {
                   m.toolStatus = "done"
-                  m.toolResult = "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe5\xae\x8c\xe6\x88\x90"
+                  m.toolResult = "深度思考完成"
                   break
                 }
               }
