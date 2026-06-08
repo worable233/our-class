@@ -41,6 +41,13 @@ function mapToolMsg(m: any): any {
       return { role: 'card', card: p }
     } catch { return { role: m.role, content: m.content } }
   }
+  // Parse assistant messages with reasoning JSON (DeepSeek R1 style)
+  if (m.role === 'assistant' && typeof m.content === 'string' && m.content.startsWith('{')) {
+    try {
+      const p = JSON.parse(m.content)
+      if (p.text) return { role: m.role, content: p.text }
+    } catch {}
+  }
   return { role: m.role, content: m.content, toolStatus: (m.role === 'tool' ? 'done' : undefined) as any }
 }
 

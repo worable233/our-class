@@ -974,7 +974,7 @@ async function agentLoopOpenAI(
 
       // Store reasoning alongside text for persistence
       fullResponse = reasoning ? JSON.stringify({ text, reasoning }) : text
-      if (text) res.write(`data: ${JSON.stringify({ type: 'text', content: text })}\n\n`)
+      res.write(`data: ${JSON.stringify({ type: 'text', content: text || '' })}\n\n`)
       break
     }
   }
