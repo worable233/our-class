@@ -434,6 +434,31 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
           if (data.type === 'text') {
             queue += data.content
             if (!streamTimer) tick()
+          } else if (data.type === 'thinking_start') {
+            if (currentConvId.value === convId) {
+              messages.value.splice(messages.value.length - 1, 0, { role: "tool" as any, content: "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad...", toolStatus: "running" } as any)
+            }
+          } else if (data.type === 'thinking') {
+            if (currentConvId.value === convId) {
+              for (let j = messages.value.length - 1; j >= 0; j--) {
+                const m = messages.value[j] as any
+                if (m.role === "tool" && m.content === "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad...") {
+                  m.content = "\xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad " + data.content.slice(0, 20) + "..."
+                  break
+                }
+              }
+            }
+          } else if (data.type === 'thinking_done') {
+            if (currentConvId.value === convId) {
+              for (let j = messages.value.length - 1; j >= 0; j--) {
+                const m = messages.value[j] as any
+                if (m.role === "tool" && m.toolStatus === "running" && m.content?.includes("\xe6\x80\x9d\xe8\x80\x83")) {
+                  m.toolStatus = "done"
+                  m.toolResult = "\xe6\xb7\xb1\xe5\xba\xa6\xe6\x80\x9d\xe8\x80\x83\xe5\xae\x8c\xe6\x88\x90"
+                  break
+                }
+              }
+            }
           } else if (data.type === 'tool_start') {
             if (currentConvId.value === convId) {
               // Insert before the pre-pushed assistant message
