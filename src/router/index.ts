@@ -24,6 +24,7 @@ const router = createRouter({
           path: 'dashboard',
           name: 'teacher-dashboard',
           component: () => import('@/views/teacher/DashboardHome.vue'),
+          meta: { permissions: ['students.read'] },
         },
         {
           path: 'points',
@@ -136,8 +137,8 @@ router.beforeEach((to, _from, next) => {
     const userPerms = auth.permissions
     const hasAny = requiredPerms.some(p => userPerms.includes(p))
     if (!hasAny) {
-      // No permission — redirect to home or dashboard
-      next(auth.isTeacher ? '/teacher/dashboard' : '/student/points')
+      // No permission — redirect to public homepage (chat)
+      next('/')
       return
     }
   }
