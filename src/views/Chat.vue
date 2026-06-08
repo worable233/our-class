@@ -161,6 +161,7 @@ onMounted(async () => {
       if (loadSeq !== seq) return
       currentConvId.value = id
       fileMap.value = res?.file_map || {}
+      const reasoningMap = res?.reasoning_map || {}
       if (res?.messages) {
         const raw = res.messages
         const flat: any[] = []
@@ -180,6 +181,10 @@ onMounted(async () => {
           if (m.role === 'tool' && msg.card) {
             flat.push({ role: 'card', card: msg.card })
             delete msg.card
+          }
+          // Restore persisted reasoning content as a tool pill
+          if (m.role === 'assistant' && reasoningMap[m.id]) {
+            flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap[m.id].slice(0, 200) + (reasoningMap[m.id].length > 200 ? '...' : '') })
           }
         }
         messages.value = flat
@@ -220,6 +225,11 @@ async function selectConversation(id: number) {
         if (m.role === 'tool' && msg.card) {
           flat.push({ role: 'card', card: msg.card })
           delete msg.card
+        }
+        // Restore persisted reasoning content
+        const reasoningMap2 = res?.reasoning_map || {}
+        if (m.role === 'assistant' && reasoningMap2[m.id]) {
+          flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap2[m.id].slice(0, 200) + (reasoningMap2[m.id].length > 200 ? '...' : '') })
         }
       }
       messages.value = flat

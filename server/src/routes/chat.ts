@@ -803,6 +803,11 @@ async function agentLoopAnthropic(
   // Emit thinking done after loop completes (if deep think was active)
   if (thinking) res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
 
+  // If thinking/planning content was generated, persist it as JSON alongside the text
+  if (thinkingParts) {
+    fullResponse = JSON.stringify({ text: fullResponse, reasoning: thinkingParts })
+  }
+
   // Save assistant response
   if (isContinue) {
     // Append to the last assistant message instead of creating a new one
@@ -967,7 +972,8 @@ async function agentLoopOpenAI(
         res.write(`data: ${JSON.stringify({ type: 'thinking', content: reasoning.slice(0, 500) })}\n\n`)
       }
 
-      fullResponse += text
+      // Store reasoning alongside text for persistence
+      fullResponse = reasoning ? JSON.stringify({ text, reasoning }) : text
       if (text) res.write(`data: ${JSON.stringify({ type: 'text', content: text })}\n\n`)
       break
     }
@@ -1032,7 +1038,8 @@ function extractMessageText(content: string): string {
   if (content.startsWith('{')) {
     try {
       const parsed = JSON.parse(content)
-      return parsed.text || content
+      // Handle both user messages with files and assistant messages with reasoning
+      return parsed.text || parsed.content || content
     } catch {}
   }
   return content
@@ -1379,7 +1386,22 @@ router.get('/conversations/:id', (req: Request, res: Response) => {
     }
   }
 
-  ok(res, { conversation, messages, file_map: fileMap })
+  // Extract reasoning_content from assistant messages for frontend display
+  const reasoningMap: Record<number, string> = {}
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role === 'assistant' && m.content.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(m.content)
+        if (parsed.reasoning) {
+          reasoningMap[m.id] = parsed.reasoning
+          messages[i].content = parsed.text || parsed.content || m.content
+        }
+      } catch {}
+    }
+  }
+
+  ok(res, { conversation, messages, file_map: fileMap, reasoning_map: reasoningMap })
 })
 
 router.delete('/conversations/:id', (req: Request, res: Response) => {
