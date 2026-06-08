@@ -29,41 +29,49 @@ const router = createRouter({
           path: 'points',
           name: 'teacher-points',
           component: () => import('@/views/teacher/PointsManage.vue'),
+          meta: { permissions: ['points.read'] },
         },
         {
           path: 'assignments',
           name: 'teacher-assignments',
           component: () => import('@/views/teacher/AssignmentCollect.vue'),
+          meta: { permissions: ['assignments.read'] },
         },
         {
           path: 'students',
           name: 'teacher-students',
           component: () => import('@/views/teacher/StudentManage.vue'),
+          meta: { permissions: ['students.read'] },
         },
         {
           path: 'roles',
           name: 'teacher-roles',
           component: () => import('@/views/teacher/RoleManage.vue'),
+          meta: { permissions: ['roles.manage'] },
         },
         {
           path: 'review-types',
           name: 'teacher-review-types',
           component: () => import('@/views/teacher/ReviewTypeManage.vue'),
+          meta: { permissions: ['points.write'] },
         },
         {
           path: 'settings',
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),
+          meta: { permissions: ['chat.config'] },
         },
         {
           path: 'skills',
           name: 'teacher-skills',
           component: () => import('@/views/teacher/SkillManage.vue'),
+          meta: { permissions: ['chat.skills', 'chat.config'] },
         },
         {
           path: 'logs',
           name: 'teacher-logs',
           component: () => import('@/views/teacher/AuditLogs.vue'),
+          meta: { permissions: ['audit_logs.read'] },
         },
         {
           path: 'traffic',
@@ -107,17 +115,33 @@ router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
   auth.loadFromStorage()
 
+  // Public pages (chat homepage)
   const publicPages = ['/']
   if (publicPages.includes(to.path)) { next(); return }
+
+  // Must be logged in
   if (!auth.isLoggedIn) {
     next('/'); return
   }
 
+  // Check role
   const requiredRole = to.meta.role as string | undefined
   if (requiredRole && auth.user?.role !== requiredRole) {
-    next('/')
-    return
+    next('/'); return
   }
+
+  // Check granular permissions
+  const requiredPerms = to.meta.permissions as string[] | undefined
+  if (requiredPerms && requiredPerms.length > 0) {
+    const userPerms = auth.permissions
+    const hasAny = requiredPerms.some(p => userPerms.includes(p))
+    if (!hasAny) {
+      // No permission — redirect to home or dashboard
+      next(auth.isTeacher ? '/teacher/dashboard' : '/student/points')
+      return
+    }
+  }
+
   next()
 })
 

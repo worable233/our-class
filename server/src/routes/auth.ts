@@ -57,6 +57,16 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
 
   const token = signToken({ id: user.id, role: user.role })
 
+  // Load user permissions from group
+  const db2 = getDb()
+  const permRows = db2.prepare(`
+    SELECT DISTINCT gp.permission_code
+    FROM group_permissions gp
+    JOIN users u ON u.group_id = gp.group_id
+    WHERE u.id = ?
+  `).all(user.id) as { permission_code: string }[]
+  const permissions = permRows.map(r => r.permission_code)
+
   ok(res, {
     user: {
       id: user.id,
@@ -68,6 +78,7 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
       student_no: user.student_no,
       nickname: user.nickname,
       token,
+      permissions,
     },
     token,
   })

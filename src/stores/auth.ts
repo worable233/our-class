@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import type { User } from '@/types'
 
 interface LoginResponse {
-  user: User & { token: string }
+  user: User & { token: string; permissions?: string[] }
   token: string
 }
 
@@ -17,12 +17,18 @@ export const useAuthStore = defineStore('auth', () => {
   const isStudent = computed(() => user.value?.role === 'student')
   const displayName = computed(() => user.value?.display_name || '')
   const userClass = computed(() => user.value?.class || '')
+  const permissions = computed(() => user.value?.permissions || [])
+
+  function hasPermission(code: string): boolean {
+    return permissions.value.includes(code)
+  }
 
   function loadFromStorage() {
     const stored = localStorage.getItem('ourclass_user')
     if (stored) {
       try {
-        user.value = JSON.parse(stored)
+        const data = JSON.parse(stored)
+        user.value = data
       } catch { localStorage.removeItem('ourclass_user') }
     }
   }
@@ -39,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
         class: res.user.class,
         avatar: res.user.avatar,
         token: res.token,
+        permissions: res.user.permissions || [],
       }
       user.value = userData
       localStorage.setItem('ourclass_user', JSON.stringify(userData))
@@ -53,5 +60,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('ourclass_user')
   }
 
-  return { user, loading, isLoggedIn, isTeacher, isStudent, displayName, userClass, loadFromStorage, login, logout }
+  return { user, loading, isLoggedIn, isTeacher, isStudent, displayName, userClass, permissions, hasPermission, loadFromStorage, login, logout }
 })

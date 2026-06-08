@@ -20,9 +20,38 @@ function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
+// Permission requirements per route (mirrors router meta.permissions)
+const ROUTE_PERMS: Record<string, string[]> = {
+  '/teacher/points': ['points.read'],
+  '/teacher/assignments': ['assignments.read'],
+  '/teacher/students': ['students.read'],
+  '/teacher/review-types': ['points.write'],
+  '/teacher/roles': ['roles.manage'],
+  '/teacher/settings': ['chat.config'],
+  '/teacher/skills': ['chat.skills', 'chat.config'],
+  '/teacher/logs': ['audit_logs.read'],
+}
+
+function hasRouteAccess(path: string): boolean {
+  const perms = ROUTE_PERMS[path]
+  if (!perms || perms.length === 0) return true
+  return perms.some(p => auth.permissions.includes(p))
+}
+
+// Recursively filter menu children by permission
+function filterChildren(children: any[]): any[] {
+  return children.filter(child => {
+    if (child.children) {
+      child.children = filterChildren(child.children)
+      return child.children.length > 0
+    }
+    return !child.key || !ROUTE_PERMS[child.key] || hasRouteAccess(child.key)
+  })
+}
+
 const menuOptions = computed<MenuOption[]>(() => {
   if (auth.isTeacher) {
-    return [
+    return filterChildren([
       {
         type: 'group',
         label: '概览',
@@ -61,7 +90,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           },
         ],
       },
-    ]
+    ])
   }
   return [
     {
