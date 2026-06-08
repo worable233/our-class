@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, h, onMounted } from 'vue'
-import { Plus, Pencil, Trash2, BookOpen, Hash, Key } from '@lucide/vue'
+import { ref, computed, onMounted } from 'vue'
+import { Plus, Pencil, Trash2, BookOpen, Hash, Key, Filter } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useDialog, useMessage } from 'naive-ui'
@@ -11,15 +11,35 @@ const dialog = useDialog()
 const message = useMessage()
 const useRef = useRefresh(load)
 const students = ref<Student[]>([])
+const classList = ref<string[]>([])
+const filterClass = ref('')
 const roleGroups = ref<{ id: number; name: string }[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ student_no: '', display_name: '', nickname: '', class: '高三(2)班', password: '123456' })
+const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456' })
+
+const classOptions = computed(() => [
+  { label: '全部班级', value: '' },
+  ...classList.value.map(c => ({ label: c, value: c })),
+])
+
+const filteredStudents = computed(() =>
+  filterClass.value
+    ? students.value.filter(s => s.class === filterClass.value)
+    : students.value,
+)
 
 async function load() {
-  students.value = await api.get<Student[]>('/students')
+  const [stu, cls] = await Promise.all([
+    api.get<Student[]>('/students'),
+    api.get<string[]>('/classes').catch(() => []),
+  ])
+  students.value = stu
+  classList.value = cls
+  // Set default class if form is empty and classes exist
+  if (!form.value.class && cls.length > 0) form.value.class = cls[0]
   loading.value = false
 }
 
@@ -84,8 +104,24 @@ onMounted(() => { load() })
 
 <template>
   <div>
-    <div style="margin-bottom: 20px; text-align: right;">
-      <n-button type="primary" @click="openNew" round>
+    <!-- Top bar: filter + add -->
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <Filter :size="16" style="color: var(--text-muted); flex-shrink: 0;" />
+        <n-select
+          v-model:value="filterClass"
+          :options="classOptions"
+          style="width: 160px"
+          size="small"
+          placeholder="全部班级"
+          clearable
+          @clear="filterClass = ''"
+        />
+        <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
+          共 {{ filteredStudents.length }} 人
+        </span>
+      </div>
+      <n-button type="primary" @click="openNew" round size="small">
         <template #icon><Plus :size="16" /></template>
         添加学生
       </n-button>
@@ -93,14 +129,14 @@ onMounted(() => { load() })
 
     <n-spin :show="loading" style="min-height: 200px">
       <n-list
-        v-if="students.length > 0"
+        v-if="filteredStudents.length > 0"
         hoverable
         clickable
         :bordered="false"
         style="background: transparent"
       >
         <n-list-item
-          v-for="s in students"
+          v-for="s in filteredStudents"
           :key="s.id"
           style="background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 8px; margin-bottom: 8px; padding: 14px 18px; transition: all .15s;"
           :style="{ borderColor: 'var(--hairline)' }"
@@ -189,7 +225,12 @@ onMounted(() => { load() })
           <n-input v-model:value="form.nickname" placeholder="显示昵称（可选）" />
         </n-form-item>
         <n-form-item label="班级" path="class">
-          <n-input v-model:value="form.class" placeholder="班级" />
+          <n-select
+            v-model:value="form.class"
+            :options="classList.map(c => ({ label: c, value: c }))"
+            :placeholder="classList.length > 0 ? '选择班级' : '暂无班级数据'"
+            :disabled="classList.length === 0"
+          />
         </n-form-item>
         <n-form-item label="密码" path="password">
           <n-input v-model:value="form.password" placeholder="留空则保持原密码（编辑时）或使用默认密码" />
