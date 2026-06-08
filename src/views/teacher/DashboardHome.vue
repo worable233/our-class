@@ -2,7 +2,7 @@
 import { ref, computed, shallowRef, watch, onMounted } from 'vue'
 import { BASE } from '@/api/client'
 import { useMessage } from 'naive-ui'
-import { NSpin, NEmpty, NButton, NCard, NNumberAnimation, NText, NIcon, NGi, NGrid } from 'naive-ui'
+import { NSpin, NEmpty, NButton, NCard, NNumberAnimation } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -190,29 +190,20 @@ onMounted(load)
     <NSpin :show="loading" style="min-height: 400px">
       <template v-if="data">
         <!-- Stats Row -->
-        <NGrid :x-gap="14" :y-gap="14" responsive="screen" :cols="4" style="margin-bottom:20px">
-          <NGi v-for="s in [
-            { num: data.users.total, label: '注册用户', sub: `${data.users.students} 学生 · ${data.users.teachers} 教师`, color: '#5E6AD2', icon: 'users' },
-            { num: data.totalViews, label: '网站流量', sub: `30天访问 ${data.visitTrend.reduce((s, p) => s + p.visits, 0)}`, color: '#18a058', icon: 'chart' },
-            { num: data.totalMessages, label: 'AI 消息总数', sub: `${data.totalConversations} 个对话`, color: '#f0a020', icon: 'message' },
-            { num: data.totalPointRecords + data.totalSubmissions, label: '总操作记录', sub: `${data.totalPointRecords} 积分 · ${data.totalSubmissions} 作业`, color: '#d03050', icon: 'activity' },
-          ]" :key="s.label">
-            <NCard size="small" :bordered="true" style="display:flex;flex-direction:row;align-items:center;gap:14px;padding:18px 20px">
-              <div :style="{width:44,height:44,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.color+'1F',color:s.color}">
-                <NIcon :size="20"><svg v-if="s.icon==='users'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <svg v-else-if="s.icon==='chart'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                <svg v-else-if="s.icon==='message'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                </NIcon>
-              </div>
-              <div>
-                <NNumberAnimation :from="0" :to="s.num" :duration="800" style="font-size:24px;font-weight:700;letter-spacing:-0.03em;line-height:1.2;color:var(--text-primary)" />
-                <NText depth="3" style="display:block;font-size:12px;margin-top:1px">{{ s.label }}</NText>
-                <NText depth="3" style="display:block;font-size:11px;opacity:0.7">{{ s.sub }}</NText>
-              </div>
-            </NCard>
-          </NGi>
-        </NGrid>
+        <div class="stats-row">
+          <div v-for="s in [
+            { num: data.users.total, label: '注册用户', sub: `${data.users.students} 学生 · ${data.users.teachers} 教师`, color: '#5E6AD2' },
+            { num: data.totalViews, label: '网站流量', sub: `30天访问 ${data.visitTrend.reduce((s, p) => s + p.visits, 0)}`, color: '#18a058' },
+            { num: data.totalMessages, label: 'AI 消息总数', sub: `${data.totalConversations} 个对话`, color: '#f0a020' },
+            { num: data.totalPointRecords + data.totalSubmissions, label: '总操作记录', sub: `${data.totalPointRecords} 积分 · ${data.totalSubmissions} 作业`, color: '#d03050' },
+          ]" :key="s.label" class="stat-card">
+            <div class="stat-num" :style="{ color: s.color }">
+              <NNumberAnimation :from="0" :to="s.num" :duration="800" />
+            </div>
+            <div class="stat-label">{{ s.label }}</div>
+            <div class="stat-sub">{{ s.sub }}</div>
+          </div>
+        </div>
 
         <!-- Charts Row -->
         <div class="charts-row">
@@ -266,6 +257,43 @@ onMounted(load)
 </template>
 
 <style scoped>
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 20px 22px;
+  transition: border-color .2s;
+}
+.stat-card:hover {
+  border-color: var(--accent);
+}
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: .7;
+}
+@media (max-width: 768px) {
+  .stats-row { grid-template-columns: 1fr 1fr; }
+}
+
 .charts-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
