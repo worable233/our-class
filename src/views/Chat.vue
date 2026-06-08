@@ -176,15 +176,15 @@ onMounted(async () => {
               if (files.length > 0) msg.fileInfo = files
             } catch {}
           }
+          // Restore persisted reasoning content BEFORE the message (first occurrence)
+          if (m.role === 'assistant' && reasoningMap[m.id]) {
+            flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap[m.id].slice(0, 200) + (reasoningMap[m.id].length > 200 ? '...' : '') })
+          }
           flat.push(msg)
           // If a tool message has embedded card data, emit a card message after the tool pill
           if (m.role === 'tool' && msg.card) {
             flat.push({ role: 'card', card: msg.card })
             delete msg.card
-          }
-          // Restore persisted reasoning content as a tool pill
-          if (m.role === 'assistant' && reasoningMap[m.id]) {
-            flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap[m.id].slice(0, 200) + (reasoningMap[m.id].length > 200 ? '...' : '') })
           }
         }
         messages.value = flat
@@ -221,15 +221,15 @@ async function selectConversation(id: number) {
             if (files.length > 0) msg.fileInfo = files
           } catch {}
         }
+        // Restore persisted reasoning content BEFORE the message
+        const reasoningMap2 = res?.reasoning_map || {}
+        if (m.role === 'assistant' && reasoningMap2[m.id]) {
+          flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap2[m.id].slice(0, 200) + (reasoningMap2[m.id].length > 200 ? '...' : '') })
+        }
         flat.push(msg)
         if (m.role === 'tool' && msg.card) {
           flat.push({ role: 'card', card: msg.card })
           delete msg.card
-        }
-        // Restore persisted reasoning content
-        const reasoningMap2 = res?.reasoning_map || {}
-        if (m.role === 'assistant' && reasoningMap2[m.id]) {
-          flat.push({ role: 'tool' as any, content: '深度思考', toolStatus: 'done' as const, toolResult: reasoningMap2[m.id].slice(0, 200) + (reasoningMap2[m.id].length > 200 ? '...' : '') })
         }
       }
       messages.value = flat
