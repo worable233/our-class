@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Pencil, Trash2, BookOpen, Hash, Key, Filter } from '@lucide/vue'
+import { Plus, Pencil, Trash2, Key, Filter } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useDialog, useMessage } from 'naive-ui'
@@ -132,17 +132,9 @@ onMounted(() => { load() })
         v-if="filteredStudents.length > 0"
         hoverable
         clickable
-        :bordered="false"
         style="background: transparent"
       >
-        <n-list-item
-          v-for="s in filteredStudents"
-          :key="s.id"
-          style="background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 8px; margin-bottom: 8px; padding: 14px 18px; transition: all .15s;"
-          :style="{ borderColor: 'var(--hairline)' }"
-          @mouseenter="$el?.style?.setProperty('border-color', 'var(--accent)')"
-          @mouseleave="$el?.style?.setProperty('border-color', 'var(--hairline)')"
-        >
+        <n-list-item v-for="s in filteredStudents" :key="s.id">
           <template #prefix>
             <n-avatar
               :size="40"
@@ -156,36 +148,16 @@ onMounted(() => { load() })
               {{ s.display_name?.charAt(0) || '?' }}
             </n-avatar>
           </template>
-
-          <template #header>
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span style="font-weight: 600; font-size: 15px; color: var(--text-primary)">{{ s.display_name }}</span>
-              <n-tag v-if="s.nickname" size="small" :bordered="false" style="font-size: 11px;">
-                {{ s.nickname }}
-              </n-tag>
-              <n-tag v-if="s.class" size="small" type="info" :bordered="false" style="font-size: 11px;">
-                {{ s.class }}
-              </n-tag>
+          <n-thing
+            :title="s.display_name"
+            :title-extra="s.class"
+            :description="s.student_no ? '#' + s.student_no : ''"
+          >
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
+              <span v-if="s.nickname">📛 {{ s.nickname }}</span>
+              <span><Key :size="13" style="vertical-align: middle;" /> {{ s.password || '******' }}</span>
             </div>
-          </template>
-
-          <template #default>
-            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
-              <div v-if="s.student_no" style="display: flex; align-items: center; gap: 4px;">
-                <Hash :size="13" />
-                <span style="font-family: monospace;">{{ s.student_no }}</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 4px;">
-                <Key :size="13" />
-                <span style="font-family: monospace;">{{ s.password || '******' }}</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 4px;">
-                <BookOpen :size="13" />
-                <span>{{ s.role === 'student' ? '学生' : s.role }}</span>
-              </div>
-            </div>
-          </template>
-
+          </n-thing>
           <template #suffix>
             <div style="display: flex; gap: 4px; flex-shrink: 0;">
               <n-button quaternary size="small" @click.stop="openEdit(s)" round>
