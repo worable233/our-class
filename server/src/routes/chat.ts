@@ -838,6 +838,7 @@ async function agentLoopOpenAI(
   const hasVersion = /\/v\d+$/.test(base)
   const url = hasVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`
   const isZhipu = apiUrl.includes('bigmodel')
+  const isMiMo = apiUrl.includes('xiaomimimo') || apiUrl.includes('mimo')
   const authKey = isZhipu ? zhipuAuth(apiKey) : apiKey
 
   const allTools = TOOLS.map(t => ({
@@ -868,10 +869,10 @@ async function agentLoopOpenAI(
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authKey}` },
         body: JSON.stringify({
           model,
-          max_tokens: 4096,
+          max_completion_tokens: isMiMo ? 32768 : 4096,
           messages: loopMessages,
           tools,
-          ...(thinking ? { thinking: true } : {}),
+          ...(thinking ? (isMiMo ? { thinking: { type: 'enabled' } } : {}) : {}),
         }),
       })
       data = await response.json()
