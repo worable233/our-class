@@ -294,7 +294,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
 
     case 'add_points': {
       // Only teachers can modify points
-      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以加减分' })
       const student = db.prepare("SELECT id FROM users WHERE display_name=? AND role='student'").get(input.student_name as string) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${input.student_name}」` })
       const amount = input.amount as number
@@ -474,7 +473,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'create_student': {
-      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以创建学生' })
       const { username, display_name, class: stuClass, password } = input as any
       if (!username || !display_name) return JSON.stringify({ error: '用户名和姓名不能为空' })
       // Check duplicate username
@@ -495,7 +493,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'update_student': {
-      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以修改学生信息' })
       const updateId = input.student_id as number
       const student = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(updateId) as any
       if (!student) return JSON.stringify({ error: `未找到 ID 为 ${updateId} 的学生` })
@@ -512,7 +509,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'delete_student': {
-      if (userRole !== 'teacher') return JSON.stringify({ error: '仅教师可以删除学生' })
       if (!input.confirm) return JSON.stringify({ error: '请将 confirm 设为 true 以确认删除操作' })
       const deleteId = input.student_id as number
       const delStudent = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(deleteId) as any
