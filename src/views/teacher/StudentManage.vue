@@ -150,10 +150,10 @@ onMounted(() => { load() })
           </template>
           <n-thing
             :title="s.display_name"
-            :title-extra="s.class"
-            :description="s.student_no ? '#' + s.student_no : ''"
+            :title-extra="s.student_no ? '#' + s.student_no : ''"
           >
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
+              <span v-if="s.class">{{ s.class }}</span>
               <span v-if="s.nickname">📛 {{ s.nickname }}</span>
             </div>
           </n-thing>
