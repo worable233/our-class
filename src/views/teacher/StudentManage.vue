@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, h, onMounted } from 'vue'
-import { Plus } from '@lucide/vue'
+import { Plus, Pencil, Trash2, BookOpen, Hash, Key } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
-import { useDialog } from 'naive-ui'
+import { useDialog, useMessage } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { NButton, NCard, NDataTable, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty } from 'naive-ui'
+import { NButton, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty, NList, NListItem, NThing, NScrollbar, NIcon } from 'naive-ui'
 
 const dialog = useDialog()
+const message = useMessage()
 const useRef = useRefresh(load)
 const students = ref<Student[]>([])
 const roleGroups = ref<{ id: number; name: string }[]>([])
@@ -16,68 +17,6 @@ const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
 const form = ref({ student_no: '', display_name: '', nickname: '', class: '高三(2)班', password: '123456' })
-
-const columns = [
-  {
-    title: '学号',
-    key: 'student_no',
-    width: 120,
-    ellipsis: { tooltip: true },
-    render: (row: Student) =>
-      row.student_no
-        ? h('span', { style: 'font-family: monospace;' }, row.student_no)
-        : h('span', { style: 'color: #999;' }, '未设置'),
-  },
-  {
-    title: '真实姓名',
-    key: 'display_name',
-    render: (row: Student) =>
-      h(NSpace, { align: 'center' }, [
-        h(NAvatar, { size: 28 }, { default: () => row.display_name.charAt(0) }),
-        row.display_name,
-      ]),
-  },
-  {
-    title: '昵称',
-    key: 'nickname',
-    width: 120,
-    ellipsis: { tooltip: true },
-    render: (row: Student) =>
-      row.nickname
-        ? h('span', null, row.nickname)
-        : h('span', { style: 'color: #999;' }, '未设置'),
-  },
-  { title: '班级', key: 'class', width: 120 },
-  {
-    title: '密码',
-    key: 'password',
-    width: 100,
-    render: (row: Student) =>
-      h(
-        NTag,
-        { size: 'small', style: 'font-family: monospace;' },
-        { default: () => row.password || '-' },
-      ),
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 150,
-    render: (row: Student) =>
-      h(NSpace, null, [
-        h(
-          NButton,
-          { quaternary: true, size: 'small', onClick: () => openEdit(row) },
-          { default: () => '编辑' },
-        ),
-        h(
-          NButton,
-          { quaternary: true, size: 'small', type: 'error', onClick: () => remove(row.id) },
-          { default: () => '删除' },
-        ),
-      ]),
-  },
-]
 
 async function load() {
   students.value = await api.get<Student[]>('/students')
@@ -110,8 +49,6 @@ async function save() {
       class: form.value.class,
       student_no,
       password: form.value.password || undefined,
-      // username and group_id omitted — not in form but the backend will
-      // fallback to auto-generated username (or preserve existing on edit)
     }
     if (editing.value) {
       await api.put(`/students/${editing.value.id}`, payload)
@@ -120,6 +57,9 @@ async function save() {
     }
     showModal.value = false
     await load()
+    message.success(editing.value ? '学生信息已更新' : '学生已创建')
+  } catch (e: any) {
+    message.error(e.message || '保存失败')
   } finally {
     saving.value = false
   }
@@ -134,30 +74,98 @@ async function remove(id: number) {
     onPositiveClick: async () => {
       await api.delete(`/students/${id}`)
       await load()
+      message.success('已删除')
     },
   })
 }
 
-onMounted(() => {
-  load()
-})
+onMounted(() => { load() })
 </script>
 
 <template>
   <div>
     <div style="margin-bottom: 20px; text-align: right;">
-      <n-button type="primary" @click="openNew">
-        <Plus :size="16" /> 添加学生
+      <n-button type="primary" @click="openNew" round>
+        <template #icon><Plus :size="16" /></template>
+        添加学生
       </n-button>
     </div>
 
-    <n-spin :show="loading">
-      <n-data-table
+    <n-spin :show="loading" style="min-height: 200px">
+      <n-list
+        v-if="students.length > 0"
+        hoverable
+        clickable
         :bordered="false"
-        :single-line="false"
-        :data="students"
-        :columns="columns"
-      />
+        style="background: transparent"
+      >
+        <n-list-item
+          v-for="s in students"
+          :key="s.id"
+          style="background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 8px; margin-bottom: 8px; padding: 14px 18px; transition: all .15s;"
+          :style="{ borderColor: 'var(--hairline)' }"
+          @mouseenter="$el?.style?.setProperty('border-color', 'var(--accent)')"
+          @mouseleave="$el?.style?.setProperty('border-color', 'var(--hairline)')"
+        >
+          <template #prefix>
+            <n-avatar
+              :size="40"
+              :style="{
+                background: 'var(--accent-glow)',
+                color: 'var(--accent-text)',
+                fontWeight: 600,
+                fontSize: '16px',
+              }"
+            >
+              {{ s.display_name?.charAt(0) || '?' }}
+            </n-avatar>
+          </template>
+
+          <template #header>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-weight: 600; font-size: 15px; color: var(--text-primary)">{{ s.display_name }}</span>
+              <n-tag v-if="s.nickname" size="small" :bordered="false" style="font-size: 11px;">
+                {{ s.nickname }}
+              </n-tag>
+              <n-tag v-if="s.class" size="small" type="info" :bordered="false" style="font-size: 11px;">
+                {{ s.class }}
+              </n-tag>
+            </div>
+          </template>
+
+          <template #default>
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
+              <div v-if="s.student_no" style="display: flex; align-items: center; gap: 4px;">
+                <Hash :size="13" />
+                <span style="font-family: monospace;">{{ s.student_no }}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <Key :size="13" />
+                <span style="font-family: monospace;">{{ s.password || '******' }}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <BookOpen :size="13" />
+                <span>{{ s.role === 'student' ? '学生' : s.role }}</span>
+              </div>
+            </div>
+          </template>
+
+          <template #suffix>
+            <div style="display: flex; gap: 4px; flex-shrink: 0;">
+              <n-button quaternary size="small" @click.stop="openEdit(s)" round>
+                <template #icon><Pencil :size="14" /></template>
+                编辑
+              </n-button>
+              <n-button quaternary size="small" type="error" @click.stop="remove(s.id)" round>
+                <template #icon><Trash2 :size="14" /></template>
+                删除
+              </n-button>
+            </div>
+          </template>
+        </n-list-item>
+      </n-list>
+
+      <n-empty v-else description="暂无学生数据" />
     </n-spin>
 
     <n-modal
@@ -166,6 +174,9 @@ onMounted(() => {
       :title="editing ? '编辑学生' : '添加学生'"
       style="width: 420px"
       :mask-closable="false"
+      header-style="padding: 20px 24px 0; font-size: 18px; font-weight: 600"
+      content-style="padding: 16px 24px"
+      footer-style="padding: 16px 24px"
     >
       <n-form :model="form" label-placement="top">
         <n-form-item label="学号" path="student_no">
@@ -185,10 +196,10 @@ onMounted(() => {
         </n-form-item>
       </n-form>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showModal = false">取消</n-button>
-          <n-button type="primary" @click="save" :disabled="!form.display_name" :loading="saving">保存</n-button>
-        </n-space>
+        <div style="display: flex; justify-content: flex-end; gap: 10px">
+          <n-button @click="showModal = false" quaternary>取消</n-button>
+          <n-button type="primary" @click="save" :disabled="!form.display_name" :loading="saving" round>保存</n-button>
+        </div>
       </template>
     </n-modal>
   </div>
@@ -197,7 +208,6 @@ onMounted(() => {
 <style scoped>
 @media (max-width: 768px) {
   .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .page-header .n-button { width: 100%; }
   :deep(.n-modal) { width: 90vw !important; max-width: 420px; }
 }
 </style>
