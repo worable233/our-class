@@ -16,7 +16,7 @@ const { isDark, toggle: toggleTheme } = useTheme()
 
 function handleUserClick() {
   if (auth.isLoggedIn) {
-    router.push(auth.isTeacher ? '/teacher/points' : '/student/points')
+    router.push(auth.isTeacher ? '/teacher/dashboard' : '/student/points')
   } else {
     emit('login')
   }
