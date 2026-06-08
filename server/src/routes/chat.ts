@@ -667,6 +667,8 @@ async function agentLoopAnthropic(
         }))
       }
 
+      // Emit thinking indicator upfront when deep think is enabled
+      if (thinking && i === 0) res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`)
       stream = await anthropic.messages.create(apiParams)
     } catch (e: any) {
       const errMsg = '请求失败: ' + (e.message || '')
@@ -798,6 +800,9 @@ async function agentLoopAnthropic(
     }
   }
 
+  // Emit thinking done after loop completes (if deep think was active)
+  if (thinking) res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
+
   // Save assistant response
   if (isContinue) {
     // Append to the last assistant message instead of creating a new one
@@ -855,6 +860,9 @@ async function agentLoopOpenAI(
   for (let i = 0; i < MAX_AGENT_LOOPS; i++) {
     let data: any
     try {
+      // Emit thinking indicator upfront
+      if (thinking && i === 0) res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`)
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authKey}` },
@@ -946,12 +954,10 @@ async function agentLoopOpenAI(
       // Final text response
       const text = msg?.content || ''
 
-      // Handle reasoning_content (DeepSeek R1 etc.) when thinking is enabled
+      // Handle reasoning_content (DeepSeek R1 etc.) when available
       const reasoning = msg?.reasoning_content || ''
-      if (reasoning) {
-        res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`)
+      if (reasoning && i === 0) {
         res.write(`data: ${JSON.stringify({ type: 'thinking', content: reasoning.slice(0, 500) })}\n\n`)
-        res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
       }
 
       fullResponse += text
@@ -959,6 +965,9 @@ async function agentLoopOpenAI(
       break
     }
   }
+
+  // Emit thinking done after loop completes
+  if (thinking) res.write(`data: ${JSON.stringify({ type: 'thinking_done' })}\n\n`)
 
   if (isContinue) {
     const last = db.prepare("SELECT id FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").get(convId) as any
