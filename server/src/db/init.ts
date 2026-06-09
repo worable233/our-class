@@ -35,35 +35,29 @@ function seedPermissionGroups(db: Database.Database) {
   const studentGroup = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?, ?)')
     .run('学生', '默认学生权限组，拥有基础权限')
 
-  const allPermissions = [
-    'students.read', 'students.write', 'students.delete',
+    const allPermissions = [
+    'students.write',
     'points.read', 'points.write',
-    'scores.read', 'scores.write', 'scores.delete',
-    'assignments.read', 'assignments.write', 'assignments.submit', 'assignments.grade',
-    'chat.access', 'chat.config', 'chat.skills', 'chat.unlimited',
+    'scores.write',
+    'assignments.write', 'assignments.submit',
+    'chat.access', 'chat.config', 'chat.unlimited',
     'roles.manage',
     'audit_logs.read',
-    'classes.read', 'classes.view_all',
-    // AI 工具权限 - 教师拥有全部
-    'tool.list_students', 'tool.get_student_points', 'tool.add_points',
-    'tool.get_score_rankings', 'tool.list_assignments', 'tool.get_submissions',
-    'tool.get_weather', 'tool.web_search', 'tool.random_pick',
-    'tool.get_current_time', 'tool.get_class_list', 'tool.view_file',
-    'tool.create_students', 'tool.update_student', 'tool.delete_students', 'tool.manage_roles',
-    'tool.get_point_details',
+    'classes.view_all',
+    // AI 工具权限
+    'tool.student.read', 'tool.student.write',
+    'tool.score.read', 'tool.score.write',
+    'tool.assignment',
+    'tool.utility',
   ]
-
-  const studentPermissions = [
+    const studentPermissions = [
     'points.read',
-    'scores.read',
-    'assignments.read', 'assignments.submit',
+    'assignments.submit',
     'chat.access',
-    'classes.read',
     // AI 工具权限 - 学生拥有基础查询工具
-    'tool.list_students', 'tool.get_student_points',
-    'tool.get_score_rankings', 'tool.list_assignments', 'tool.get_submissions',
-    'tool.get_current_time', 'tool.get_class_list', 'tool.view_file',
-    'tool.get_point_details',
+    'tool.student.read',
+    'tool.score.read',
+    'tool.assignment',
   ]
 
   const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')

@@ -42,7 +42,7 @@ const groupedCount = computed(() =>
 )
 
 function tagType(count: number) {
-  if (count >= 15) return 'info' as const
+  if (count >= 14) return 'info' as const
   if (count >= 8) return 'warning' as const
   return 'success' as const
 }

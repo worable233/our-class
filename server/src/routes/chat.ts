@@ -313,9 +313,30 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
   const db = getDb()
 
   // Check tool permission
-  const toolPerm = `tool.${name}`
+  const toolPerm = TOOL_PERM_MAP[name] || `tool.${name}`
   if (!userPermissions.includes(toolPerm)) {
     return JSON.stringify({ error: `您没有权限使用「${name}」工具` })
+  }
+
+  // Tool -> permission code mapping (grouped permissions)
+  const TOOL_PERM_MAP: Record<string, string> = {
+    'list_students': 'tool.student.read',
+    'get_student_points': 'tool.student.read',
+    'create_students': 'tool.student.write',
+    'update_student': 'tool.student.write',
+    'delete_students': 'tool.student.write',
+    'get_score_rankings': 'tool.score.read',
+    'get_point_details': 'tool.score.read',
+    'add_points': 'tool.score.write',
+    'list_assignments': 'tool.assignment',
+    'get_submissions': 'tool.assignment',
+    'get_weather': 'tool.utility',
+    'web_search': 'tool.utility',
+    'random_pick': 'tool.utility',
+    'get_current_time': 'tool.utility',
+    'get_class_list': 'tool.utility',
+    'view_file': 'tool.utility',
+    'manage_roles': 'tool.utility',
   }
 
   // Load tool config for max_result_length (全局，所有用户共享)
