@@ -240,7 +240,8 @@ async function deleteRole(id: number) {
             <n-select v-model:value="form.parent_id" :options="parentOptions" :disabled="!!editing" placeholder="选择身份组" />
           </n-form-item>
           <n-form-item label="班级">
-            <n-select v-model:value="form.class" :options="classOptions" placeholder="选择班级" :disabled="!!editing && !currentUserPerms.includes('classes.view_all')" />
+            <n-input v-if="currentUserPerms.includes('classes.view_all')" v-model:value="form.class" placeholder="输入班级名称" :disabled="!!editing" />
+            <n-select v-else v-model:value="form.class" :options="classOptions" placeholder="选择班级" :disabled="!!editing" />
           </n-form-item>
         </template>
 
@@ -250,7 +251,7 @@ async function deleteRole(id: number) {
         <div v-if="activeTab === 'roles' && selectedParentPerms.length > 0" style="margin-bottom: 12px">
           <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px">继承自父身份组（不可修改）</div>
           <div style="display: flex; flex-wrap: wrap; gap: 4px">
-            <n-tag v-for="code in selectedParentPerms" :key="code" size="tiny" :bordered="false" round disabled style="opacity: 0.6; font-size: 11px">{{ code }}</n-tag>
+            <n-tag v-for="code in selectedParentPerms" :key="code" size="tiny" :bordered="false" round style="opacity: 0.5; font-size: 11px; cursor: not-allowed">{{ code }}</n-tag>
           </div>
         </div>
 

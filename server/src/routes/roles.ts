@@ -253,7 +253,8 @@ router.put('/role-groups/:id', authMiddleware, validate(updateGroupSchema), (req
   if (!group) return fail(res, 404, 'NOT_FOUND', '子权限组不存在')
 
   const userPerms = (req.user as any)?.permissions || []
-  if (!userPerms.includes('classes.view_all') && req.user!.class !== group.class) {
+  const targetClass = req.body.class ?? group.class
+  if (!userPerms.includes('classes.view_all') && req.user!.class !== targetClass) {
     return fail(res, 403, 'FORBIDDEN', '无权修改该班级的职位')
   }
 
