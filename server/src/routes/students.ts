@@ -56,8 +56,8 @@ router.post('/', requirePermission('students.write'), validate(createSchema), (r
   const pw = req.body.password
   // Default to "学生" permission group if none specified
   const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as any)?.id ?? null
-  const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, student_no, nickname) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(uname, display_name, stuClass, pw, finalGroupId, studentNo, nickname ?? null)
+  const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(uname, display_name, stuClass, pw, finalGroupId, studentNo, nickname ?? null, 'student')
 
   const student = db
     .prepare(
