@@ -4,10 +4,11 @@ import { api } from '@/api/client'
 import {
   NButton, NInput, NAlert, NSpace, NSpin, NSelect, NTabs, NTabPane,
   NSwitch, NForm, NFormItem, NInputNumber, NCard, NTag, NDivider,
-  NCheckbox, NCheckboxGroup, NGrid, NGi, NScrollbar, NText,
+  NCheckbox, NCheckboxGroup, NGrid, NGi, NScrollbar, NText, NCascader,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import type { ChatSettings, ToolConfig } from '@/types'
+import { chinaRegions } from '@/data/china-regions'
 
 const message = useMessage()
 
@@ -165,6 +166,19 @@ const toolFields: Record<string, ToolConfigField[]> = {
 
 function getConfigData(tc: ToolConfig): Record<string, any> {
   try { return JSON.parse(tc.config_json || '{}') } catch { return {} }
+}
+
+function findRegionPath(value: string): string[] {
+  if (!value) return []
+  for (const province of chinaRegions) {
+    if (province.value === value) return [value]
+    if (province.children) {
+      for (const city of province.children) {
+        if (city.value === value) return [province.value, value]
+      }
+    }
+  }
+  return []
 }
 
 function updateConfigData(tc: ToolConfig, key: string, value: any) {
@@ -353,8 +367,19 @@ onMounted(load)
                   <div v-if="toolFields[tc.tool_name]?.length" style="display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px">
                     <div v-for="field in toolFields[tc.tool_name]" :key="field.key" style="display: flex; align-items: center; gap: 6px">
                       <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap">{{ field.label }}:</span>
+                      <n-cascader
+                        v-if="tc.tool_name === 'get_weather' && field.key === 'default_city'"
+                        :value="findRegionPath(getConfigData(tc)[field.key] || '')"
+                        @update:value="v => updateConfigData(tc, field.key, v[v.length - 1] || '')"
+                        :options="chinaRegions"
+                        size="small"
+                        style="width: 140px"
+                        placeholder="选择城市"
+                        :check-strategy="'child'"
+                        clearable
+                      />
                       <n-input
-                        v-if="field.type === 'text'"
+                        v-else-if="field.type === 'text'"
                         :value="getConfigData(tc)[field.key] || ''"
                         @update:value="v => updateConfigData(tc, field.key, v)"
                         :placeholder="field.placeholder"
