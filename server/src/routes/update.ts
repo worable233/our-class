@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { exec, execSync } from 'child_process'
+import { exec, execSync, spawn } from 'child_process'
 import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -90,7 +90,7 @@ router.post('/apply', async (_req: Request, res: Response) => {
   try {
     // 先检查 git 是否可用
     try {
-      execSync('git --version', { encoding: 'utf-8', timeout: 3000 })
+      execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
       updating = false
       return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
@@ -104,9 +104,18 @@ router.post('/apply', async (_req: Request, res: Response) => {
       return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
     }
 
-    // git pull（非阻塞）
-    const { stdout: pullOut } = await asyncExec('git pull origin main 2>&1', execOpts({
+    // fetch 最新代码 + reset --hard 到远程（比 pull 更安全，避免合并冲突）
+    const { stdout: fetchOut } = await asyncExec('git fetch origin main 2>&1', execOpts({
       timeout: 30000,
+      cwd: PROJECT_ROOT,
+    }))
+    await asyncExec('git reset --hard origin/main 2>&1', execOpts({
+      timeout: 15000,
+      cwd: PROJECT_ROOT,
+    }))
+    // 清理被删除的文件（比如旧的迁移 sql 文件）
+    await asyncExec('git clean -fd 2>&1', execOpts({
+      timeout: 10000,
       cwd: PROJECT_ROOT,
     }))
 
@@ -117,13 +126,31 @@ router.post('/apply', async (_req: Request, res: Response) => {
     }))
 
     ok(res, {
-      message: '更新成功，请重启服务器以生效',
-      pull: pullOut.trim(),
+      message: '✅ 更新成功，服务器即将自动重启',
+      pull: fetchOut.trim(),
+    })
+
+    // 等待响应发送完毕后再重启
+    res.on('finish', () => {
+      setTimeout(() => {
+        const child = spawn(process.argv[0], process.argv.slice(1), {
+          cwd: PROJECT_ROOT,
+          stdio: 'inherit',
+          detached: true,
+        })
+        child.unref()
+        process.exit(0)
+      }, 1000)
     })
   } catch (e: any) {
+    // 如果失败，尝试恢复 git 状态
+    try {
+      execSync('git reset --hard HEAD 2>&1', execOpts({ cwd: PROJECT_ROOT, timeout: 10000 }))
+    } catch {}
+
     const message = e.code === 'ETIMEDOUT' || e.killed
       ? '操作超时，请检查网络连接后重试'
-      : '更新失败，请检查控制台输出或稍后重试'
+      : '更新失败，已自动回退代码变更，请检查控制台输出或稍后重试'
     fail(res, 500, 'UPDATE_FAILED', message)
   } finally {
     updating = false
