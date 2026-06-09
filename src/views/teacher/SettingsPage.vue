@@ -376,8 +376,8 @@ onMounted(load)
                       <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap">{{ field.label }}:</span>
                       <n-cascader
                         v-if="tc.tool_name === 'get_weather' && field.key === 'default_city'"
-                        :value="findRegionPath(getConfigData(tc)[field.key] || '')"
-                        @update:value="onCityChange(tc, $event)"
+                        :value="getConfigData(tc)[field.key] || null"
+                        @update:value="v => updateConfigData(tc, field.key, v || '')"
                         :options="chinaRegions"
                         size="small"
                         style="width: 140px"
