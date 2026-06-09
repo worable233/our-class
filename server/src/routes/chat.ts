@@ -1534,29 +1534,32 @@ router.post(
       .all(convId) as MessageRow[]
 
     // ── Protections ──────────────────────────────────────────────────────
-
-    // 1. Round limit (50 exchanges = 100 messages)
-    if (history.length >= lim.max_rounds * 2) {
-      return fail(res, 400, 'ROUND_LIMIT', `对话已达 ${lim.max_rounds} 轮上限，请开启新对话`)
-    }
-
-    // 2. Bot detection: rapid-fire requests get delayed
+    const userPerms = (req.user as any)?.permissions || []
+    const unlimited = userPerms.includes('chat.unlimited')
     const lim = getLimits()
 
-    const now = Date.now()
-    const last = lastMsgTime.get(req.user!.id) || 0
-    lastMsgTime.set(req.user!.id, now)
-    if (now - last < lim.rapid_gap_ms && now - last > 0) {
-      await new Promise(r => setTimeout(r, lim.rapid_delay_ms))
-    }
+    if (!unlimited) {
+      // 1. Round limit
+      if (history.length >= lim.max_rounds * 2) {
+        return fail(res, 400, 'ROUND_LIMIT', `对话已达 ${lim.max_rounds} 轮上限，请开启新对话`)
+      }
 
-    // 3. Progressive delay based on round count
-    const rounds = Math.floor(history.length / 2)
-    if (rounds > 10) {
-      const delay = rounds <= 30
-        ? (rounds - 10) * 1000
-        : 20000 + (rounds - 30) * 3000
-      await new Promise(r => setTimeout(r, Math.min(delay, 30000)))
+      // 2. Bot detection: rapid-fire requests get delayed
+      const now = Date.now()
+      const last = lastMsgTime.get(req.user!.id) || 0
+      lastMsgTime.set(req.user!.id, now)
+      if (now - last < lim.rapid_gap_ms && now - last > 0) {
+        await new Promise(r => setTimeout(r, lim.rapid_delay_ms))
+      }
+
+      // 3. Progressive delay based on round count
+      const rounds = Math.floor(history.length / 2)
+      if (rounds > 10) {
+        const delay = rounds <= 30
+          ? (rounds - 10) * 1000
+          : 20000 + (rounds - 30) * 3000
+        await new Promise(r => setTimeout(r, Math.min(delay, 30000)))
+      }
     }
 
     // 4. Context window: only keep last N exchanges

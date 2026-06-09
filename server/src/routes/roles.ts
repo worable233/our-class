@@ -28,6 +28,7 @@ const ALL_PERMISSIONS = [
   { code: 'chat.access', label: '使用AI助手', category: 'AI助手' },
   { code: 'chat.config', label: '配置API Key', category: 'AI助手' },
   { code: 'chat.skills', label: '管理 Skill', category: 'AI助手' },
+  { code: 'chat.unlimited', label: '不受调用限制', category: 'AI助手' },
   { code: 'roles.manage', label: '管理权限组', category: '系统设置' },
   { code: 'audit_logs.read', label: '查看操作日志', category: '系统设置' },
   { code: 'classes.read', label: '查看班级列表', category: '系统设置' },

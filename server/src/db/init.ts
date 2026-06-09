@@ -40,7 +40,7 @@ function seedPermissionGroups(db: Database.Database) {
     'points.read', 'points.write',
     'scores.read', 'scores.write', 'scores.delete',
     'assignments.read', 'assignments.write', 'assignments.submit', 'assignments.grade',
-    'chat.access', 'chat.config', 'chat.skills',
+    'chat.access', 'chat.config', 'chat.skills', 'chat.unlimited',
     'roles.manage',
     'audit_logs.read',
     'classes.read', 'classes.view_all',
