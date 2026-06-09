@@ -230,8 +230,8 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
                 :time="formatDate(c.date)"
                 type="info"
               >
-                <template #icon>
-                  <code style="font-size: 10px">{{ c.hash }}</code>
+                <template #header>
+                  <code style="font-size: 11px">{{ c.hash }}</code>
                 </template>
               </n-timeline-item>
             </n-timeline>
@@ -274,8 +274,8 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
             :time="formatDateTime(c.date)"
             :type="c.hash === versionInfo.sha ? 'success' : 'default'"
           >
-            <template #icon>
-              <code style="font-size: 10px">{{ c.hash }}</code>
+            <template #header>
+              <code style="font-size: 11px">{{ c.hash }}</code>
             </template>
           </n-timeline-item>
         </n-timeline>
