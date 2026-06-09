@@ -318,6 +318,10 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     return JSON.stringify({ error: `您没有权限使用「${name}」工具` })
   }
 
+  // Look up current user name for audit logging
+  const curUser = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId) as any
+  const userName = curUser?.display_name || ''
+
   // Tool -> permission code mapping (grouped permissions)
   const TOOL_PERM_MAP: Record<string, string> = {
     'list_students': 'tool.student.read',
@@ -397,6 +401,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const absAmt = Math.abs(amount)
       db.prepare('INSERT INTO point_records (student_id, reason, type, amount, created_by, date) VALUES (?,?,?,?,?,?)')
         .run(student.id, input.reason, type, absAmt, userId, new Date().toISOString().split('T')[0])
+      writeAuditLog(userId, userName, 'add_points', 'point_record', student.id, { student_name: input.student_name, amount, reason: input.reason })
       return JSON.stringify({ success: true, message: `已为「${input.student_name}」${type === 'add' ? '加' : '扣'}${absAmt}分，原因：${input.reason}` })
     }
 
@@ -592,6 +597,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         const result = db.prepare(
           'INSERT INTO users (username, display_name, role, class, password, group_id, student_no) VALUES (?,?,?,?,?,(SELECT id FROM permission_groups WHERE name=?),?)'
         ).run(username, display_name, 'student', cls || '', password || '123456', '学生', `S${String(maxId.m + 1).padStart(7, '0')}`)
+        writeAuditLog(userId, userName, 'create_student', 'user', result.lastInsertRowid, { username, display_name, class: cls })
         results.push({ success: true, id: result.lastInsertRowid, username, display_name, class: cls || '' })
       }
       return JSON.stringify({ total: students.length, created: results.filter((r: any) => r.success).length, results })
@@ -613,6 +619,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params, updateId)
       }
       const updated = db.prepare("SELECT id, username, display_name, class FROM users WHERE id = ?").get(updateId)
+      writeAuditLog(userId, userName, 'update_student', 'user', updateId, { display_name: input.display_name, class: input.class })
       return JSON.stringify({ success: true, student: updated, message: `已更新学生信息` })
     }
 
@@ -628,6 +635,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         const student = db.prepare(delSql).get(id, ...cf.params) as any
         if (!student) { results.push({ id, error: `未找到 ID 为 ${id} 的学生或无权操作` }); continue }
         db.prepare("DELETE FROM users WHERE id = ?").run(id)
+        writeAuditLog(userId, userName, 'delete_student', 'user', id, { display_name: student.display_name, class: student.class })
         results.push({ id, success: true, display_name: student.display_name })
       }
       return JSON.stringify({ total: ids.length, deleted: results.filter((r: any) => r.success).length, results })
@@ -655,6 +663,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         const gid = result.lastInsertRowid
         const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
         for (const code of permissions) insert.run(gid, code)
+        writeAuditLog(userId, userName, 'create_role', 'role', gid, { name, permissions })
         return JSON.stringify({ success: true, id: gid, name, message: '权限组已创建' })
       }
       if (action === 'update') {
@@ -669,6 +678,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
           const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
           for (const code of input.permissions as string[]) insert.run(gid, code)
         }
+        writeAuditLog(userId, userName, 'update_role', 'role', gid, { name: input.name, permissions: input.permissions })
         return JSON.stringify({ success: true, message: '权限组已更新' })
       }
       if (action === 'delete') {
@@ -677,6 +687,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         if (gid <= 2) return JSON.stringify({ error: '无法删除默认权限组' })
         db.prepare('UPDATE users SET group_id = NULL WHERE group_id = ?').run(gid)
         db.prepare('DELETE FROM permission_groups WHERE id = ?').run(gid)
+        writeAuditLog(userId, userName, 'delete_role', 'role', gid, {})
         return JSON.stringify({ success: true, message: '权限组已删除' })
       }
       if (action === 'assign') {
@@ -693,6 +704,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
           db.prepare('UPDATE users SET group_id = ? WHERE id = ?').run(gid, uid)
           results.push({ id: uid, display_name: user.display_name, success: true })
         }
+        writeAuditLog(userId, userName, 'assign_role', 'role', gid, { user_ids: userIds, assigned: results.filter((r: any) => r.success).length })
         return JSON.stringify({ total: userIds.length, assigned: results.filter((r: any) => r.success).length, results })
       }
       return JSON.stringify({ error: '未知操作: ' + action })
