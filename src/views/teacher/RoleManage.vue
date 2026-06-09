@@ -1,51 +1,75 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Shield, Plus, Pencil, Trash2, Check, X } from '@lucide/vue'
+import { ref, computed, onMounted, h } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
-import type { PermissionGroup, PermissionDef } from '@/types'
-import { useDialog, useMessage } from 'naive-ui'
 import {
-  NButton, NModal, NForm, NFormItem, NInput,
-  NSpace, NTag, NSpin, NEmpty, NCheckbox, NCheckboxGroup,
-  NGi, NGrid, NNumberAnimation, NAlert,
-  NBadge, NPopconfirm, NList, NListItem,
+  NButton, NInput, NAlert, NSpace, NSpin, NSelect, NTabs, NTabPane,
+  NModal, NCard, NTag, NCheckbox, NCheckboxGroup, NDivider, NForm, NFormItem,
 } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 
-const dialog = useDialog()
 const message = useMessage()
-const groups = ref<PermissionGroup[]>([])
+const auth = useAuthStore()
+
+interface PermissionDef { code: string; label: string; category: string }
+interface PermissionGroup { id: number; name: string; description: string; parent_id: number | null; class: string; parent_name?: string; permissions: string[]; created_at: string }
+
+// ── Shared state ─────────────────────────────────────────────────
+
 const allPermissions = ref<PermissionDef[]>([])
-const loading = ref(true)
-const saving = ref(false)
+const groups = ref<PermissionGroup[]>([])
+const loading = ref(false)
 const showModal = ref(false)
-const editing = ref<PermissionGroup | null>(null)
-const form = ref({
-  name: '',
-  description: '',
-  permissions: [] as string[],
-})
+const editing = ref<number | null>(null)
+const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, permissions: [] as string[] })
+const saving = ref(false)
+const activeTab = ref('identities')
+const currentUserPerms = computed(() => auth.permissions || [])
+
+// ── Computed ─────────────────────────────────────────────────────
+
+const identityGroups = computed(() => groups.value.filter(g => !g.parent_id))
+const roleGroups = computed(() => groups.value.filter(g => g.parent_id))
 
 const permissionCategories = computed(() => {
   const map: Record<string, PermissionDef[]> = {}
   for (const p of allPermissions.value) {
-    const category = p.category
-    if (!map[category]) map[category] = []
-    map[category].push(p)
+    const cat = p.category
+    if (!map[cat]) map[cat] = []
+    map[cat].push(p)
   }
   return Object.entries(map)
 })
 
-const totalPermissions = computed(() => allPermissions.value.length)
+const parentOptions = computed(() => identityGroups.value.map(g => ({ label: g.name, value: g.id })))
 
-const groupedCount = computed(() =>
-  groups.value.reduce((sum, g) => sum + g.permissions.length, 0),
-)
+const classOptions = computed(() => {
+  if (currentUserPerms.value.includes('classes.view_all')) return [{ label: '全部班级', value: '' }]
+  return (auth.user?.class || '').split(',').filter(Boolean).map(c => ({ label: c, value: c }))
+})
+
+// Selected parent's permissions (for disabled checkboxes)
+const selectedParentPerms = computed(() => {
+  const pid = form.value.parent_id
+  if (!pid) return []
+  const parent = groups.value.find(g => g.id === pid)
+  return parent?.permissions || []
+})
+
+// Permissions available to check: current user's perms minus parent's perms
+const availableExtraPerms = computed(() => {
+  const parentPerms = new Set(selectedParentPerms.value)
+  const userPerms = new Set(currentUserPerms.value)
+  return allPermissions.value.filter(p => !parentPerms.has(p.code) && userPerms.has(p.code))
+})
 
 function tagType(count: number) {
   if (count >= 14) return 'info' as const
   if (count >= 8) return 'warning' as const
   return 'success' as const
 }
+
+// ── Load ─────────────────────────────────────────────────────────
 
 async function load() {
   loading.value = true
@@ -56,261 +80,211 @@ async function load() {
     ])
     groups.value = g
     allPermissions.value = p
-  } catch {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-function openNew() {
-  editing.value = null
-  form.value = { name: '', description: '', permissions: [] }
-  showModal.value = true
-}
-
-function openEdit(g: PermissionGroup) {
-  editing.value = g
-  form.value = { name: g.name, description: g.description, permissions: [...g.permissions] }
-  showModal.value = true
-}
-
-async function save() {
-  if (!form.value.name) return
-  saving.value = true
-  try {
-    if (editing.value) {
-      await api.put(`/roles/groups/${editing.value.id}`, form.value)
-      message.success('职位已更新')
-    } else {
-      await api.post('/roles/groups', form.value)
-      message.success('职位已创建')
-    }
-    showModal.value = false
-    await load()
-  } catch {
-    message.error('保存失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function remove(id: number) {
-  dialog.warning({
-    title: '确认删除',
-    content: '删除该职位后，拥有该职位的用户将失去相关权限。确定要删除吗？',
-    positiveText: '确认删除',
-    negativeText: '取消',
-    positiveButtonProps: { type: 'error' as const },
-    onPositiveClick: async () => {
-      try {
-        await api.delete(`/roles/groups/${id}`)
-        message.success('已删除')
-        await load()
-      } catch {
-        message.error('删除失败')
-      }
-    },
-  })
+  } catch { message.error('加载数据失败') }
+  finally { loading.value = false }
 }
 
 onMounted(load)
+
+// ── Identity Group CRUD ─────────────────────────────────────────
+
+function openIdentityNew() {
+  editing.value = null
+  form.value = { name: '', description: '', class: '', parent_id: null, permissions: [] }
+  showModal.value = true
+}
+
+function openIdentityEdit(g: PermissionGroup) {
+  editing.value = g.id
+  form.value = { name: g.name, description: g.description, class: '', parent_id: null, permissions: [...g.permissions] }
+  showModal.value = true
+}
+
+async function saveIdentity() {
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.put(`/roles/groups/${editing.value}`, { name: form.value.name, description: form.value.description, permissions: form.value.permissions })
+      message.success('身份组已更新')
+    } else {
+      await api.post('/roles/groups', { name: form.value.name, description: form.value.description, permissions: form.value.permissions })
+      message.success('身份组已创建')
+    }
+    showModal.value = false
+    load()
+  } catch (e: any) { message.error(e.message || '操作失败') }
+  finally { saving.value = false }
+}
+
+async function deleteIdentity(id: number) {
+  if (!window.confirm('确定要删除此身份组吗？')) return
+  try {
+    await api.delete(`/roles/groups/${id}`)
+    message.success('已删除')
+    load()
+  } catch (e: any) { message.error(e.message || '删除失败') }
+}
+
+// ── Role Group CRUD ─────────────────────────────────────────────
+
+function openRoleNew() {
+  editing.value = null
+  form.value = { name: '', description: '', class: '', parent_id: null, permissions: [] }
+  showModal.value = true
+}
+
+function openRoleEdit(g: PermissionGroup) {
+  editing.value = g.id
+  form.value = { name: g.name, description: g.description, class: g.class, parent_id: g.parent_id, permissions: [...g.permissions] }
+  showModal.value = true
+}
+
+async function saveRole() {
+  if (!form.value.parent_id) { message.error('请选择父身份组'); return }
+  if (!form.value.class) { message.error('请选择班级'); return }
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.put(`/roles/role-groups/${editing.value}`, { name: form.value.name, permissions: form.value.permissions, class: form.value.class })
+      message.success('职位已更新')
+    } else {
+      await api.post('/roles/role-groups', { name: form.value.name, parent_id: form.value.parent_id, class: form.value.class, permissions: form.value.permissions })
+      message.success('职位已创建')
+    }
+    showModal.value = false
+    load()
+  } catch (e: any) { message.error(e.message || '操作失败') }
+  finally { saving.value = false }
+}
+
+async function deleteRole(id: number) {
+  if (!window.confirm('确定要删除此职位吗？')) return
+  try {
+    await api.delete(`/roles/role-groups/${id}`)
+    message.success('已删除')
+    load()
+  } catch (e: any) { message.error(e.message || '删除失败') }
+}
 </script>
 
 <template>
-  <div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">职位管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理权限组及其可访问的模块和功能</NText>
-      </div>
-      <NButton type="primary" @click="openNew" round :disabled="allPermissions.length === 0">
-        <template #icon><Plus :size="16" /></template>
-        新建职位
-      </NButton>
-    </div>
+  <n-spin :show="loading">
+    <n-tabs v-model:value="activeTab" type="line" animated style="margin-bottom: 12px">
+      <n-tab-pane name="identities" tab="身份管理">
+        <n-space vertical :size="12">
+          <n-button v-if="currentUserPerms.includes('roles.manage')" @click="openIdentityNew" secondary>新建身份组</n-button>
 
-    <!-- 统计卡片 -->
-    <NGrid :cols="3" :x-gap="16" style="margin-bottom: 28px">
-      <NGi>
-        <NCard size="small" :bordered="true">
-          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">职位总数</NText>
-          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em">
-            <NNumberAnimation :from="0" :to="groups.length" :duration="600" />
-          </NText>
-        </NCard>
-      </NGi>
-      <NGi>
-        <NCard size="small" :bordered="true">
-          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">可分配权限</NText>
-          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em;color:var(--accent-text)">
-            <NNumberAnimation :from="0" :to="totalPermissions" :duration="600" />
-          </NText>
-        </NCard>
-      </NGi>
-      <NGi>
-        <NCard size="small" :bordered="true">
-          <NText depth="3" style="font-size:12px;display:block;margin-bottom:4px">已分配权限</NText>
-          <NText style="font-size:28px;font-weight:700;letter-spacing:-0.03em">
-            <NNumberAnimation :from="0" :to="groupedCount" :duration="600" />
-          </NText>
-        </NCard>
-      </NGi>
-    </NGrid>
-
-    <!-- 职位列表 -->
-    <NSpin :show="loading" style="min-height: 200px">
-      <template v-if="groups.length > 0">
-        <NList hoverable clickable style="background:transparent">
-          <NListItem v-for="group in groups" :key="group.id">
-            <template #prefix>
-              <div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--accent-glow);color:var(--accent-text);flex-shrink:0">
-                <Shield :size="18" />
+          <n-card v-for="g in identityGroups" :key="g.id" size="small" :bordered="true">
+            <div style="display: flex; align-items: flex-start; gap: 12px">
+              <div style="flex: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
+                  <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ g.name }}</span>
+                  <n-tag size="tiny" :type="tagType(g.permissions.length)" round :bordered="false" style="flex-shrink:0">
+                    {{ g.permissions.length }} 项
+                  </n-tag>
+                </div>
+                <div v-if="g.description" style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">{{ g.description }}</div>
+                <div v-if="g.permissions.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px">
+                  <n-tag v-for="code in g.permissions.slice(0, 8)" :key="code" size="tiny" :bordered="false" round style="font-size: 11px">{{ code }}</n-tag>
+                  <n-tag v-if="g.permissions.length > 8" size="tiny" :bordered="false" round style="font-size: 11px">+{{ g.permissions.length - 8 }}</n-tag>
+                </div>
               </div>
-            </template>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;width:100%">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0">
-                <span style="font-weight:600;font-size:15px;color:var(--text-primary);white-space:nowrap">{{ group.name }}</span>
-                <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">{{ group.description || '暂无描述' }}</span>
-                <NTag size="tiny" :type="tagType(group.permissions.length)" round :bordered="false" style="flex-shrink:0">
-                  {{ group.permissions.length }} 项
-                </NTag>
-              </div>
-              <div style="display:flex;gap:4px;flex-shrink:0">
-                <NButton quaternary size="tiny" @click.stop="openEdit(group)" round>
-                  <template #icon><Pencil :size="13" /></template>编辑
-                </NButton>
-                <NPopconfirm @positive-click="remove(group.id)">
-                  <template #trigger>
-                    <NButton quaternary size="tiny" type="error" round>
-                      <template #icon><Trash2 :size="13" /></template>删除
-                    </NButton>
-                  </template>
-                  确定删除职位「{{ group.name }}」？
-                </NPopconfirm>
+              <div v-if="currentUserPerms.includes('roles.manage')" style="display: flex; gap: 4px; flex-shrink: 0">
+                <n-button size="tiny" quaternary @click="openIdentityEdit(g)">编辑</n-button>
+                <n-button size="tiny" quaternary type="error" @click="deleteIdentity(g.id)">删除</n-button>
               </div>
             </div>
-            <template #footer>
-              <div v-if="group.permissions.length > 0" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
-                <template v-for="code in group.permissions.slice(0, 8)" :key="code">
-                  <NTag size="tiny" :bordered="false" round style="font-size:11px">
-                    {{ allPermissions.find(p => p.code === code)?.label || code }}
-                  </NTag>
-                </template>
-                <NTag v-if="group.permissions.length > 8" size="tiny" :bordered="false" round style="font-size:11px">
-                  +{{ group.permissions.length - 8 }}
-                </NTag>
+          </n-card>
+        </n-space>
+      </n-tab-pane>
+
+      <n-tab-pane name="roles" tab="职位管理">
+        <n-space vertical :size="12">
+          <n-button @click="openRoleNew" secondary>新建职位</n-button>
+
+          <n-card v-for="g in roleGroups" :key="g.id" size="small" :bordered="true">
+            <div style="display: flex; align-items: flex-start; gap: 12px">
+              <div style="flex: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap">
+                  <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ g.name }}</span>
+                  <n-tag size="tiny" :bordered="false" round style="font-size: 11px">{{ g.class }}</n-tag>
+                  <n-tag size="tiny" type="info" :bordered="false" round style="font-size: 11px">{{ g.parent_name || '未知' }}</n-tag>
+                  <n-tag size="tiny" :type="tagType(g.permissions.length)" round :bordered="false" style="font-size: 11px">
+                    +{{ g.permissions.length }} 额外
+                  </n-tag>
+                </div>
               </div>
-              <div v-else style="font-size:11px;color:var(--text-muted);margin-top:4px">暂无权限</div>
-            </template>
-          </NListItem>
-        </NList>
-      </template>
-      <NEmpty v-else description="暂无职位，点击上方按钮创建" />
-    </NSpin>
-
-    <!-- 新建/编辑弹窗 -->
-    <NModal
-      v-model:show="showModal"
-      preset="card"
-      :title="editing ? '编辑职位' : '新建职位'"
-      style="width: 640px; max-width: 92vw"
-      :mask-closable="false"
-      :segmented="{ content: true, footer: true }"
-      header-style="font-size:18px;font-weight:600"
-      content-style="padding: 20px 28px"
-      footer-style="padding: 16px 28px"
-    >
-      <NForm :model="form" label-placement="top">
-        <NFormItem label="职位名称" required>
-          <NInput
-            v-model:value="form.name"
-            placeholder="例如：班长、纪律委员、课代表"
-            :maxlength="20"
-            show-count
-            clearable
-          />
-        </NFormItem>
-        <NFormItem label="描述（选填）">
-          <NInput
-            v-model:value="form.description"
-            placeholder="简要说明该职位的职责范围"
-            :maxlength="100"
-            show-count
-            clearable
-            type="textarea"
-            :rows="2"
-          />
-        </NFormItem>
-
-        <NDivider style="margin: 20px 0 16px">
-          <NTag size="small" :bordered="false" round>权限配置</NTag>
-        </NDivider>
-
-        <NAlert type="info" :bordered="false" style="margin-bottom: 20px">
-          <template #header>勾选该职位拥有的权限</template>
-          老师默认拥有全部权限，学生默认只有基础权限
-        </NAlert>
-
-        <div style="max-height: 360px; overflow-y: auto; padding-right: 4px">
-          <NCheckboxGroup v-model:value="form.permissions">
-            <div
-              v-for="[category, perms] in permissionCategories"
-              :key="category"
-              style="margin-bottom: 16px"
-            >
-              <div
-                style="
-                  display: flex; align-items: center; gap: 8px;
-                  padding: 8px 12px; margin-bottom: 8px;
-                  border-radius: 6px;
-                  background: var(--ground);
-                  font-size: 13px; font-weight: 600;
-                  color: var(--text-secondary);
-                "
-              >
-                <NBadge :value="perms.length" :max="99" />
-                {{ category }}
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 6px 12px; padding-left: 4px">
-                <NCheckbox
-                  v-for="p in perms"
-                  :key="p.code"
-                  :value="p.code"
-                  style="padding: 3px 0; min-width: 140px"
-                >
-                  {{ p.label }}
-                </NCheckbox>
+              <div style="display: flex; gap: 4px; flex-shrink: 0">
+                <n-button size="tiny" quaternary @click="openRoleEdit(g)">编辑</n-button>
+                <n-button size="tiny" quaternary type="error" @click="deleteRole(g.id)">删除</n-button>
               </div>
             </div>
-          </NCheckboxGroup>
+          </n-card>
+        </n-space>
+      </n-tab-pane>
+    </n-tabs>
+
+    <!-- ── Shared Modal ── -->
+    <n-modal v-model:show="showModal" :mask-closable="false" preset="card" style="max-width: 640px" :title="editing ? '编辑' : '新建'" :segmented="{ content: true }">
+      <n-form label-placement="top" size="small">
+        <n-form-item label="名称">
+          <n-input v-model:value="form.name" placeholder="权限组名称" />
+        </n-form-item>
+
+        <n-form-item v-if="activeTab === 'identities'" label="描述">
+          <n-input v-model:value="form.description" placeholder="可选描述" />
+        </n-form-item>
+
+        <template v-if="activeTab === 'roles'">
+          <n-form-item label="继承自">
+            <n-select v-model:value="form.parent_id" :options="parentOptions" :disabled="!!editing" placeholder="选择身份组" />
+          </n-form-item>
+          <n-form-item label="班级">
+            <n-select v-model:value="form.class" :options="classOptions" placeholder="选择班级" :disabled="!!editing && !currentUserPerms.includes('classes.view_all')" />
+          </n-form-item>
+        </template>
+
+        <n-divider>权限设置</n-divider>
+
+        <!-- Selected parent's permissions (disabled) -->
+        <div v-if="activeTab === 'roles' && selectedParentPerms.length > 0" style="margin-bottom: 12px">
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px">继承自父身份组（不可修改）</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px">
+            <n-tag v-for="code in selectedParentPerms" :key="code" size="tiny" :bordered="false" round disabled style="opacity: 0.6; font-size: 11px">{{ code }}</n-tag>
+          </div>
         </div>
-      </NForm>
+
+        <!-- Identity: show all permissions -->
+        <!-- Role: show only extra permissions the user can grant -->
+        <div v-for="[category, perms] in permissionCategories" :key="category">
+          <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 8px 0 4px">{{ category }}</div>
+          <n-checkbox-group v-model:value="form.permissions">
+            <n-space :size="[12, 4]" wrap>
+              <template v-for="p in perms" :key="p.code">
+                <!-- Identity tab: show all permissions -->
+                <n-checkbox v-if="activeTab === 'identities'" :value="p.code" :label="`${p.label} (${p.code})`" size="small" />
+                <!-- Role tab: show only perms user has AND not in parent -->
+                <n-checkbox
+                  v-else-if="availableExtraPerms.includes(p) || form.permissions.includes(p.code)"
+                  :value="p.code" :label="`${p.label} (${p.code})`" size="small"
+                />
+              </template>
+            </n-space>
+          </n-checkbox-group>
+        </div>
+      </n-form>
 
       <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 10px">
-          <NButton @click="showModal = false" :disabled="saving" quaternary>取消</NButton>
-          <NButton
-            type="primary"
-            @click="save"
-            :disabled="!form.name"
-            :loading="saving"
-            round
-          >
-            {{ editing ? '保存修改' : '创建职位' }}
-          </NButton>
-        </div>
+        <n-space justify="end">
+          <n-button @click="showModal = false">取消</n-button>
+          <n-button type="primary" :loading="saving" @click="activeTab === 'identities' ? saveIdentity() : saveRole()">
+            {{ editing ? '保存' : '创建' }}
+          </n-button>
+        </n-space>
       </template>
-    </NModal>
-  </div>
+    </n-modal>
+  </n-spin>
 </template>
 
 <style scoped>
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-}
 </style>
