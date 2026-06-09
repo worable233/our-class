@@ -225,13 +225,17 @@ async function checkUpdate() {
 }
 
 async function applyUpdate() {
+  if (!window.confirm('确定要拉取最新代码并安装依赖吗？\n\n更新过程中页面可能无响应，更新后需要手动重启服务器。')) {
+    return
+  }
   updateApplying.value = true
   updateResult.value = ''
   try {
     const res = await api.post<{ message: string; pull: string }>('/system/update/apply', {})
     updateResult.value = '✅ ' + res.message + (res.pull ? '\n' + res.pull : '')
   } catch (e: any) {
-    updateResult.value = '❌ ' + (e.message || '更新失败')
+    const msg = e.message || '更新失败'
+    updateResult.value = msg.includes('UPDATE_IN_PROGRESS') ? '⏳ 已有更新任务正在进行中' : ('❌ ' + msg)
   } finally {
     updateApplying.value = false
   }
