@@ -181,6 +181,13 @@ function findRegionPath(value: string): string[] {
   return []
 }
 
+function onCityChange(tc: ToolConfig, v: string[] | null) {
+  updateConfigData(tc, 'default_city', v?.[v.length - 1] || '')
+  // Force reactivity by replacing the ref item
+  const idx = toolConfigs.value.findIndex(t => t.tool_name === tc.tool_name)
+  if (idx !== -1) toolConfigs.value[idx] = { ...toolConfigs.value[idx] }
+}
+
 function updateConfigData(tc: ToolConfig, key: string, value: any) {
   const data = getConfigData(tc)
   data[key] = value
@@ -370,12 +377,11 @@ onMounted(load)
                       <n-cascader
                         v-if="tc.tool_name === 'get_weather' && field.key === 'default_city'"
                         :value="findRegionPath(getConfigData(tc)[field.key] || '')"
-                        @update:value="v => updateConfigData(tc, field.key, v[v.length - 1] || '')"
+                        @update:value="onCityChange(tc, $event)"
                         :options="chinaRegions"
                         size="small"
                         style="width: 140px"
                         placeholder="选择城市"
-                        :check-strategy="'child'"
                         clearable
                       />
                       <n-input
