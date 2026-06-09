@@ -46,9 +46,9 @@ const ALL_PERMISSIONS = [
   { code: 'tool.get_current_time', label: '当前时间', category: 'AI 工具' },
   { code: 'tool.get_class_list', label: '班级列表', category: 'AI 工具' },
   { code: 'tool.view_file', label: '查看文件', category: 'AI 工具' },
-  { code: 'tool.create_student', label: '创建学生', category: 'AI 工具' },
+  { code: 'tool.create_students', label: '批量创建学生', category: 'AI 工具' },
   { code: 'tool.update_student', label: '修改学生', category: 'AI 工具' },
-  { code: 'tool.delete_student', label: '删除学生', category: 'AI 工具' },
+  { code: 'tool.delete_students', label: '批量删除学生', category: 'AI 工具' },
 ]
 
 // ── Zod Schemas ────────────────────────────────────────────────────────────
