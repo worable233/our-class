@@ -47,7 +47,7 @@ router.get('/check', async (_req: Request, res: Response) => {
 
     // ping GitHub 检查网络连通性
     try {
-      execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 5000 }))
+      execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
       return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
     }
@@ -98,7 +98,7 @@ router.post('/apply', async (_req: Request, res: Response) => {
 
     // ping GitHub 检查网络连通性
     try {
-      execSync('ping -c 1 -t 3 github.com 2>&1', { encoding: 'utf-8', timeout: 5000 })
+      execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
       updating = false
       return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
