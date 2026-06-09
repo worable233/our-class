@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '@/api/client'
-import { NButton, NCard, NSelect, NInputNumber, NAlert, NTag } from 'naive-ui'
+import {
+  NButton, NCard, NSelect, NInputNumber, NAlert, NTag, NSpace, NDivider,
+  NDescriptions, NDescriptionsItem, NTimeline, NTimelineItem, NEmpty, NSpin,
+  NForm, NFormItem, NGi, NGrid, NStatistic,
+} from 'naive-ui'
 import { useMessage } from 'naive-ui'
+import { RefreshCw, Download, Save, History, Settings } from '@lucide/vue'
 
 const message = useMessage()
 
@@ -18,6 +23,7 @@ const updateSettings = ref({ auto_check_interval: 3600, ping_timeout: 3 })
 const savingSettings = ref(false)
 
 const versionInfo = ref({ sha: '', date: '', message: '', last_check_time: '' })
+const versionLoading = ref(true)
 
 const lastCheckDisplay = computed(() => {
   const t = versionInfo.value.last_check_time
@@ -26,6 +32,16 @@ const lastCheckDisplay = computed(() => {
   if (isNaN(d.getTime())) return t
   return d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 })
+
+const intervalOptions = [
+  { label: '关闭', value: 0 },
+  { label: '每 30 分钟', value: 1800 },
+  { label: '每 1 小时', value: 3600 },
+  { label: '每 2 小时', value: 7200 },
+  { label: '每 6 小时', value: 21600 },
+  { label: '每 12 小时', value: 43200 },
+  { label: '每天', value: 86400 },
+]
 
 function formatDate(iso: string) {
   const d = new Date(iso)
@@ -39,8 +55,16 @@ function formatDate(iso: string) {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
+function formatDateTime(iso: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 async function loadVersion() {
+  versionLoading.value = true
   try { versionInfo.value = await api.get('/system/update/version') } catch {}
+  finally { versionLoading.value = false }
 }
 async function loadHistory() {
   try { historyList.value = await api.get('/system/update/history') } catch {}
@@ -148,107 +172,147 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
 </script>
 
 <template>
-  <div style="max-width:720px;display:flex;flex-direction:column;gap:16px;padding:8px 0">
+  <n-spin :show="versionLoading">
+    <n-space vertical :size="16" style="max-width: 800px; padding: 8px 0">
 
-    <!-- 版本信息 -->
-    <n-card size="small" :bordered="true">
-      <template #header><span style="font-weight:600">版本信息</span></template>
-      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
-        <div style="display:flex;justify-content:space-between">
-          <span style="color:var(--text-muted)">当前版本</span>
-          <span style="font-family:monospace">{{ versionInfo.sha || '--' }}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between">
-          <span style="color:var(--text-muted)">提交信息</span>
-          <span style="max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right">{{ versionInfo.message || '--' }}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between">
-          <span style="color:var(--text-muted)">上次检查</span>
-          <span>{{ lastCheckDisplay }}</span>
-        </div>
-      </div>
-    </n-card>
+      <!-- ── 版本信息 ── -->
+      <n-card title="版本信息" size="small" segmented>
+        <n-descriptions label-placement="left" :column="1" size="small" bordered>
+          <n-descriptions-item label="当前版本">
+            <code style="font-size: 13px">{{ versionInfo.sha || '--' }}</code>
+          </n-descriptions-item>
+          <n-descriptions-item label="提交信息">
+            {{ versionInfo.message || '--' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="提交时间">
+            {{ versionInfo.date ? formatDateTime(versionInfo.date) : '--' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="上次检查">
+            {{ lastCheckDisplay }}
+          </n-descriptions-item>
+        </n-descriptions>
+      </n-card>
 
-    <!-- 检查更新 -->
-    <n-card size="small" :bordered="true">
-      <template #header><span style="font-weight:600">检查更新</span></template>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <n-button :loading="updateChecking" @click="checkUpdate" round :disabled="updateApplying" style="width:fit-content">
-          {{ updateChecking ? '检查中...' : '检查更新' }}
-        </n-button>
+      <!-- ── 检查更新 ── -->
+      <n-card title="检查更新" size="small" segmented>
+        <n-space vertical :size="12">
+          <n-button :loading="updateChecking" @click="checkUpdate" :disabled="updateApplying" secondary>
+            <template #icon><RefreshCw :size="14" /></template>
+            {{ updateChecking ? '检查中...' : '检查更新' }}
+          </n-button>
 
-        <div v-if="updateInfo !== null">
-          <n-alert :type="updateInfo.behind ? 'warning' : 'success'" :closable="false" style="font-size:12px;margin-bottom:8px">
-            <template #header>{{ updateInfo.behind ? '有新版本可用' : '已是最新版本' }}</template>
-            <div style="display:flex;gap:12px;font-size:12px">
-              <span>当前 <code>{{ updateInfo.current }}</code></span>
-              <span v-if="updateInfo.behind">→ <code>{{ updateInfo.latest }}</code></span>
-            </div>
+          <n-alert v-if="updateResult && !updateInfo" :type="updateResult.startsWith('FAILED') ? 'error' : 'info'" :closable="false" style="font-size: 12px">
+            {{ updateResult }}
           </n-alert>
-          <div v-if="updateInfo.commits.length > 0" style="background:var(--surface-2);border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.8">
-            <div style="font-weight:600;color:var(--text-secondary);margin-bottom:4px;font-size:11px">更新内容 ({{ updateInfo.commits.length }} 个提交)</div>
-            <div v-for="c in updateInfo.commits" :key="c.hash" style="display:flex;gap:6px;color:var(--text-secondary)">
-              <span style="color:var(--accent-text);font-family:monospace;flex-shrink:0">{{ c.hash }}</span>
-              <span>{{ c.message }}</span>
+
+          <n-alert v-if="updateInfo" :type="updateInfo.behind ? 'warning' : 'success'" :closable="false" style="font-size: 12px">
+            <template #header>
+              <span style="font-weight: 600">
+                {{ updateInfo.behind ? '有新版本可用' : '已是最新版本' }}
+              </span>
+            </template>
+            <n-space :size="12" align="center">
+              <n-tag size="small" :bordered="false">{{ updateInfo.current }}</n-tag>
+              <span v-if="updateInfo.behind">→</span>
+              <n-tag v-if="updateInfo.behind" size="small" type="warning" :bordered="false">{{ updateInfo.latest }}</n-tag>
+            </n-space>
+          </n-alert>
+
+          <div v-if="updateInfo?.commits.length" style="background: var(--surface-2); border-radius: 8px; padding: 12px 16px">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
+              更新内容（共 {{ updateInfo.commits.length }} 个提交）
             </div>
+            <n-timeline size="small">
+              <n-timeline-item
+                v-for="c in updateInfo.commits"
+                :key="c.hash"
+                :content="c.message"
+                :time="formatDate(c.date)"
+                type="info"
+              >
+                <template #icon>
+                  <code style="font-size: 10px">{{ c.hash }}</code>
+                </template>
+              </n-timeline-item>
+            </n-timeline>
           </div>
-        </div>
-      </div>
-    </n-card>
+        </n-space>
+      </n-card>
 
-    <!-- 立即更新 -->
-    <n-card v-if="updateInfo?.behind" size="small" :bordered="true">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <n-button type="primary" :loading="updateApplying" @click="applyUpdate" round style="width:fit-content">
-          {{ updateApplying ? '更新中...' : '立即更新' }}
-        </n-button>
-        <n-alert v-if="updateResult" :type="updateResult.startsWith('DONE') ? 'success' : (updateResult.startsWith('FAILED') ? 'error' : 'info')" :closable="false" style="font-size:12px;white-space:pre-wrap">{{ updateResult }}</n-alert>
-        <pre v-if="updateOutput" style="background:var(--surface-2);border-radius:6px;padding:8px 12px;font-size:11px;line-height:1.5;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary);margin:0">{{ updateOutput }}</pre>
-      </div>
-    </n-card>
+      <!-- ── 立即更新 ── -->
+      <n-card v-if="updateInfo?.behind" size="small" segmented>
+        <n-space vertical :size="12">
+          <n-button type="primary" :loading="updateApplying" @click="applyUpdate">
+            <template #icon><Download :size="14" /></template>
+            {{ updateApplying ? '更新中...' : '立即更新' }}
+          </n-button>
 
-    <!-- 历史版本 -->
-    <n-card size="small" :bordered="true">
-      <template #header><span style="font-weight:600">历史版本</span></template>
-      <div style="display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto">
-        <div v-for="c in historyList" :key="c.hash" style="display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid var(--hairline);font-size:12px">
-          <span style="color:var(--accent-text);font-family:monospace;flex-shrink:0">{{ c.hash }}</span>
-          <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.message }}</span>
-          <span style="color:var(--text-muted);flex-shrink:0;font-size:11px">{{ formatDate(c.date) }}</span>
-        </div>
-        <div v-if="!historyList.length && !historyLoaded" style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px">加载中...</div>
-        <div v-if="!historyList.length && historyLoaded" style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px">暂无记录</div>
-      </div>
-    </n-card>
+          <n-alert v-if="updateResult" :type="updateResult.startsWith('DONE') ? 'success' : 'error'" :closable="false" style="font-size: 12px; white-space: pre-wrap">
+            {{ updateResult }}
+          </n-alert>
 
-    <!-- 自动检测设置 -->
-    <n-card size="small" :bordered="true">
-      <template #header><span style="font-weight:600">自动检测设置</span></template>
-      <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="color:var(--text-muted);width:100px">检测间隔</span>
-          <n-select v-model:value="updateSettings.auto_check_interval" :options="[
-            { label: '关闭', value: 0 },
-            { label: '每 30 分钟', value: 1800 },
-            { label: '每 1 小时', value: 3600 },
-            { label: '每 2 小时', value: 7200 },
-            { label: '每 6 小时', value: 21600 },
-            { label: '每 12 小时', value: 43200 },
-            { label: '每天', value: 86400 },
-          ]" size="small" style="width:140px" />
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="color:var(--text-muted);width:100px">Ping 超时</span>
-          <n-input-number v-model:value="updateSettings.ping_timeout" size="small" style="width:100px" :min="1" :max="10" />
-          <span style="font-size:12px;color:var(--text-muted)">秒</span>
-        </div>
-        <n-button size="tiny" @click="saveUpdateSettings" :loading="savingSettings" round style="width:fit-content">保存设置</n-button>
-      </div>
-    </n-card>
+          <pre v-if="updateOutput" style="background: var(--surface-2); border-radius: 6px; padding: 8px 12px; font-size: 11px; line-height: 1.5; max-height: 240px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: var(--text-secondary); margin: 0">{{ updateOutput }}</pre>
+        </n-space>
+      </n-card>
 
-  </div>
+      <!-- ── 历史版本 ── -->
+      <n-card title="历史版本" size="small" segmented>
+        <template #header-extra>
+          <History :size="14" />
+        </template>
+        <div v-if="!historyList.length && !historyLoaded" style="padding: 24px 0">
+          <n-empty description="加载中..." />
+        </div>
+        <div v-else-if="!historyList.length" style="padding: 24px 0">
+          <n-empty description="暂无记录" />
+        </div>
+        <n-timeline v-else size="small">
+          <n-timeline-item
+            v-for="c in historyList"
+            :key="c.hash"
+            :content="c.message"
+            :time="formatDateTime(c.date)"
+            :type="c.hash === versionInfo.sha ? 'success' : 'default'"
+          >
+            <template #icon>
+              <code style="font-size: 10px">{{ c.hash }}</code>
+            </template>
+          </n-timeline-item>
+        </n-timeline>
+      </n-card>
+
+      <!-- ── 自动检测设置 ── -->
+      <n-card title="自动检测设置" size="small" segmented>
+        <template #header-extra>
+          <Settings :size="14" />
+        </template>
+        <n-form label-placement="left" label-width="100" size="small">
+          <n-grid :cols="2" :x-gap="24">
+            <n-gi>
+              <n-form-item label="检测间隔">
+                <n-select v-model:value="updateSettings.auto_check_interval" :options="intervalOptions" style="width: 100%" />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="Ping 超时">
+                <n-input-number v-model:value="updateSettings.ping_timeout" :min="1" :max="10" style="width: 100px" />
+                <span style="margin-left: 8px; font-size: 12px; color: var(--text-muted)">秒</span>
+              </n-form-item>
+            </n-gi>
+          </n-grid>
+          <n-space :size="12" style="margin-top: 4px">
+            <n-button size="small" @click="saveUpdateSettings" :loading="savingSettings" secondary>
+              <template #icon><Save :size="14" /></template>
+              保存设置
+            </n-button>
+          </n-space>
+        </n-form>
+      </n-card>
+
+    </n-space>
+  </n-spin>
 </template>
 
 <style scoped>
-code { font-size:12px; }
+code { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
 </style>
