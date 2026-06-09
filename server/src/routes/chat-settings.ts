@@ -209,4 +209,33 @@ router.put(
   },
 )
 
+// ── Rate Limits ─────────────────────────────────────────────────────────
+
+router.get('/rate-limits', requirePermission('chat.config'), (_req: Request, res: Response) => {
+  const db = getDb()
+  const row = db.prepare('SELECT * FROM rate_limits WHERE id = 1').get() as any
+  if (!row) return ok(res, { max_rounds: 50, context_window: 20, max_agent_loops: 5, rapid_gap_ms: 1500, rapid_delay_ms: 2000 })
+  ok(res, {
+    max_rounds: row.max_rounds,
+    context_window: row.context_window,
+    max_agent_loops: row.max_agent_loops,
+    rapid_gap_ms: row.rapid_gap_ms,
+    rapid_delay_ms: row.rapid_delay_ms,
+  })
+})
+
+router.put('/rate-limits', requirePermission('chat.config'), (req: Request, res: Response) => {
+  const db = getDb()
+  const { max_rounds, context_window, max_agent_loops, rapid_gap_ms, rapid_delay_ms } = req.body
+  db.prepare(`INSERT INTO rate_limits (id, max_rounds, context_window, max_agent_loops, rapid_gap_ms, rapid_delay_ms)
+    VALUES (1, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET max_rounds=COALESCE(?,max_rounds), context_window=COALESCE(?,context_window),
+    max_agent_loops=COALESCE(?,max_agent_loops), rapid_gap_ms=COALESCE(?,rapid_gap_ms), rapid_delay_ms=COALESCE(?,rapid_delay_ms), updated_at=CURRENT_TIMESTAMP`)
+    .run(
+      max_rounds ?? 50, context_window ?? 20, max_agent_loops ?? 5, rapid_gap_ms ?? 1500, rapid_delay_ms ?? 2000,
+      max_rounds ?? null, context_window ?? null, max_agent_loops ?? null, rapid_gap_ms ?? null, rapid_delay_ms ?? null,
+    )
+  ok(res, { saved: true })
+})
+
 export default router

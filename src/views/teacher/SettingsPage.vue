@@ -142,7 +142,24 @@ async function saveSettings() {
   }
 }
 
-// ── Tab 3 ───────────────────────────────────────────────────
+// ── Tab 5: Rate Limits ─────────────────────────────────────
+
+const rateLimits = ref({ max_rounds: 50, context_window: 20, max_agent_loops: 5, rapid_gap_ms: 1500, rapid_delay_ms: 2000 })
+const rateLimitsSaving = ref(false)
+
+async function loadRateLimits() {
+  try { rateLimits.value = await api.get('/chat/rate-limits') } catch {}
+}
+async function saveRateLimits() {
+  rateLimitsSaving.value = true
+  try {
+    await api.put('/chat/rate-limits', rateLimits.value)
+    message.success('调用限制已保存')
+  } catch { message.error('保存失败') }
+  finally { rateLimitsSaving.value = false }
+}
+
+// ── Tab 3: Tool Config ───────────────────────────────────────
 
 interface ToolConfigField { key: string; label: string; type: 'text' | 'number'; placeholder?: string }
 
@@ -226,7 +243,10 @@ async function saveToolConfig(tc: ToolConfig) {
 }
 
 // tab 4 removed — moved to SystemUpdate.vue
-onMounted(load)
+onMounted(() => {
+  load()
+  loadRateLimits()
+})
 </script>
 <template>
   <div>
@@ -416,7 +436,72 @@ onMounted(load)
           </div>
         </n-tab-pane>
 
-        <!-- Tab 4: （已移到独立页面 系统更新） -->
+        <!-- Tab 5: 调用限制 -->
+        <n-tab-pane name="limits" tab="调用限制">
+          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px">
+            <n-alert type="info" :bordered="false" style="font-size: 12px">
+              配置 AI 对话的调用限制，包括对话轮数、上下文窗口、工具调用次数和防刷检测。
+            </n-alert>
+
+            <n-card size="small" :bordered="true">
+              <template #header><span style="font-weight: 600">对话限制</span></template>
+              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+                <n-grid :cols="2" :x-gap="24">
+                  <n-gi>
+                    <n-form-item label="最大对话轮数">
+                      <n-input-number v-model:value="rateLimits.max_rounds" :min="5" :max="200" style="width: 100%" />
+                    </n-form-item>
+                  </n-gi>
+                  <n-gi>
+                    <n-form-item label="上下文窗口">
+                      <n-input-number v-model:value="rateLimits.context_window" :min="4" :max="100" style="width: 100%" />
+                    </n-form-item>
+                  </n-gi>
+                </n-grid>
+                <n-text depth="3" style="font-size: 11px">最大对话轮数决定一次对话最多能来回多少次。上下文窗口决定发送给 AI 的最近几轮对话。</n-text>
+              </n-form>
+            </n-card>
+
+            <n-card size="small" :bordered="true">
+              <template #header><span style="font-weight: 600">工具调用限制</span></template>
+              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+                <n-grid :cols="2" :x-gap="24">
+                  <n-gi>
+                    <n-form-item label="最大工具调用次数">
+                      <n-input-number v-model:value="rateLimits.max_agent_loops" :min="1" :max="20" style="width: 100%" />
+                    </n-form-item>
+                  </n-gi>
+                </n-grid>
+                <n-text depth="3" style="font-size: 11px">单次 AI 响应中最多能调用多少次工具（查积分、抽人、搜天气等）。</n-text>
+              </n-form>
+            </n-card>
+
+            <n-card size="small" :bordered="true">
+              <template #header><span style="font-weight: 600">防刷检测</span></template>
+              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+                <n-grid :cols="2" :x-gap="24">
+                  <n-gi>
+                    <n-form-item label="请求间隔">
+                      <n-input-number v-model:value="rateLimits.rapid_gap_ms" :min="100" :max="30000" :step="100" style="width: 100%" />
+                      <span style="margin-left: 8px; font-size: 12px; color: var(--text-muted)">毫秒</span>
+                    </n-form-item>
+                  </n-gi>
+                  <n-gi>
+                    <n-form-item label="惩罚延迟">
+                      <n-input-number v-model:value="rateLimits.rapid_delay_ms" :min="100" :max="30000" :step="100" style="width: 100%" />
+                      <span style="margin-left: 8px; font-size: 12px; color: var(--text-muted)">毫秒</span>
+                    </n-form-item>
+                  </n-gi>
+                </n-grid>
+                <n-text depth="3" style="font-size: 11px">请求间隔内多次发送消息会被延迟处理。惩罚延迟是检测到快速请求后等待的时间。</n-text>
+              </n-form>
+            </n-card>
+
+            <n-button :loading="rateLimitsSaving" @click="saveRateLimits" secondary style="width: fit-content">
+              保存设置
+            </n-button>
+          </div>
+        </n-tab-pane>
 
       </n-tabs>
     </n-spin>
