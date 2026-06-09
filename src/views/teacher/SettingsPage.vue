@@ -211,6 +211,7 @@ const updateChecking = ref(false)
 const updateApplying = ref(false)
 const updateResult = ref('')
 const reloadCountdown = ref(0)
+const updateOutput = ref('')
 
 async function checkUpdate() {
   updateChecking.value = true
@@ -230,24 +231,59 @@ async function applyUpdate() {
     return
   }
   updateApplying.value = true
-  updateResult.value = '⏳ 拉取代码中...'
+  updateResult.value = '... 正在更新...'
   try {
-    const res = await api.post<{ message: string; pull: string }>('/system/update/apply', {})
-    // 更新成功，开始倒计时自动刷新页面加载最新前端代码
-    updateResult.value = '✅ ' + res.message
-    reloadCountdown.value = 5
-    if (reloadTimer) clearInterval(reloadTimer)
-    reloadTimer = setInterval(() => {
-      reloadCountdown.value--
-      updateResult.value = '✅ 更新成功，' + reloadCountdown.value + ' 秒后自动刷新页面...'
-      if (reloadCountdown.value <= 0) {
-        if (reloadTimer) clearInterval(reloadTimer)
-        window.location.reload()
+    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+    const resp = await fetch('/api/system/update/apply', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const reader = resp.body?.getReader()
+    if (!reader) throw new Error('无法读取响应流')
+    const decoder = new TextDecoder()
+    let buf = ''
+    let done = false
+    while (true) {
+      const { done: d, value } = await reader.read()
+      if (d) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const data = JSON.parse(line.slice(6))
+          if (data.type === 'step') {
+            updateResult.value = '... ' + data.message
+          } else if (data.type === 'success') {
+            updateOutput.value += '[OK] ' + data.message + '\n'
+          } else if (data.type === 'output') {
+            updateOutput.value += data.text
+          } else if (data.type === 'error') {
+            updateResult.value = 'FAILED: ' + data.message
+            done = true
+          } else if (data.type === 'done') {
+            updateResult.value = 'DONE: ' + data.message
+            done = true
+          }
+        } catch {}
       }
-    }, 1000)
+    }
+    if (done && !updateResult.value.includes('FAILED')) {
+      reloadCountdown.value = 5
+      if (reloadTimer) clearInterval(reloadTimer)
+      reloadTimer = setInterval(() => {
+        reloadCountdown.value--
+        updateResult.value = '即将刷新... ' + reloadCountdown.value
+        if (reloadCountdown.value <= 0) {
+          if (reloadTimer) clearInterval(reloadTimer)
+          window.location.reload()
+        }
+      }, 1000)
+    }
   } catch (e: any) {
-    const msg = e.message || '更新失败'
-    updateResult.value = msg.includes('UPDATE_IN_PROGRESS') ? '⏳ 已有更新任务正在进行中' : ('❌ ' + msg)
+    const msg = e.message || 'update failed'
+    updateResult.value = msg.includes('UPDATE_IN_PROGRESS') ? '已有更新任务正在进行中' : ('FAILED: ' + msg)
   } finally {
     updateApplying.value = false
   }
@@ -475,8 +511,10 @@ onMounted(load)
                   </div>
                 </div>
 
-                <n-alert v-if="updateResult" :type="updateResult.startsWith('✅') ? 'success' : (updateResult.startsWith('❌') ? 'error' : 'info')" :closable="false" style="font-size:12px;white-space:pre-wrap">
+                <n-alert v-if="updateResult" :type="updateResult.startsWith('DONE') ? 'success' : (updateResult.startsWith('FAILED') ? 'error' : 'info')" :closable="false" style="font-size:12px;white-space:pre-wrap">
                   {{ updateResult }}
+                </n-alert>
+                <pre v-if="updateOutput" style="background:var(--surface-2);border-radius:6px;padding:8px 12px;font-size:11px;line-height:1.5;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary);margin:0">{{ updateOutput }}</pre>
                 </n-alert>
               </div>
             </n-card>

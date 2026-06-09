@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { exec, execSync, spawn } from 'child_process'
-import { promisify } from 'util'
+import { execSync, spawn } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { ok, fail } from '../lib/response.js'
@@ -8,8 +7,6 @@ import { authMiddleware, requirePermission } from '../middleware/auth.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROJECT_ROOT = join(__dirname, '../..')
-
-const asyncExec = promisify(exec)
 
 // 并发锁：防止同时执行多个更新操作
 let updating = false
@@ -31,6 +28,11 @@ function execOpts(extra: Record<string, any> = {}) {
   return { ...extra, env: { ...process.env, ...getProxyEnv(), ...(extra.env || {}) } }
 }
 
+// SSE 辅助：发送事件
+function sse(res: Response, type: string, data: any) {
+  res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`)
+}
+
 // 所有更新路由都需要教师权限
 router.use(authMiddleware)
 router.use(requirePermission('chat.config'))
@@ -38,14 +40,12 @@ router.use(requirePermission('chat.config'))
 // GET /api/system/update/check — 检查远程是否有新版本
 router.get('/check', async (_req: Request, res: Response) => {
   try {
-    // 先检查 git 是否可用
     try {
       execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
       return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
     }
 
-    // ping GitHub 检查网络连通性
     try {
       execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
@@ -80,57 +80,113 @@ router.get('/check', async (_req: Request, res: Response) => {
   }
 })
 
-// POST /api/system/update/apply — 拉取最新代码并安装依赖
+// 带输出的 spawn 包装：实时捕获 stdout/stderr
+function runCommand(cmd: string, args: string[], opts: any, onOutput: (chunk: string) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { ...opts, env: { ...process.env, ...getProxyEnv() } })
+    const timeout = opts.timeout || 0
+    let timer: NodeJS.Timeout | null = null
+    if (timeout) timer = setTimeout(() => { child.kill(); reject(new Error('Command timed out')) }, timeout)
+
+    child.stdout.on('data', (data: Buffer) => onOutput(data.toString()))
+    child.stderr.on('data', (data: Buffer) => onOutput(data.toString()))
+
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer)
+      if (code === 0) resolve()
+      else reject(new Error(`命令退出码: ${code}`))
+    })
+    child.on('error', reject)
+  })
+}
+
+// POST /api/system/update/apply — 流式输出更新过程
 router.post('/apply', async (_req: Request, res: Response) => {
   if (updating) {
     return fail(res, 429, 'UPDATE_IN_PROGRESS', '更新任务正在进行中，请等待完成')
   }
 
   updating = true
+
+  // 设置 SSE 响应头
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  function emit(type: string, data: any) { sse(res, type, data) }
+
   try {
-    // 先检查 git 是否可用
+    // ① 检查 Git
+    emit('step', { message: '正在检查 Git...' })
     try {
       execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
-      updating = false
-      return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
+      emit('error', { message: 'Git 未安装或不在系统 PATH 中' })
+      res.end(); return
     }
+    emit('success', { message: '✓ Git 可用' })
 
-    // ping GitHub 检查网络连通性
+    // ② ping GitHub
+    emit('step', { message: '正在连接 GitHub...' })
     try {
       execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
-      updating = false
-      return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
+      emit('error', { message: '无法连接到 GitHub，请检查网络连接' })
+      res.end(); return
+    }
+    emit('success', { message: '✓ 网络连通' })
+
+    // ③ git fetch
+    emit('step', { message: '正在拉取最新代码...' })
+    try {
+      await runCommand('git', ['fetch', 'origin', 'main'], execOpts({ cwd: PROJECT_ROOT, timeout: 30000 }),
+        (chunk) => emit('output', { text: chunk })
+      )
+    } catch (e: any) {
+      emit('error', { message: '拉取代码失败: ' + (e.message || '') })
+      res.end(); return
     }
 
-    // fetch 最新代码 + reset --hard 到远程（比 pull 更安全，避免合并冲突）
-    const { stdout: fetchOut } = await asyncExec('git fetch origin main 2>&1', execOpts({
-      timeout: 30000,
-      cwd: PROJECT_ROOT,
-    }))
-    await asyncExec('git reset --hard origin/main 2>&1', execOpts({
-      timeout: 15000,
-      cwd: PROJECT_ROOT,
-    }))
-    // 清理被删除的文件（比如旧的迁移 sql 文件）
-    await asyncExec('git clean -fd 2>&1', execOpts({
-      timeout: 10000,
-      cwd: PROJECT_ROOT,
-    }))
+    // ④ git reset --hard
+    emit('step', { message: '正在同步代码...' })
+    try {
+      await runCommand('git', ['reset', '--hard', 'origin/main'], execOpts({ cwd: PROJECT_ROOT, timeout: 15000 }),
+        (chunk) => emit('output', { text: chunk })
+      )
+    } catch (e: any) {
+      emit('error', { message: '同步代码失败: ' + (e.message || '') })
+      res.end(); return
+    }
 
-    // npm install（非阻塞）
-    await asyncExec('npm install 2>&1', execOpts({
-      timeout: 120000,
-      cwd: PROJECT_ROOT,
-    }))
+    // ⑤ git clean
+    emit('step', { message: '正在清理文件...' })
+    try {
+      await runCommand('git', ['clean', '-fd'], execOpts({ cwd: PROJECT_ROOT, timeout: 10000 }),
+        (chunk) => emit('output', { text: chunk })
+      )
+    } catch (e: any) {
+      emit('error', { message: '清理文件失败: ' + (e.message || '') })
+      res.end(); return
+    }
 
-    ok(res, {
-      message: '✅ 更新成功，服务器即将自动重启',
-      pull: fetchOut.trim(),
-    })
+    // ⑥ npm install
+    emit('step', { message: '正在安装依赖...' })
+    try {
+      await runCommand('npm', ['install'], execOpts({ cwd: PROJECT_ROOT, timeout: 120000 }),
+        (chunk) => emit('output', { text: chunk })
+      )
+    } catch (e: any) {
+      emit('error', { message: '安装依赖失败，请检查控制台输出' })
+      res.end(); return
+    }
 
-    // 等待响应发送完毕后再重启
+    // 全部完成
+    emit('done', { message: '更新成功，即将重启服务器...' })
+    res.end()
+
+    // 等待响应发送完毕，然后自重启
     res.on('finish', () => {
       setTimeout(() => {
         const child = spawn(process.argv[0], process.argv.slice(1), {
@@ -143,15 +199,10 @@ router.post('/apply', async (_req: Request, res: Response) => {
       }, 1000)
     })
   } catch (e: any) {
-    // 如果失败，尝试恢复 git 状态
-    try {
-      execSync('git reset --hard HEAD 2>&1', execOpts({ cwd: PROJECT_ROOT, timeout: 10000 }))
-    } catch {}
-
-    const message = e.code === 'ETIMEDOUT' || e.killed
-      ? '操作超时，请检查网络连接后重试'
-      : '更新失败，已自动回退代码变更，请检查控制台输出或稍后重试'
-    fail(res, 500, 'UPDATE_FAILED', message)
+    emit('error', { message: '更新失败，已自动回退代码变更' })
+    res.end()
+    // 尝试恢复 git 状态
+    try { execSync('git reset --hard HEAD 2>&1', execOpts({ cwd: PROJECT_ROOT, timeout: 10000 })) } catch {}
   } finally {
     updating = false
   }
