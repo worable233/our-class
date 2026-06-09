@@ -21,7 +21,7 @@ const updateSchema = z.object({
 })
 
 // GET /api/teachers — list all teachers
-router.get('/', requirePermission('students.read'), (_req: Request, res: Response) => {
+router.get('/', requirePermission('students.write'), (_req: Request, res: Response) => {
   const db = getDb()
   const teachers = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname
@@ -34,7 +34,7 @@ router.get('/', requirePermission('students.read'), (_req: Request, res: Respons
 })
 
 // GET /api/teachers/:id
-router.get('/:id', requirePermission('students.read'), (req: Request, res: Response) => {
+router.get('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const teacher = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname

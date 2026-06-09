@@ -64,7 +64,7 @@ interface SubmissionRow {
 // GET /api/assignments
 // ---------------------------------------------------------------------------
 
-router.get('/', requirePermission('assignments.read'), (req: Request, res: Response) => {
+router.get('/', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id } = req.query
 
@@ -113,7 +113,7 @@ router.post('/', requirePermission('assignments.write'), validate(createSchema),
 // GET /api/assignments/:id/submissions
 // ---------------------------------------------------------------------------
 
-router.get('/:id/submissions', requirePermission('assignments.read'), (req: Request, res: Response) => {
+router.get('/:id/submissions', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
   const subs = db
     .prepare(
@@ -158,7 +158,7 @@ router.post('/:id/submit', requirePermission('assignments.submit'), validate(sub
 
 router.put(
   '/submissions/:id/grade',
-  requirePermission('assignments.grade'),
+  requirePermission('assignments.write'),
   validate(gradeSchema),
   (req: Request, res: Response) => {
     const db = getDb()

@@ -12,7 +12,7 @@ router.use(authMiddleware)
 
 // Allow both chat.skills and chat.config (backward compat for existing installs)
 function requireSkillsOrConfig(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user?.permissions?.includes('chat.skills') && !req.user?.permissions?.includes('chat.config')) {
+  if (!req.user?.permissions?.includes('chat.config')) {
     throw new ForbiddenError('权限不足')
   }
   next()

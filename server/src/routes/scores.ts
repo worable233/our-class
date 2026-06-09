@@ -21,7 +21,7 @@ const updateScoreSchema = z.object({
 })
 
 // GET /api/scores?student_id=xxx&course=xxx
-router.get('/', requirePermission('scores.read'), (req: Request, res: Response) => {
+router.get('/', requirePermission('scores.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, course } = req.query
   let sql = `SELECT s.*, u.display_name as student_name FROM scores s JOIN users u ON s.student_id = u.id WHERE 1=1`
@@ -42,7 +42,7 @@ router.get('/', requirePermission('scores.read'), (req: Request, res: Response) 
 })
 
 // GET /api/scores/rankings?course=xxx&exam=xxx
-router.get('/rankings', requirePermission('scores.read'), (req: Request, res: Response) => {
+router.get('/rankings', requirePermission('scores.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { course, exam_name } = req.query
   let sql = `
@@ -89,7 +89,7 @@ router.put('/:id', requirePermission('scores.write'), validate(updateScoreSchema
 })
 
 // DELETE /api/scores/:id
-router.delete('/:id', requirePermission('scores.delete'), (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('scores.write'), (req: Request, res: Response) => {
   const db = getDb()
   const existing = db.prepare('SELECT id FROM scores WHERE id = ?').get(req.params.id)
   if (!existing) throw new NotFoundError('成绩记录不存在')

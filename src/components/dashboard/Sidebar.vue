@@ -22,16 +22,16 @@ function renderIcon(icon: any) {
 
 // Permission requirements per route (mirrors router meta.permissions)
 const ROUTE_PERMS: Record<string, string[]> = {
-  '/teacher/dashboard': ['students.read'],
+  '/teacher/dashboard': ['students.write'],
   '/teacher/points': ['points.read'],
-  '/teacher/assignments': ['assignments.read'],
-  '/teacher/users': ['students.read'],
+  '/teacher/assignments': ['assignments.write'],
+  '/teacher/users': ['students.write'],
   '/teacher/review-types': ['points.write'],
   '/teacher/point-details': ['points.read'],
   '/teacher/roles': ['roles.manage'],
   '/teacher/settings': ['chat.config'],
-  '/teacher/site-data': ['students.read'],
-  '/teacher/skills': ['chat.skills', 'chat.config'],
+  '/teacher/site-data': ['students.write'],
+  '/teacher/skills': ['chat.config'],
   '/teacher/logs': ['audit_logs.read'],
   '/teacher/update': ['chat.config'],
 }

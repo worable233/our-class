@@ -31,7 +31,7 @@ const updateSchema = z.object({
 })
 
 // GET /api/students?class=xxx
-router.get('/', requirePermission('students.read'), (req: Request, res: Response) => {
+router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
   let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
@@ -68,7 +68,7 @@ router.post('/', requirePermission('students.write'), validate(createSchema), (r
 })
 
 // GET /api/students/:id
-router.get('/:id', requirePermission('students.read'), (req: Request, res: Response) => {
+router.get('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const student = db
     .prepare(
@@ -136,7 +136,7 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
 })
 
 // DELETE /api/students/:id
-router.delete('/:id', requirePermission('students.delete'), (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const id = req.params.id
 

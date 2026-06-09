@@ -24,7 +24,7 @@ const router = createRouter({
           path: 'dashboard',
           name: 'teacher-dashboard',
           component: () => import('@/views/teacher/DashboardHome.vue'),
-          meta: { permissions: ['students.read'] },
+          meta: { permissions: ['students.write'] },
         },
         {
           path: 'points',
@@ -36,13 +36,13 @@ const router = createRouter({
           path: 'assignments',
           name: 'teacher-assignments',
           component: () => import('@/views/teacher/AssignmentCollect.vue'),
-          meta: { permissions: ['assignments.read'] },
+          meta: { permissions: ['assignments.write'] },
         },
         {
           path: 'users',
           name: 'teacher-users',
           component: () => import('@/views/teacher/UserManage.vue'),
-          meta: { permissions: ['students.read'] },
+          meta: { permissions: ['students.write'] },
         },
         {
           path: 'roles',
@@ -72,7 +72,7 @@ const router = createRouter({
           path: 'site-data',
           name: 'teacher-site-data',
           component: () => import('@/views/teacher/SiteData.vue'),
-          meta: { permissions: ['students.read'] },
+          meta: { permissions: ['students.write'] },
         },
         {
           path: 'update',
@@ -84,7 +84,7 @@ const router = createRouter({
           path: 'skills',
           name: 'teacher-skills',
           component: () => import('@/views/teacher/SkillManage.vue'),
-          meta: { permissions: ['chat.skills', 'chat.config'] },
+          meta: { permissions: ['chat.config'] },
         },
         {
           path: 'logs',

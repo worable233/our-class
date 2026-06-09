@@ -6,7 +6,7 @@ import { ok, fail } from '../lib/response.js'
 const router = Router()
 
 // GET /api/classes — 班级列表（含人数统计）
-router.get('/', requirePermission('classes.read'), (_req: Request, res: Response) => {
+router.get('/', requirePermission('students.write'), (_req: Request, res: Response) => {
   const db = getDb()
   const rows = db.prepare(`
     SELECT c.id, c.name, COUNT(u.id) AS student_count
@@ -19,7 +19,7 @@ router.get('/', requirePermission('classes.read'), (_req: Request, res: Response
 })
 
 // POST /api/classes — 创建班级
-router.post('/', requirePermission('classes.read'), (req: Request, res: Response) => {
+router.post('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { name } = req.body
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -35,7 +35,7 @@ router.post('/', requirePermission('classes.read'), (req: Request, res: Response
 })
 
 // PUT /api/classes/:id — 重命名班级
-router.put('/:id', requirePermission('classes.read'), (req: Request, res: Response) => {
+router.put('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   const { name } = req.body
@@ -58,7 +58,7 @@ router.put('/:id', requirePermission('classes.read'), (req: Request, res: Respon
 })
 
 // DELETE /api/classes/:id — 删除班级
-router.delete('/:id', requirePermission('classes.read'), (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   const cls = db.prepare('SELECT name FROM classes WHERE id = ?').get(id) as { name: string } | undefined
