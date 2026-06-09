@@ -47,11 +47,11 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as JwtPayload
     const db = getDb()
     const row = db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.class, u.group_id, pg.name as group_name
+      SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, pg.name as group_name
       FROM users u
       LEFT JOIN permission_groups pg ON u.group_id = pg.id
       WHERE u.id = ?
-    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; group_name: string | null } | undefined
+    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; role_id: number | null; group_name: string | null } | undefined
 
     if (!row) throw new AuthError()
 
@@ -80,7 +80,16 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
       }
     }
 
-    req.user = { id: row.id, username: row.username, display_name: row.display_name, role, class: row.class, permissions }
+    // Load role extra permissions (role_id overrides/adds to group permissions)
+    if (row.role_id) {
+      const rolePermRows = db.prepare(
+        'SELECT DISTINCT gp.permission_code FROM group_permissions gp WHERE gp.group_id = ?'
+      ).all(row.role_id) as { permission_code: string }[]
+      const rolePerms = rolePermRows.map(r => r.permission_code)
+      permissions = [...new Set([...permissions, ...rolePerms])]
+    }
+
+    req.user = { id: row.id, username: row.username, display_name: row.display_name, role, class: row.class, role_id: row.role_id, permissions }
     next()
   } catch (err) {
     if (err instanceof AuthError) throw err
