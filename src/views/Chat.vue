@@ -7,7 +7,8 @@ import ChatLayout from '@/components/chat/ChatLayout.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import { Star, BarChart3, FileText, MessageSquare } from '@lucide/vue'
+import type { ComponentPublicInstance } from 'vue'
+import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
@@ -80,6 +81,7 @@ const webSearch = ref(true)
 const fileMap = ref<Record<number, any>>({})
 
 const sidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null)
+const inputRef = ref<{ input: string } | null>(null)
 const currentConvId = ref<number | null>(null)
 const messages = ref<ChatMessage[]>([])
 // Group messages into conversation turns (user → response)
@@ -258,12 +260,14 @@ function newConversation() {
   router.push('/')
 }
 
-function welcomeAction(_label: string, prompt: string) {
+function welcomeAction(prompt: string) {
   if (!auth.isLoggedIn) {
     emit('login')
     return
   }
-  sendMessage(prompt)
+  if (inputRef.value) {
+    inputRef.value.input = prompt
+  }
 }
 
 // ── Random pick modal callbacks ──
@@ -558,7 +562,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
   sending = false
 }
 
-defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() }, closeSearch() { sidebarRef.value?.closeSearch() } })
+defineExpose({ toggleSearch() { sidebarRef.value?.toggleSearch() }, closeSearch() { sidebarRef.value?.closeSearch() }, newConversation })
 
 
 function stopStream() {
@@ -751,9 +755,12 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
           <div class="welcome-label"><span>/</span>Welcome to OurClass</div>
           <h1 class="welcome-title">班级管理系统</h1>
           <div class="welcome-btns">
-            <button class="welcome-btn" @click="welcomeAction('积分管理', '查询我的积分概况')"><Star :size="14" />积分管理</button>
-            <button class="welcome-btn" @click="welcomeAction('成绩分析', '查询最近的成绩排名')"><BarChart3 :size="14" />成绩分析</button>
-            <button class="welcome-btn" @click="welcomeAction('作业管理', '查询最近的作业')"><FileText :size="14" />作业管理</button>
+            <button class="welcome-btn" @click="welcomeAction('查询我的积分概况')"><Star :size="14" />积分概况</button>
+            <button class="welcome-btn" @click="welcomeAction('查询最近的成绩排名')"><BarChart3 :size="14" />成绩排名</button>
+            <button class="welcome-btn" @click="welcomeAction('查询最近的作业')"><FileText :size="14" />作业查询</button>
+            <button class="welcome-btn" @click="welcomeAction('帮我随机抽取一名学生')"><Shuffle :size="14" />随机抽号</button>
+            <button class="welcome-btn" @click="welcomeAction('全班学生的积分排行')"><Trophy :size="14" />积分排行</button>
+            <button class="welcome-btn" @click="welcomeAction('今天天气怎么样')"><Sun :size="14" />查天气</button>
           </div>
         </div>
 
@@ -781,7 +788,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
           <button class="continue-btn" @click="continueGeneration">继续生成</button>
         </div>
       </div>
-      <ChatInput
+      <ChatInput ref="inputRef"
         :loading="streaming"
         :disabled="terminated"
         :enable-deep-think="settings.enable_deep_think"

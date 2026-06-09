@@ -177,6 +177,8 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 watch(input, () => { nextTick(autoResize) })
+
+defineExpose({ input })
 </script>
 
 <template>

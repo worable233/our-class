@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import HomeHeader from '@/components/HomeHeader.vue'
@@ -8,7 +8,9 @@ import LoginModal from '@/components/LoginModal.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
-const sidebarOpen = ref(true)
+const savedChatSidebar = localStorage.getItem('ourclass_chat_sidebar')
+const sidebarOpen = ref(savedChatSidebar !== null ? savedChatSidebar === 'true' : true)
+watch(sidebarOpen, (val) => localStorage.setItem('ourclass_chat_sidebar', String(val)))
 const showLogin = ref(false)
 const chatRef = ref<InstanceType<typeof ChatView> | null>(null)
 

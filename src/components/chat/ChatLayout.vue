@@ -19,6 +19,9 @@ defineEmits<{ closeSidebar: [] }>()
 </template>
 
 <style scoped>
+.flex-1.w-full.flex.min-h-0 {
+  overflow: hidden;
+}
 .sidebar-panel {
   width: 261px;
   flex-shrink: 0;

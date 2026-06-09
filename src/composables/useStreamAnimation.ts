@@ -7,17 +7,17 @@
  */
 export const STREAM_CONFIG = {
   /** 每次 tick 追加的字符数 */
-  CHARS_PER_TICK: 4,
+  CHARS_PER_TICK: 2,
   /** tick 间隔（ms） */
-  TICK_INTERVAL_MS: 60,
+  TICK_INTERVAL_MS: 50,
   /** 单字符不透明度 从 60%→100% 的时长（ms） */
-  ANIMATION_DURATION_MS: 500,
+  ANIMATION_DURATION_MS: 120,
   /** 辉光从亮→灭 的时长（ms），比 opacity 动画长，形成拖尾感 */
-  GLOW_DURATION_MS: 800,
+  GLOW_DURATION_MS: 200,
   /** 非线性缓动函数 */
   ANIMATION_EASING: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
   /** 字符刚出现时的不透明度（0-1） */
-  INITIAL_OPACITY: 0.6,
+  INITIAL_OPACITY: 0.5,
 }
 
 /**
@@ -37,12 +37,10 @@ export function buildStreamAnimationCSS(config = STREAM_CONFIG): string {
   const dur = `${config.ANIMATION_DURATION_MS}ms`
   const easing = config.ANIMATION_EASING
   const opacity = config.INITIAL_OPACITY
-  const glow1 = `${config.GLOW_COLOR} 0 0 ${config.GLOW_BLUR}`
-  const glow2 = `${config.GLOW_COLOR_2} 0 0 ${config.GLOW_SPREAD}`
   return `
 @keyframes charGlow {
-  0%   { opacity: ${opacity}; text-shadow: ${glow1}, ${glow2}; }
-  100% { opacity: 1;          text-shadow: none; }
+  0%   { opacity: ${opacity}; }
+  100% { opacity: 1; }
 }
 .stream-char {
   animation: charGlow ${dur} ${easing} forwards;

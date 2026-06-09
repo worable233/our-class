@@ -347,7 +347,9 @@ html:not(.dark) .search-bar:hover::before {
 .list {
   flex: 1; overflow-y: auto;
   padding: 0 8px 8px;
+  scrollbar-width: none;
 }
+.list::-webkit-scrollbar { display: none; }
 
 .item {
   position: relative;

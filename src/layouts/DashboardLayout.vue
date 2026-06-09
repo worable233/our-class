@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, provide } from 'vue'
+import { ref, computed, provide, watch } from 'vue'
 import { NLayout, NLayoutContent } from 'naive-ui'
 import Sidebar from '@/components/dashboard/Sidebar.vue'
 import Header from '@/components/dashboard/Header.vue'
@@ -8,7 +8,8 @@ const MOBILE_BP = 768
 const isMobile = ref(window.innerWidth < MOBILE_BP)
 window.addEventListener('resize', () => { isMobile.value = window.innerWidth < MOBILE_BP })
 
-const sidebarOpen = ref(!isMobile.value)
+const savedSidebar = localStorage.getItem('ourclass_sidebar_open')
+const sidebarOpen = ref(savedSidebar !== null ? savedSidebar === 'true' : !isMobile.value)
 const sidebarCollapsed = computed({
   get: () => !sidebarOpen.value,
   set: (val) => { sidebarOpen.value = !val },
@@ -18,6 +19,10 @@ const refreshTick = ref(0)
 function refreshContent() { refreshTick.value++ }
 provide('refreshContent', refreshContent)
 provide('refreshTick', refreshTick)
+
+watch(sidebarOpen, (val) => {
+  localStorage.setItem('ourclass_sidebar_open', String(val))
+})
 
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function closeSidebar() { sidebarOpen.value = false }

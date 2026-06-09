@@ -24,7 +24,7 @@ function safeHost(url: string): string {
           <a v-for="(r, i) in results" :key="i" :href="r.url" target="_blank" class="sp-item" rel="noreferrer">
             <div class="sp-item-top">
               <span class="sp-index">{{ i + 1 }}</span>
-              <img v-if="favicons[i]" :src="favicons[i]" width="16" height="16" class="sp-favicon" />
+              <img v-if="favicons[i]" :src="favicons[i]" width="16" height="16" class="sp-favicon" @error="($event.target as HTMLImageElement).style.display='none'" />
               <span class="sp-domain">{{ safeHost(r.url) }}</span>
             </div>
             <div class="sp-item-title">{{ r.title }}</div>
