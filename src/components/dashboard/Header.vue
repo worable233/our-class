@@ -23,6 +23,7 @@ const pageTitle = computed(() => {
     '/teacher/users': '用户管理',
     '/teacher/roles': '职位管理',
     '/teacher/review-types': '点评类型',
+    '/teacher/point-details': '积分明细',
     '/teacher/logs': '操作日志',
     '/teacher/traffic': '流量监控',
     '/teacher/settings': '站点设置',

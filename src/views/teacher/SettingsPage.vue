@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { api } from '@/api/client'
 import {
   NButton, NInput, NAlert, NSpace, NSpin, NSelect, NTabs, NTabPane,
@@ -204,6 +204,39 @@ async function saveToolConfig(tc: ToolConfig) {
   }
 }
 
+// ── Tab 4: System Update ──────────────────────────────────────────────
+
+const updateInfo = ref<{ current: string; latest: string; behind: boolean; commits: { message: string; author: string; date: string }[] } | null>(null)
+const updateChecking = ref(false)
+const updateApplying = ref(false)
+const updateResult = ref('')
+
+async function checkUpdate() {
+  updateChecking.value = true
+  updateResult.value = ''
+  updateInfo.value = null
+  try {
+    updateInfo.value = await api.get('/system/update/check')
+  } catch (e: any) {
+    updateResult.value = e.message || '检查失败'
+  } finally {
+    updateChecking.value = false
+  }
+}
+
+async function applyUpdate() {
+  updateApplying.value = true
+  updateResult.value = ''
+  try {
+    const res = await api.post<{ message: string; pull: string }>('/system/update/apply', {})
+    updateResult.value = '✅ ' + res.message + (res.pull ? '\n' + res.pull : '')
+  } catch (e: any) {
+    updateResult.value = '❌ ' + (e.message || '更新失败')
+  } finally {
+    updateApplying.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -385,6 +418,54 @@ onMounted(load)
           </div>
         </n-tab-pane>
 
+        <!-- Tab 4: 系统更新 -->
+        <n-tab-pane name="update" tab="系统更新">
+          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px">
+            <n-card size="small" :bordered="true">
+              <template #header><span style="font-weight:600">版本更新</span></template>
+              <div style="display:flex;flex-direction:column;gap:12px">
+                <n-text depth="3" style="font-size:13px">
+                  从 GitHub 远程仓库检查并拉取最新代码。数据库和配置文件不受影响。
+                </n-text>
+
+                <div style="display:flex;gap:8px">
+                  <n-button :loading="updateChecking" @click="checkUpdate" round>
+                    {{ updateChecking ? '检查中...' : '检查更新' }}
+                  </n-button>
+                  <n-button
+                    v-if="updateInfo?.behind"
+                    type="primary"
+                    :loading="updateApplying"
+                    @click="applyUpdate"
+                    round
+                  >
+                    {{ updateApplying ? '更新中...' : '立即更新' }}
+                  </n-button>
+                </div>
+
+                <div v-if="updateInfo">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+                    <n-tag size="small" round :bordered="false" :type="updateInfo.behind ? 'warning' : 'success'">
+                      {{ updateInfo.behind ? '有新版本' : '已是最新' }}
+                    </n-tag>
+                    <span style="color:var(--text-muted)">当前 {{ updateInfo.current }}</span>
+                    <span v-if="updateInfo.behind" style="color:var(--text-muted)">→ {{ updateInfo.latest }}</span>
+                  </div>
+                  <div v-if="updateInfo.commits.length > 0" style="background:var(--surface-2);border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.8">
+                    <div v-for="c in updateInfo.commits" :key="c.hash" style="display:flex;gap:6px;color:var(--text-secondary)">
+                      <span style="color:var(--accent-text);font-family:monospace">{{ c.hash }}</span>
+                      <span style="flex:1">{{ c.message }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <n-alert v-if="updateResult" :type="updateResult.startsWith('✅') ? 'success' : (updateResult.startsWith('❌') ? 'error' : 'info')" :closable="false" style="font-size:12px;white-space:pre-wrap">
+                  {{ updateResult }}
+                </n-alert>
+              </div>
+            </n-card>
+          </div>
+        </n-tab-pane>
       </n-tabs>
     </n-spin>
   </div>

@@ -43,13 +43,14 @@ function seedPermissionGroups(db: Database.Database) {
     'chat.access', 'chat.config', 'chat.skills',
     'roles.manage',
     'audit_logs.read',
-    'classes.read',
+    'classes.read', 'classes.view_all',
     // AI 工具权限 - 教师拥有全部
     'tool.list_students', 'tool.get_student_points', 'tool.add_points',
     'tool.get_score_rankings', 'tool.list_assignments', 'tool.get_submissions',
     'tool.get_weather', 'tool.web_search', 'tool.random_pick',
     'tool.get_current_time', 'tool.get_class_list', 'tool.view_file',
     'tool.create_student', 'tool.update_student', 'tool.delete_student',
+    'tool.get_point_details',
   ]
 
   const studentPermissions = [
@@ -62,6 +63,7 @@ function seedPermissionGroups(db: Database.Database) {
     'tool.list_students', 'tool.get_student_points',
     'tool.get_score_rankings', 'tool.list_assignments', 'tool.get_submissions',
     'tool.get_current_time', 'tool.get_class_list', 'tool.view_file',
+    'tool.get_point_details',
   ]
 
   const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')

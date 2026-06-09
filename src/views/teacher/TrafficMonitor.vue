@@ -2,8 +2,8 @@
 // @ts-nocheck - globe.gl and three.js types
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { BASE } from '@/api/client'
-import { NSpin, NEmpty, NButton, NText } from 'naive-ui'
-import { RotateCw } from '@lucide/vue'
+import { NSpin, NEmpty, NButton, NText, NCard, NTag, NGi, NGrid } from 'naive-ui'
+import { RotateCw, Activity, Eye, Users, Globe, Shield, ShieldAlert, AlertTriangle, XCircle } from '@lucide/vue'
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
@@ -15,6 +15,15 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
+
+// 筛选状态
+const activeView = ref('3d')
+const activeRegion = ref('world')
+const activeMode = ref('访问')
+
+const viewOptions = ['3D', '2D']
+const regionOptions = ['世界', '中国']
+const modeOptions = ['访问', '仅拦截']
 
 async function load() {
   loading.value = true
@@ -127,6 +136,12 @@ function fmtCompact(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(n)
 }
+function fmtBytes(b: number): string {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB'
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB'
+  if (b >= 1024) return (b / 1024).toFixed(1) + ' KB'
+  return b + ' B'
+}
 
 onMounted(load)
 onUnmounted(() => {
@@ -150,50 +165,98 @@ onUnmounted(() => {
     <NSpin :show="loading" style="flex:1;min-height:500px">
       <div v-if="data" style="display:flex;flex-direction:column;gap:16px;">
         <!-- Stats Cards -->
-        <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;">
-          <div v-for="s in [
-            { v: fmtCompact(data.requests), l: '请求次数', c: '#0FC6C2' },
-            { v: fmtCompact(data.pv), l: '访问次数（PV）', c: '#5E6AD2' },
-            { v: fmtCompact(data.uv), l: '独立访客（UV）', c: '#18a058' },
-            { v: fmtCompact(data.uniqueIps), l: '独立 IP', c: '#a050dc' },
-            { v: fmtCompact(data.intercepts), l: '拦截次数', c: '#e86969' },
-            { v: fmtCompact(data.attackIps), l: '攻击 IP', c: '#FF8859' },
-            { v: fmtCompact(data.err4xxCount), l: `4xx ${data.err4xxRate}`, c: '#f0a020' },
-            { v: fmtCompact(data.err5xxCount), l: `5xx ${data.err5xxRate}`, c: '#e869a0' },
-          ]" :key="s.l" style="display:flex;align-items:center;gap:8px;background:var(--surface-1);border:1px solid var(--hairline);border-radius:6px;padding:10px 12px;">
-            <div :style="{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.c+'20',color:s.c}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
-            </div>
-            <div><div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2;">{{ s.v }}</div><div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">{{ s.l }}</div></div>
-          </div>
-        </div>
+        <n-grid :cols="8" :x-gap="8" :y-gap="8">
+          <n-gi v-for="s in [
+            { v: fmtCompact(data.requests), l: '总请求数', c: '#0FC6C2', icon: Activity, bytes: false },
+            { v: fmtCompact(data.pv), l: 'GET 请求（PV）', c: '#5E6AD2', icon: Eye, bytes: false },
+            { v: fmtCompact(data.uv), l: '覆盖城市数', c: '#18a058', icon: Users, bytes: false },
+            { v: fmtBytes(data.uniqueIps), l: '总流量', c: '#a050dc', icon: Globe, bytes: true },
+            { v: fmtCompact(data.intercepts), l: '拦截次数', c: '#e86969', icon: Shield, bytes: false },
+            { v: fmtCompact(data.attackIps), l: '攻击来源城市', c: '#FF8859', icon: ShieldAlert, bytes: false },
+            { v: fmtCompact(data.err4xxCount), l: `4xx ${data.err4xxRate}`, c: '#f0a020', icon: AlertTriangle, bytes: false },
+            { v: fmtCompact(data.err5xxCount), l: `5xx ${data.err5xxRate}`, c: '#e869a0', icon: XCircle, bytes: false },
+          ]" :key="s.l">
+            <n-card size="small" :bordered="true" :style="'padding:8px 0'">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div :style="{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.c+'20',color:s.c}">
+                  <component :is="s.icon" :size="16" />
+                </div>
+                <div>
+                  <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2;">{{ s.v }}</div>
+                  <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">{{ s.l }}</div>
+                </div>
+              </div>
+            </n-card>
+          </n-gi>
+        </n-grid>
 
         <!-- Globe Area -->
         <div style="display:flex;gap:12px;min-height:460px;">
-          <div ref="globeEl" style="flex:1;min-height:420px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;position:relative;background-image:radial-gradient(rgba(15,198,194,0.04) 1px,transparent 1px);background-size:20px 20px;background-color:#f5f7fa;"></div>
-          <div style="width:300px;flex-shrink:0;background:var(--surface-1);border:1px solid var(--hairline);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;">
-            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">地理位置</div>
-            <div style="display:flex;gap:6px;margin-bottom:14px;font-size:11px;">
-              <span style="color:#0FC6C2;background:rgba(15,198,194,0.1);padding:2px 6px;border-radius:4px;">3D</span>
-              <span style="color:var(--text-muted);padding:2px 6px;">2D</span>
-              <span style="color:var(--hairline);padding:0 2px;">|</span>
-              <span style="color:#0FC6C2;background:rgba(15,198,194,0.1);padding:2px 6px;border-radius:4px;">世界</span>
-              <span style="color:var(--text-muted);padding:2px 6px;">中国</span>
-              <span style="color:var(--hairline);padding:0 2px;">|</span>
-              <span style="color:#0FC6C2;background:rgba(15,198,194,0.1);padding:2px 6px;border-radius:4px;">访问</span>
-              <span style="color:var(--text-muted);padding:2px 6px;">仅拦截</span>
+          <div ref="globeEl" class="globe-wrap"></div>
+          <n-card size="small" :bordered="true" style="width:300px;flex-shrink:0;display:flex;flex-direction:column;">
+            <template #header>
+              <span style="font-size:13px;font-weight:600;">地理位置</span>
+            </template>
+            <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+              <n-tag v-for="v in viewOptions" :key="v" size="tiny" round :bordered="false" :type="activeView === v ? 'info' : 'default'" :checkable="true" :checked="activeView === v" @click="activeView = v" style="cursor:pointer">{{ v }}</n-tag>
+              <span style="color:var(--hairline);margin:0 2px;">|</span>
+              <n-tag v-for="r in regionOptions" :key="r" size="tiny" round :bordered="false" :type="activeRegion === r ? 'info' : 'default'" :checkable="true" :checked="activeRegion === r" @click="activeRegion = r" style="cursor:pointer">{{ r }}</n-tag>
+              <span style="color:var(--hairline);margin:0 2px;">|</span>
+              <n-tag v-for="m in modeOptions" :key="m" size="tiny" round :bordered="false" :type="activeMode === m ? 'info' : 'default'" :checkable="true" :checked="activeMode === m" @click="activeMode = m" style="cursor:pointer">{{ m }}</n-tag>
             </div>
             <div style="flex:1;overflow-y:auto;">
-              <div v-for="g in data.geoData" :key="g.country" style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:4px;font-size:12px;">
+              <div v-for="g in data.geoData" :key="g.country" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:4px;font-size:12px;">
                 <span style="width:8px;height:8px;border-radius:2px;flex-shrink:0;background:#0FC6C2;"></span>
                 <span style="flex:1;color:var(--text-secondary);">{{ g.country }}</span>
                 <span style="font-weight:600;color:var(--text-primary);">{{ fmtCompact(g.value) }}</span>
               </div>
             </div>
-          </div>
+          </n-card>
         </div>
       </div>
       <NEmpty v-else-if="!loading" description="暂无数据" />
     </NSpin>
   </div>
 </template>
+
+<style scoped>
+.globe-wrap {
+  flex: 1;
+  min-height: 420px;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background-image: radial-gradient(rgba(15,198,194,0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-color: transparent;
+}
+.globe-wrap::before,
+.globe-wrap::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.globe-wrap::before {
+  width: min(92%, 480px);
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+}
+html:not(.dark) .globe-wrap::before {
+  border-color: rgba(15, 198, 194, 0.25);
+}
+
+.globe-wrap::after {
+  width: min(98%, 520px);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.03) 60%, transparent 80%);
+  filter: blur(14px);
+}
+html:not(.dark) .globe-wrap::after {
+  background: radial-gradient(circle, rgba(15,198,194,0.10) 0%, rgba(15,198,194,0.06) 30%, rgba(15,198,194,0.02) 60%, transparent 80%);
+}
+</style>

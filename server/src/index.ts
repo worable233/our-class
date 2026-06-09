@@ -29,6 +29,7 @@ import auditRoutes from './routes/audit.js'
 import analyticsRoutes, { trackPageView } from './routes/analytics.js'
 import reviewTypeRoutes from './routes/reviewTypes.js'
 import teacherRoutes from './routes/teachers.js'
+import updateRoutes from './routes/update.js'
 
 const app = express()
 
@@ -94,6 +95,7 @@ app.use('/api/roles', authMiddleware, roleRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/analytics', analyticsRoutes)
 app.use('/api/review-types', reviewTypeRoutes)
+app.use('/api/system/update', authMiddleware, updateRoutes)
 
 // ── Error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler)

@@ -170,6 +170,8 @@ router.get('/waf-stats', (_req: Request, res: Response) => {
   const attackCities = db.prepare("SELECT COUNT(DISTINCT city) as c FROM traffic_logs WHERE is_attack=1 AND city!=''").get() as { c: number }
   const err4x = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE status_code>=400 AND status_code<500").get() as { c: number }
   const err5x = db.prepare("SELECT COUNT(*) as c FROM traffic_logs WHERE status_code>=500").get() as { c: number }
+  const totalUpload = db.prepare("SELECT COALESCE(SUM(upload_bytes), 0) as s FROM traffic_logs").get() as { s: number }
+  const totalDownload = db.prepare("SELECT COALESCE(SUM(download_bytes), 0) as s FROM traffic_logs").get() as { s: number }
 
   // 2. Geo distribution
   const geoRaw = db.prepare(`
@@ -232,31 +234,38 @@ router.get('/waf-stats', (_req: Request, res: Response) => {
     FROM traffic_logs GROUP BY path ORDER BY count DESC LIMIT 10
   `).all() as { path: string; count: number }[]
 
-  const visitedDomains = Array.from(new Set(visitedRaw.map(r => 'demo.waf-ce.chaitin.cn'))).map(d => ({ domain: d, count: visitedRaw.reduce((s, r) => s + r.count, 0) }))
+  const visitedDomains = Array.from(new Set(visitedRaw.map(r => r.path))).map(d => ({ domain: (() => { try { return new URL(d).hostname } catch { return d } })(), count: visitedRaw.filter(r => r.path === d).reduce((s, r) => s + r.count, 0) }))
   const visitedPages = visitedRaw.map(r => ({
-    url: r.path === '/' ? 'https://demo.waf-ce.chaitin.cn/' : 'https://demo.waf-ce.chaitin.cn' + r.path,
+    url: r.path,
     count: r.count,
   }))
 
-  // 7. Time-series (QPS / access / intercept — hourly)
-  const now = new Date()
+  // 7. Time-series (QPS / access / intercept — hourly, 近 24 小时)
+  const hourlyRaw = db.prepare(`
+    SELECT strftime('%Y-%m-%d %H:00', created_at) as hour,
+           COUNT(*) as total,
+           SUM(CASE WHEN is_intercepted=1 THEN 1 ELSE 0 END) as intercepted
+    FROM traffic_logs
+    WHERE created_at >= datetime('now', '-24 hours')
+    GROUP BY hour ORDER BY hour
+  `).all() as { hour: string; total: number; intercepted: number }[]
+
   const qpsData: { time: string; value: number }[] = []
   const accessData: { time: string; value: number }[] = []
   const interceptData: { time: string; value: number }[] = []
 
-  for (let i = 23; i >= 0; i--) {
-    const h = now.getHours() - i
-    const hour = ((h % 24 + 24) % 24).toString().padStart(2, '0') + ':00'
-    qpsData.push({ time: hour, value: Math.floor(Math.random() * 80 + 10) })
-    accessData.push({ time: hour, value: Math.floor(Math.random() * 120 + 20) })
-    interceptData.push({ time: hour, value: Math.floor(Math.random() * 60 + 5) })
+  for (const r of hourlyRaw) {
+    const time = r.hour.split(' ')[1]
+    qpsData.push({ time, value: Math.round(r.total / 3600) })
+    accessData.push({ time, value: r.total })
+    interceptData.push({ time, value: r.intercepted })
   }
 
   ok(res, {
     requests: total.c,
     pv: pv.c,
     uv: cities.c,
-    uniqueIps: total.c,
+    uniqueIps: totalUpload.s + totalDownload.s,
     intercepts: intercepted.c,
     attackIps: attackCities.c,
     err4xxCount: err4x.c,

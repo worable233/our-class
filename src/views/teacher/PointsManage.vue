@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import type { Student, PointRecord, PointSummary } from '@/types'
+import type { Student, PointSummary } from '@/types'
 import { useMessage } from 'naive-ui'
 import {
   NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NGrid, NGi, NSpin, NIcon,
@@ -26,22 +26,34 @@ const auth = useAuthStore()
 const allClasses = ref<ClassInfo[]>([])
 const selectedClass = ref<ClassInfo | null>(null)
 
-// 教师只显示自己管理的班级
+// 有 classes.view_all 权限看到全部，否则只看自己管理的班级
 const classList = computed(() => {
+  if (auth.permissions.includes('classes.view_all')) return allClasses.value
   const myClasses = (auth.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
-  if (myClasses.length === 0) return allClasses.value // 管理员看到全部
+  if (myClasses.length === 0) return allClasses.value
   return allClasses.value.filter(c => myClasses.includes(c.name))
 })
 const students = ref<Student[]>([])
 const pointSummary = ref<PointSummary[]>([])
-const records = ref<PointRecord[]>([])
 const reviewTypes = ref<ReviewType[]>([])
 const loading = ref(false)
 
 // Quick action state
 const quickAction = ref<{ student: Student; show: boolean } | null>(null)
 const selectedReview = ref<ReviewType | null>(null)
-const floatingAnim = ref<{ id: number; text: string; type: string } | null>(null)
+const celebration = ref<{ emoji: string; name: string; text: string; type: string; show: boolean } | null>(null)
+
+// 预生成随机光点位置和浮动参数
+const dotPositions = Array.from({ length: 24 }, () => ({
+  left: Math.random() * 100,
+  top: Math.random() * 100,
+  size: 3 + Math.random() * 7,
+  delay: Math.random() * 2.5,
+  dur: 4 + Math.random() * 3,
+  offsetX: (Math.random() - 0.5) * 120,
+  offsetY: 60 + Math.random() * 80,
+  curveX: (Math.random() - 0.5) * 60,
+}))
 
 const addTypes = computed(() => reviewTypes.value.filter(t => t.type === 'add'))
 const deductTypes = computed(() => reviewTypes.value.filter(t => t.type === 'deduct'))
@@ -71,19 +83,13 @@ async function loadPoints() {
   pointSummary.value = await api.get<PointSummary[]>(url)
 }
 
-async function loadRecords() {
-  if (!selectedClass.value) return
-  const url = `/points?class=${encodeURIComponent(selectedClass.value.name)}`
-  records.value = await api.get<PointRecord[]>(url)
-}
-
 async function loadReviewTypes() {
   try { reviewTypes.value = (await api.get<ReviewType[]>('/review-types')) || [] } catch {}
 }
 
 async function loadAll() {
   loading.value = true
-  await Promise.all([loadStudents(), loadPoints(), loadRecords(), loadReviewTypes()])
+  await Promise.all([loadStudents(), loadPoints(), loadReviewTypes()])
   loading.value = false
 }
 
@@ -96,7 +102,6 @@ function backToClasses() {
   selectedClass.value = null
   students.value = []
   pointSummary.value = []
-  records.value = []
 }
 
 // Open quick action modal with review types
@@ -119,18 +124,24 @@ async function confirmQuick() {
       review_type_id: r.id,
     })
 
+    const name = quickAction.value.student.display_name
     const sign = r.type === 'add' ? '+' : '-'
-    floatingAnim.value = {
-      id: quickAction.value.student.id,
+    message.success(`${name} ${sign}${r.amount} ${r.reason || r.name}`)
+
+    // 全屏庆祝动画（3s，渐显渐隐）
+    celebration.value = {
+      emoji: r.emoji,
+      name,
       text: `${sign}${r.amount}`,
       type: r.type,
+      show: true,
     }
-    setTimeout(() => { floatingAnim.value = null }, 1200)
+    setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200)
+    setTimeout(() => { celebration.value = null }, 3800)
 
     quickAction.value = null
     selectedReview.value = null
     await loadPoints()
-    await loadRecords()
   } catch (e: any) {
     message.error(e.message || '操作失败')
     quickAction.value = null
@@ -180,18 +191,31 @@ function startRandomPick() {
   tick()
 }
 
-function quickForRandom(type: 'add' | 'deduct', amount: number) {
+function quickForRandom(rt: ReviewType) {
   if (!randomResult.value) return
   randomStop = true; randoming.value = false
   randomModalVisible.value = false
-  let rt = reviewTypes.value.find(t => t.type === type && t.amount === amount)
-  if (!rt) rt = reviewTypes.value.find(t => t.type === type)
-  if (rt) {
-    selectedReview.value = rt
-    quickAction.value = { student: randomResult.value, show: true }
-  } else {
-    message.warning('暂无可用点评类型，请先在点评类型页面创建')
-  }
+  api.post('/points', {
+    student_id: randomResult.value.id,
+    reason: rt.name,
+    type: rt.type,
+    amount: rt.amount,
+    review_type_id: rt.id,
+  }).then(() => {
+    loadPoints()
+    const sign = rt.type === 'add' ? '+' : '-'
+    message.success(`${randomResult.value!.display_name} ${sign}${rt.amount} ${rt.name}`)
+    // 全屏庆祝
+    celebration.value = {
+      emoji: rt.emoji,
+      name: randomResult.value!.display_name,
+      text: `${sign}${rt.amount}`,
+      type: rt.type,
+      show: true,
+    }
+    setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200)
+    setTimeout(() => { celebration.value = null }, 3800)
+  }).catch((e: any) => message.error(e.message || '操作失败'))
 }
 
 function openScoreCard(student: Student) {
@@ -270,26 +294,28 @@ onMounted(loadClasses)
     <template v-if="selectedClass">
 
       <NSpin :show="loading" style="min-height:300px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-bottom:32px">
-          <NCard v-for="s in students" :key="s.id" size="small" hoverable
-            style="position:relative;overflow:hidden;cursor:pointer"
-            @click="openScoreCard(s)"
-            :class="{ 'has-anim': floatingAnim?.id === s.id }"
-          >
-            <div v-if="floatingAnim?.id === s.id" class="float-point" :class="floatingAnim.type">{{ floatingAnim.text }}</div>
-            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-              <NAvatar
-                :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }"
-                :size="46"
-                round
-              >{{ s.display_name.charAt(0) }}</NAvatar>
-              <NText style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</NText>
-              <NText style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
-                <Star :size="16" /> {{ getPoints(s.id) }}
-              </NText>
-            </div>
-          </NCard>
-          <NEmpty v-if="students.length === 0" description="该班级暂无学生" />
+        <template v-if="students.length > 0">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-bottom:32px">
+            <NCard v-for="s in students" :key="s.id" size="small" hoverable
+              style="position:relative;overflow:hidden;cursor:pointer"
+              @click="openScoreCard(s)"
+            >
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+                <NAvatar
+                  :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }"
+                  :size="46"
+                  round
+                >{{ s.display_name.charAt(0) }}</NAvatar>
+                <NText style="font-size:14px;font-weight:600;text-align:center;line-height:1.3">{{ s.display_name }}</NText>
+                <NText style="font-size:20px;font-weight:700;color:var(--accent-text);letter-spacing:-0.02em;display:flex;align-items:center;gap:4px">
+                  <Star :size="16" /> {{ getPoints(s.id) }}
+                </NText>
+              </div>
+            </NCard>
+          </div>
+        </template>
+        <div v-else style="display:flex;justify-content:center;padding:60px 0">
+          <NEmpty description="该班级暂无学生" />
         </div>
       </NSpin>
     </template>
@@ -392,17 +418,54 @@ onMounted(loadClasses)
           </n-button>
         </div>
         <Transition name="result-fade">
-          <div v-if="randomResult && !randoming" class="rm-result">
-            <div class="rm-result-label">为 <strong>{{ randomResult.display_name }}</strong> 快速操作：</div>
-            <div class="rm-result-btns">
-              <n-button size="small" type="success" @click="quickForRandom('add', 2)">+2</n-button>
-              <n-button size="small" type="success" @click="quickForRandom('add', 3)">+3</n-button>
-              <n-button size="small" type="error" @click="quickForRandom('deduct', 1)">-1</n-button>
+          <div v-if="randomResult && !randoming" style="padding-top:16px">
+            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:14px">为 <span style="color:var(--accent-text)">{{ randomResult.display_name }}</span> 选择点评：</div>
+            <div v-if="addTypes.length > 0" style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:16px;justify-content:center">
+              <div
+                v-for="t in addTypes" :key="t.id"
+                class="review-option" style="gap:6px"
+                @click="quickForRandom(t)"
+              >
+                <div class="review-option-circle add" style="width:56px;height:56px">
+                  <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:#18a058;color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">+{{ t.amount }}</n-tag>
+                </div>
+                <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
+              </div>
+            </div>
+            <div v-if="deductTypes.length > 0" style="display:flex;flex-wrap:wrap;gap:20px;justify-content:center">
+              <div
+                v-for="t in deductTypes" :key="t.id"
+                class="review-option" style="gap:6px"
+                @click="quickForRandom(t)"
+              >
+                <div class="review-option-circle deduct" style="width:56px;height:56px">
+                  <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:#d03050;color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">-{{ t.amount }}</n-tag>
+                </div>
+                <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
+              </div>
             </div>
           </div>
         </Transition>
       </div>
     </n-modal>
+
+    <!-- Celebration overlay -->
+    <Transition name="celebration-fade">
+      <div v-if="celebration?.show" class="celebration-overlay" :class="celebration.type">
+        <div class="celebration-bg-dots">
+          <span v-for="(d, i) in dotPositions" :key="i" class="celebration-dot" :style="{ left: d.left + '%', top: d.top + '%', width: d.size + 'px', height: d.size + 'px', animationDelay: d.delay + 's', animationDuration: d.dur + 's', '--ox': d.offsetX + 'px', '--oy': d.offsetY + 'px', '--cx': d.curveX + 'px' }" />
+        </div>
+        <div class="celebration-content">
+          <div class="celebration-emoji">{{ celebration.emoji }}</div>
+          <div class="celebration-text">
+            <span class="celebration-name">{{ celebration.name }}</span>
+            <span class="celebration-score">{{ celebration.text }}</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -424,19 +487,6 @@ onMounted(loadClasses)
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.float-point {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 44px; font-weight: 800; pointer-events: none;
-  animation: floatUp 1.2s var(--ease-out-quint) forwards; z-index: 5;
-}
-.float-point.add { color: #22c55e; }
-.float-point.deduct { color: #ef4444; }
-@keyframes floatUp {
-  0% { opacity: 1; transform: translate(-50%, -30%) scale(0.4); }
-  40% { opacity: 1; transform: translate(-50%, -80%) scale(1.15); }
-  100% { opacity: 0; transform: translate(-50%, -140%) scale(0.9); }
 }
 
 .rm-body { display:flex; flex-direction:column; gap:20px; }
@@ -511,5 +561,113 @@ onMounted(loadClasses)
 @media (max-width:768px) {
   .page-header { flex-direction:column; align-items:flex-start; gap:12px; }
   .page-header .n-button { width:100%; }
+}
+
+/* ── 全屏庆祝动画 ── */
+.celebration-fade-enter-active { transition: opacity 0.35s ease-out; }
+.celebration-fade-leave-active { transition: opacity 0.5s ease-in; }
+.celebration-fade-enter-from,
+.celebration-fade-leave-to { opacity: 0; }
+
+.celebration-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+}
+.celebration-overlay.add { --glow: rgba(34,197,94,0.6); }
+.celebration-overlay.deduct { --glow: rgba(239,68,68,0.6); }
+
+.celebration-bg-dots {
+  position: absolute; inset: 0; overflow: hidden;
+  pointer-events: none;
+}
+
+.celebration-dot {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--glow);
+  box-shadow: 0 0 8px 2px var(--glow), 0 0 20px 4px var(--glow);
+  animation: dotFloatUp ease-in-out infinite;
+  opacity: 0.4;
+  pointer-events: none;
+  will-change: transform;
+}
+.celebration-overlay.deduct .celebration-dot {
+  animation-name: dotFloatDown;
+}
+
+/* 加分：轻盈上升，带曲线飘移 */
+@keyframes dotFloatUp {
+  0%   { transform: translate(0, 0) scale(0.7); }
+  30%  { transform: translate(calc(var(--cx) * 0.5), calc(var(--oy) * -0.3)) scale(1); }
+  50%  { transform: translate(var(--cx), calc(var(--oy) * -0.55)) scale(1.15); }
+  70%  { transform: translate(calc(var(--cx) * 0.3), calc(var(--oy) * -0.8)) scale(0.95); }
+  100% { transform: translate(var(--ox), calc(var(--oy) * -1)) scale(0.5); }
+}
+
+/* 减分：缓缓下降，带曲线飘移 */
+@keyframes dotFloatDown {
+  0%   { transform: translate(0, 0) scale(0.7); }
+  30%  { transform: translate(calc(var(--cx) * 0.5), calc(var(--oy) * 0.3)) scale(1); }
+  50%  { transform: translate(var(--cx), calc(var(--oy) * 0.55)) scale(1.15); }
+  70%  { transform: translate(calc(var(--cx) * 0.3), calc(var(--oy) * 0.8)) scale(0.95); }
+  100% { transform: translate(var(--ox), calc(var(--oy) * 1)) scale(0.5); }
+}
+
+@keyframes dotFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.6;
+  }
+  25% {
+    transform: translate(40px, -30px) scale(1.3);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-20px, -60px) scale(0.8);
+    opacity: 0.4;
+  }
+  75% {
+    transform: translate(30px, -20px) scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.celebration-content {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  position: relative; z-index: 1;
+}
+
+.celebration-emoji {
+  font-size: 72px;
+  line-height: 1;
+  filter: drop-shadow(0 0 20px var(--glow));
+  animation: celebBounce 0.6s ease-out;
+}
+
+@keyframes celebBounce {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.15); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.celebration-text {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+
+.celebration-name {
+  font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.85);
+}
+
+.celebration-score {
+  font-size: 40px; font-weight: 800;
+  color: #22c55e;
+  text-shadow: 0 0 20px rgba(34,197,94,0.5);
+}
+.celebration-overlay.deduct .celebration-score {
+  color: #ef4444;
+  text-shadow: 0 0 20px rgba(239,68,68,0.5);
 }
 </style>

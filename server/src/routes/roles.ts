@@ -31,6 +31,7 @@ const ALL_PERMISSIONS = [
   { code: 'roles.manage', label: '管理权限组', category: '系统设置' },
   { code: 'audit_logs.read', label: '查看操作日志', category: '系统设置' },
   { code: 'classes.read', label: '查看班级列表', category: '系统设置' },
+  { code: 'classes.view_all', label: '查看全部班级', category: '系统设置' },
   // AI 工具权限（tool. 前缀统一管理）
   { code: 'tool.list_students', label: '查询学生列表', category: 'AI 工具' },
   { code: 'tool.get_student_points', label: '查询学生积分', category: 'AI 工具' },

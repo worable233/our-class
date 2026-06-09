@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { computed, h, ref } from 'vue'
 import type { MenuOption } from 'naive-ui'
 import { NLayoutSider, NMenu, NIcon, NTooltip } from 'naive-ui'
-import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen } from '@lucide/vue'
+import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -27,6 +27,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/assignments': ['assignments.read'],
   '/teacher/users': ['students.read'],
   '/teacher/review-types': ['points.write'],
+  '/teacher/point-details': ['points.read'],
   '/teacher/roles': ['roles.manage'],
   '/teacher/settings': ['chat.config'],
   '/teacher/site-data': ['students.read'],
@@ -68,6 +69,7 @@ const menuOptions = computed<MenuOption[]>(() => {
         key: 'students',
         children: [
           { key: '/teacher/points', label: '积分管理', icon: renderIcon(Star) },
+          { key: '/teacher/point-details', label: '积分明细', icon: renderIcon(ClipboardList) },
           { key: '/teacher/assignments', label: '作业管理', icon: renderIcon(List) },
           { key: '/teacher/users', label: '用户管理', icon: renderIcon(Users) },
           { key: '/teacher/review-types', label: '点评类型', icon: renderIcon(Star) },

@@ -57,6 +57,12 @@ const router = createRouter({
           meta: { permissions: ['points.write'] },
         },
         {
+          path: 'point-details',
+          name: 'teacher-point-details',
+          component: () => import('@/views/teacher/PointDetails.vue'),
+          meta: { permissions: ['points.read'] },
+        },
+        {
           path: 'settings',
           name: 'teacher-settings',
           component: () => import('@/views/teacher/SettingsPage.vue'),

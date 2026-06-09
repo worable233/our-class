@@ -3,12 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { Plus, Pencil, Trash2, Filter, School, Users, GraduationCap } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 import { useDialog, useMessage } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { NButton, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty, NList, NListItem, NThing, NScrollbar, NIcon, NTabs, NTabPane, NCard, NButtonGroup, NPopconfirm } from 'naive-ui'
 
 const dialog = useDialog()
 const message = useMessage()
+const auth = useAuthStore()
 const useRef = useRefresh(load)
 
 // ── 用户管理 ──
@@ -110,7 +112,16 @@ const classForm = ref({ name: '' })
 
 async function load() {
   const stu = await api.get<Student[]>('/students')
-  students.value = stu
+  if (!auth.permissions.includes('classes.view_all')) {
+    const myClasses = (auth.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      students.value = stu.filter(s => s.class && myClasses.includes(s.class))
+    } else {
+      students.value = stu
+    }
+  } else {
+    students.value = stu
+  }
   loading.value = false
 }
 
