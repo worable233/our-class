@@ -216,6 +216,7 @@ const updateOutput = ref('')
 // 新状态：版本信息、历史列表、设置
 const versionInfo = ref({ sha: '', date: '', message: '', last_check_time: '' })
 const historyList = ref<{ hash: string; message: string; author: string; date: string }[]>([])
+const historyLoaded = ref(false)
 const updateSettings = ref({ auto_check_interval: 3600, ping_timeout: 3 })
 const savingSettings = ref(false)
 
@@ -244,6 +245,7 @@ async function loadVersion() {
 }
 async function loadHistory() {
   try { historyList.value = await api.get('/system/update/history') } catch {}
+  finally { historyLoaded.value = true }
 }
 async function loadUpdateSettings() {
   try { updateSettings.value = await api.get('/system/update/settings') } catch {}
@@ -607,7 +609,8 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
                 <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.message }}</span>
                 <span style="color:var(--text-muted);flex-shrink:0;font-size:11px">{{ formatDate(c.date) }}</span>
               </div>
-              <div v-if="!historyList.length" style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px">加载中...</div>
+              <div v-if="!historyList.length && !historyLoaded" style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px">加载中...</div>
+              <div v-if="!historyList.length && historyLoaded" style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px">暂无记录</div>
             </div>
           </n-card>
 

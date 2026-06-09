@@ -85,34 +85,40 @@ router.get('/version', (_req: Request, res: Response) => {
   } catch {
     return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装')
   }
-  const sha = execSync('git rev-parse --short HEAD', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
-  const date = execSync('git log -1 --format=%cI', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
-  const msg = execSync('git log -1 --format=%s', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
-
-  const db = getDb()
-  const settings = db.prepare('SELECT last_check_time FROM update_settings WHERE id = 1').get() as any
-
-  ok(res, { sha, date, message: msg, last_check_time: settings?.last_check_time || null })
+  try {
+    const sha = execSync('git rev-parse --short HEAD', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
+    const date = execSync('git log -1 --format=%cI', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
+    const msg = execSync('git log -1 --format=%s', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
+    const db = getDb()
+    const settings = db.prepare('SELECT last_check_time FROM update_settings WHERE id = 1').get() as any
+    ok(res, { sha, date, message: msg, last_check_time: settings?.last_check_time || null })
+  } catch {
+    fail(res, 500, 'VERSION_FAILED', '获取版本信息失败，请确认项目是 Git 仓库')
+  }
 })
 
 // ── History ─────────────────────────────────────────────────────────────────
 
-// GET /api/system/update/history — 获取历史版本列表（最近20条）
+// GET /api/system/update/history — 获取历史版本列表（最近30条）
 router.get('/history', (_req: Request, res: Response) => {
   try {
     execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 }))
   } catch {
     return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装')
   }
-  const log = execSync(
-    'git log --oneline --pretty=format:"%h|%an|%cI|%s" -30',
-    execOpts({ encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }),
-  ).trim()
-  const commits = log.split('\n').filter(Boolean).map(line => {
-    const [hash, author, date, ...msgParts] = line.split('|')
-    return { hash, author, date, message: msgParts.join('|') || '' }
-  })
-  ok(res, commits)
+  try {
+    const log = execSync(
+      'git log --oneline --pretty=format:"%h|%an|%cI|%s" -30',
+      execOpts({ encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }),
+    ).trim()
+    const commits = log.split('\n').filter(Boolean).map(line => {
+      const [hash, author, date, ...msgParts] = line.split('|')
+      return { hash, author, date, message: msgParts.join('|') || '' }
+    })
+    ok(res, commits)
+  } catch {
+    ok(res, [])
+  }
 })
 
 // ── Check ───────────────────────────────────────────────────────────────────
@@ -169,7 +175,7 @@ router.post('/check', async (req: Request, res: Response) => {
 // ── Apply ───────────────────────────────────────────────────────────────────
 
 // POST /api/system/update/apply — 流式输出更新过程
-router.post('/apply', async (_req: Request, res: Response) => {
+router.post('/apply', async (req: Request, res: Response) => {
   if (updating) return fail(res, 429, 'UPDATE_IN_PROGRESS', '更新任务正在进行中')
 
   updating = true
@@ -179,35 +185,48 @@ router.post('/apply', async (_req: Request, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
 
-  function emit(type: string, data: any) { sse(res, type, data) }
+  let aborted = false
+  let currentChild: { kill: () => void } | null = null
+  const onClose = () => {
+    aborted = true
+    if (currentChild) { try { currentChild.kill() } catch {} }
+    res.end()
+  }
+  req.on('close', onClose)
+
+  function emit(type: string, data: any) { if (!aborted) sse(res, type, data) }
 
   try {
+    if (aborted) return
     emit('step', { message: '正在检查 Git...' })
     try { execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 })) }
-    catch { emit('error', { message: 'Git 未安装' }); res.end(); return }
+    catch { emit('error', { message: 'Git 未安装' }); return }
+
+    if (aborted) return
     emit('success', { message: 'Git 可用' })
 
     emit('step', { message: '正在连接 GitHub...' })
     try { execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 5000 })) }
-    catch { emit('error', { message: '无法连接到 GitHub' }); res.end(); return }
-    emit('success', { message: '网络连通' })
+    catch { emit('error', { message: '无法连接到 GitHub' }); return }
 
-    emit('step', { message: '正在拉取代码...' })
-    try { await runCommand('git', ['fetch', 'origin', 'main'], execOpts({ cwd: PROJECT_ROOT, timeout: 30000 }), (chunk) => emit('output', { text: chunk })) }
-    catch (e: any) { emit('error', { message: '拉取失败: ' + (e.message || '') }); res.end(); return }
+    for (const [label, cmd, args, opts, critical] of [
+      ['拉取代码', 'git', ['fetch', 'origin', 'main'], { timeout: 30000 }, true],
+      ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000 }, true],
+      ['清理文件', 'git', ['clean', '-fd'], { timeout: 10000 }, false],
+      ['安装依赖', 'npm', ['install'], { timeout: 120000 }, true],
+    ] as const) {
+      if (aborted) return
+      emit('step', { message: '正在' + label + '...' })
+      try {
+        currentChild = null
+        await runCommand(cmd as string, args as string[], execOpts({ cwd: PROJECT_ROOT, ...opts }), (chunk) => emit('output', { text: chunk }))
+      } catch (e: any) {
+        if (aborted) return
+        if (critical) { emit('error', { message: label + '失败' }); return }
+      }
+    }
 
-    emit('step', { message: '正在同步代码...' })
-    try { await runCommand('git', ['reset', '--hard', 'origin/main'], execOpts({ cwd: PROJECT_ROOT, timeout: 15000 }), (chunk) => emit('output', { text: chunk })) }
-    catch (e: any) { emit('error', { message: '同步失败' }); res.end(); return }
-
-    emit('step', { message: '正在清理文件...' })
-    try { await runCommand('git', ['clean', '-fd'], execOpts({ cwd: PROJECT_ROOT, timeout: 10000 }), (chunk) => emit('output', { text: chunk })) }
-    catch { /* clean failure is non-critical */ }
-
-    emit('step', { message: '正在安装依赖...' })
-    try { await runCommand('npm', ['install'], execOpts({ cwd: PROJECT_ROOT, timeout: 120000 }), (chunk) => emit('output', { text: chunk })) }
-    catch { emit('error', { message: '安装依赖失败' }); res.end(); return }
-
+    if (aborted) return
     emit('done', { message: '更新成功，即将重启...' })
     res.end()
     res.on('finish', () => {
@@ -217,11 +236,9 @@ router.post('/apply', async (_req: Request, res: Response) => {
         process.exit(0)
       }, 1000)
     })
-  } catch (e: any) {
-    emit('error', { message: '更新失败' })
-    res.end()
-    try { execSync('git reset --hard HEAD 2>&1', execOpts({ cwd: PROJECT_ROOT, timeout: 10000 })) } catch {}
   } finally {
+    req.removeListener('close', onClose)
+    if (!aborted) res.end()
     updating = false
   }
 })
