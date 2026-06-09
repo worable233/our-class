@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { computed, h, ref } from 'vue'
 import type { MenuOption } from 'naive-ui'
 import { NLayoutSider, NMenu, NIcon, NTooltip } from 'naive-ui'
-import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList } from '@lucide/vue'
+import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList, RefreshCw } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -33,6 +33,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/site-data': ['students.read'],
   '/teacher/skills': ['chat.skills', 'chat.config'],
   '/teacher/logs': ['audit_logs.read'],
+  '/teacher/update': ['chat.config'],
 }
 
 function hasRouteAccess(path: string): boolean {
@@ -91,6 +92,7 @@ const menuOptions = computed<MenuOption[]>(() => {
               { key: '/teacher/logs', label: '操作日志', icon: renderIcon(History) },
               { key: '/teacher/traffic', label: '流量监控', icon: renderIcon(Globe) },
               { key: '/teacher/site-data', label: '站点数据', icon: renderIcon(LayoutDashboard) },
+              { key: '/teacher/update', label: '系统更新', icon: renderIcon(RefreshCw) },
             ],
           },
         ],

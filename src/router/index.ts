@@ -75,6 +75,12 @@ const router = createRouter({
           meta: { permissions: ['students.read'] },
         },
         {
+          path: 'update',
+          name: 'teacher-update',
+          component: () => import('@/views/teacher/SystemUpdate.vue'),
+          meta: { permissions: ['chat.config'] },
+        },
+        {
           path: 'skills',
           name: 'teacher-skills',
           component: () => import('@/views/teacher/SkillManage.vue'),
