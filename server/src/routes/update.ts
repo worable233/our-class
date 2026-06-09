@@ -16,6 +16,21 @@ let updating = false
 
 const router = Router()
 
+// 获取系统代理配置（从环境变量或系统设置）
+function getProxyEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  const proxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']
+  for (const key of proxyVars) {
+    const val = process.env[key]
+    if (val) env[key] = val
+  }
+  return env
+}
+
+function execOpts(extra: Record<string, any> = {}) {
+  return { ...extra, env: { ...process.env, ...getProxyEnv(), ...(extra.env || {}) } }
+}
+
 // 所有更新路由都需要教师权限
 router.use(authMiddleware)
 router.use(requirePermission('chat.config'))
@@ -25,28 +40,28 @@ router.get('/check', async (_req: Request, res: Response) => {
   try {
     // 先检查 git 是否可用
     try {
-      execSync('git --version', { encoding: 'utf-8', timeout: 3000 })
+      execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 }))
     } catch {
       return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
     }
 
     // ping GitHub 检查网络连通性
     try {
-      execSync('ping -c 1 -t 3 github.com 2>&1', { encoding: 'utf-8', timeout: 5000 })
+      execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 5000 }))
     } catch {
       return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
     }
 
-    const fetchOut = execSync('git fetch origin main 2>&1', { encoding: 'utf-8', timeout: 15000, cwd: PROJECT_ROOT })
-    const localSha = execSync('git rev-parse HEAD', { encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }).trim()
-    const remoteSha = execSync('git rev-parse origin/main', { encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }).trim()
+    const fetchOut = execSync('git fetch origin main 2>&1', execOpts({ encoding: 'utf-8', timeout: 15000, cwd: PROJECT_ROOT }))
+    const localSha = execSync('git rev-parse HEAD', execOpts({ encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT })).trim()
+    const remoteSha = execSync('git rev-parse origin/main', execOpts({ encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT })).trim()
     const behind = localSha !== remoteSha
 
     let commits: { message: string; author: string; date: string }[] = []
     if (behind) {
       const log = execSync(
         `git log --oneline --pretty=format:"%h|%an|%ar|%s" ${localSha}..origin/main`,
-        { encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT },
+        execOpts({ encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }),
       ).trim()
       commits = log.split('\n').filter(Boolean).map(line => {
         const [hash, author, date, ...msgParts] = line.split('|')
@@ -90,16 +105,16 @@ router.post('/apply', async (_req: Request, res: Response) => {
     }
 
     // git pull（非阻塞）
-    const { stdout: pullOut } = await asyncExec('git pull origin main 2>&1', {
+    const { stdout: pullOut } = await asyncExec('git pull origin main 2>&1', execOpts({
       timeout: 30000,
       cwd: PROJECT_ROOT,
-    })
+    }))
 
     // npm install（非阻塞）
-    await asyncExec('npm install 2>&1', {
+    await asyncExec('npm install 2>&1', execOpts({
       timeout: 120000,
       cwd: PROJECT_ROOT,
-    })
+    }))
 
     ok(res, {
       message: '更新成功，请重启服务器以生效',
