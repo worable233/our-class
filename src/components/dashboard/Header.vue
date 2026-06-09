@@ -28,6 +28,7 @@ const pageTitle = computed(() => {
     '/teacher/traffic': '流量监控',
     '/teacher/settings': '站点设置',
     '/teacher/site-data': '站点数据',
+    '/teacher/update': '系统更新',
     '/student/points': '我的积分',
     '/student/leaderboard': '积分排行',
     '/student/assignments': '作业查询',

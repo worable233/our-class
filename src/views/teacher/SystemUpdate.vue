@@ -173,7 +173,7 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
 
 <template>
   <n-spin :show="versionLoading">
-    <n-space vertical :size="16" style="max-width: 800px; padding: 8px 0">
+    <n-space vertical :size="16">
 
       <!-- ── 版本信息 ── -->
       <n-card title="版本信息" size="small" segmented>
