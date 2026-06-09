@@ -210,6 +210,7 @@ const updateInfo = ref<{ current: string; latest: string; behind: boolean; commi
 const updateChecking = ref(false)
 const updateApplying = ref(false)
 const updateResult = ref('')
+const reloadCountdown = ref(0)
 
 async function checkUpdate() {
   updateChecking.value = true
@@ -225,14 +226,25 @@ async function checkUpdate() {
 }
 
 async function applyUpdate() {
-  if (!window.confirm('确定要拉取最新代码并安装依赖吗？\n\n更新过程中页面可能无响应，更新后需要手动重启服务器。')) {
+  if (!window.confirm('确定要拉取最新代码并安装依赖吗？\n\n更新完成后页面将自动刷新以加载最新代码。')) {
     return
   }
   updateApplying.value = true
-  updateResult.value = ''
+  updateResult.value = '⏳ 拉取代码中...'
   try {
     const res = await api.post<{ message: string; pull: string }>('/system/update/apply', {})
-    updateResult.value = '✅ ' + res.message + (res.pull ? '\n' + res.pull : '')
+    // 更新成功，开始倒计时自动刷新页面加载最新前端代码
+    updateResult.value = '✅ ' + res.message
+    reloadCountdown.value = 5
+    if (reloadTimer) clearInterval(reloadTimer)
+    reloadTimer = setInterval(() => {
+      reloadCountdown.value--
+      updateResult.value = '✅ 更新成功，' + reloadCountdown.value + ' 秒后自动刷新页面...'
+      if (reloadCountdown.value <= 0) {
+        if (reloadTimer) clearInterval(reloadTimer)
+        window.location.reload()
+      }
+    }, 1000)
   } catch (e: any) {
     const msg = e.message || '更新失败'
     updateResult.value = msg.includes('UPDATE_IN_PROGRESS') ? '⏳ 已有更新任务正在进行中' : ('❌ ' + msg)
