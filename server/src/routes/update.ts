@@ -30,6 +30,13 @@ router.get('/check', async (_req: Request, res: Response) => {
       return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
     }
 
+    // ping GitHub 检查网络连通性
+    try {
+      execSync('ping -c 1 -t 3 github.com 2>&1', { encoding: 'utf-8', timeout: 5000 })
+    } catch {
+      return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
+    }
+
     const fetchOut = execSync('git fetch origin main 2>&1', { encoding: 'utf-8', timeout: 15000, cwd: PROJECT_ROOT })
     const localSha = execSync('git rev-parse HEAD', { encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }).trim()
     const remoteSha = execSync('git rev-parse origin/main', { encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT }).trim()
@@ -72,6 +79,14 @@ router.post('/apply', async (_req: Request, res: Response) => {
     } catch {
       updating = false
       return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装或不在系统 PATH 中')
+    }
+
+    // ping GitHub 检查网络连通性
+    try {
+      execSync('ping -c 1 -t 3 github.com 2>&1', { encoding: 'utf-8', timeout: 5000 })
+    } catch {
+      updating = false
+      return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络连接')
     }
 
     // git pull（非阻塞）
