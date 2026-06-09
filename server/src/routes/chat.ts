@@ -283,8 +283,8 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     return JSON.stringify({ error: `您没有权限使用「${name}」工具` })
   }
 
-  // Load tool config for max_result_length
-  const config = db.prepare('SELECT config_json, max_result_length FROM tool_configs WHERE user_id = ? AND tool_name = ?').get(userId, name) as any
+  // Load tool config for max_result_length (全局，所有用户共享)
+  const config = db.prepare('SELECT config_json, max_result_length FROM tool_configs WHERE tool_name = ? ORDER BY id ASC LIMIT 1').get(name) as any
   const configData = config ? JSON.parse(config.config_json || '{}') : {}
 
   switch (name) {
@@ -425,8 +425,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
 
     case 'get_weather': {
       const city = (input.city as string) || ''
-      const cfg = db.prepare('SELECT city FROM api_keys WHERE user_id=? AND is_active=1').get(userId) as any
-      const targetCity = city || cfg?.city || ''
+      const targetCity = city || (configData as any)?.default_city || ''
       const params = targetCity ? `?city=${encodeURIComponent(targetCity)}&extended=true` : '?extended=true'
       try {
         const res = await fetch(`https://uapis.cn/api/v1/misc/weather${params}`)

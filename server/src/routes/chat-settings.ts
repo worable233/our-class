@@ -137,8 +137,7 @@ router.get(
   requirePermission('chat.config'),
   (_req: Request, res: Response) => {
     const db = getDb()
-    const userId = _req.user!.id
-    const rows = db.prepare('SELECT * FROM tool_configs WHERE user_id = ?').all(userId) as any[]
+    const rows = db.prepare('SELECT * FROM tool_configs').all() as any[]
 
     // Merge with defaults: show default if no custom config exists
     const result = DEFAULT_TOOLS.map(def => {
@@ -157,9 +156,8 @@ router.get(
   requirePermission('chat.config'),
   (req: Request, res: Response) => {
     const db = getDb()
-    const userId = req.user!.id
     const name = req.params.name
-    const row = db.prepare('SELECT * FROM tool_configs WHERE user_id = ? AND tool_name = ?').get(userId, name) as any
+    const row = db.prepare('SELECT * FROM tool_configs WHERE tool_name = ? ORDER BY id ASC LIMIT 1').get(name) as any
 
     if (row) {
       return ok(res, { tool_name: row.tool_name, config_json: row.config_json, max_result_length: row.max_result_length, enabled: !!row.enabled })
@@ -182,7 +180,7 @@ router.put(
     const userId = req.user!.id
     const name = req.params.name
 
-    const existing = db.prepare('SELECT id FROM tool_configs WHERE user_id = ? AND tool_name = ?').get(userId, name) as any
+    const existing = db.prepare('SELECT id FROM tool_configs WHERE tool_name = ? ORDER BY id ASC LIMIT 1').get(name) as any
 
     if (existing) {
       const fields: string[] = []
@@ -191,7 +189,7 @@ router.put(
       if (req.body.max_result_length !== undefined) { fields.push('max_result_length = ?'); params.push(req.body.max_result_length) }
       if (req.body.enabled !== undefined) { fields.push('enabled = ?'); params.push(req.body.enabled ? 1 : 0) }
       if (fields.length > 0) {
-        db.prepare(`UPDATE tool_configs SET ${fields.join(', ')} WHERE user_id = ? AND tool_name = ?`).run(...params, userId, name)
+        db.prepare(`UPDATE tool_configs SET ${fields.join(', ')} WHERE tool_name = ?`).run(...params, name)
       }
     } else {
       db.prepare(`
