@@ -206,6 +206,7 @@ async function saveToolConfig(tc: ToolConfig) {
 
 // tab 4 removed — moved to SystemUpdate.vue
 onMounted(load)
+</script>
 <template>
   <div>
     <n-spin :show="!loaded">
