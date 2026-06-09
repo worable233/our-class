@@ -81,6 +81,7 @@ const SYSTEM_PROMPT = `你是 OurClass 班级管理系统的 AI 助手。你拥�
 ### get_current_time — 获取当前日期和时间
 ### get_point_details — 查询积分明细，可按学生姓名和日期范围筛选
 ### random_pick — 随机抽取学生，class(可选班级), count(可选数量，默认1)
+### manage_roles — 管理权限组（创建/更新/删除/查询/分配），仅管理员可用
 ### web_search — 联网搜索知识点、新闻、概念等公开资料（query必填）
 - 拿到搜索结果后，必须在正文每句话末尾使用[N]标注引用来源（如"广州塔是标志性建筑[1]"，N对应搜索结果序号）
 - 禁止在正文中列出完整URL，禁止使用Markdown链接格式，只写核心信息并在句末加[N]序号
@@ -266,6 +267,22 @@ const TOOLS: ToolDef[] = [
         confirm: { type: 'boolean', description: '确认删除，必须设为 true 才会执行' },
       },
       required: ['student_ids', 'confirm'],
+    },
+  },
+  {
+    name: 'manage_roles',
+    description: '管理权限组。可创建/更新/删除权限组、查询权限组列表、分配权限组给用户。仅拥有 roles.manage 权限的教师可用。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'update', 'delete', 'assign'], description: '操作类型：list=查询权限组列表, create=创建权限组, update=更新权限组, delete=删除权限组, assign=分配权限组给用户' },
+        group_id: { type: 'integer', description: '权限组 ID（update/delete 时需要）' },
+        name: { type: 'string', description: '权限组名称（create/update 时需要）' },
+        description: { type: 'string', description: '权限组描述（create/update 时可选）' },
+        permissions: { type: 'array', items: { type: 'string' }, description: '权限 code 列表，如["students.read","points.read"]（create/update 时需要）' },
+        user_ids: { type: 'array', items: { type: 'integer' }, description: '要分配权限组的用户 ID 列表（assign 时需要）' },
+      },
+      required: ['action'],
     },
   },
   {
@@ -593,6 +610,71 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         results.push({ id, success: true, display_name: student.display_name })
       }
       return JSON.stringify({ total: ids.length, deleted: results.filter((r: any) => r.success).length, results })
+    }
+
+    case 'manage_roles': {
+      if (!userPermissions.includes('roles.manage')) return JSON.stringify({ error: '您没有管理权限组的权限' })
+      const action = input.action as string
+      if (action === 'list') {
+        const groups = db.prepare('SELECT * FROM permission_groups ORDER BY id').all() as any[]
+        const result = groups.map((g: any) => {
+          const perms = db.prepare('SELECT permission_code FROM group_permissions WHERE group_id = ?').all(g.id) as any[]
+          return { ...g, permissions: perms.map((p: any) => p.permission_code) }
+        })
+        return JSON.stringify({ groups: result })
+      }
+      if (action === 'create') {
+        const name = input.name as string
+        const desc = (input.description as string) || ''
+        const permissions = (input.permissions as string[]) || []
+        if (!name) return JSON.stringify({ error: '请提供权限组名称' })
+        const dup = db.prepare('SELECT id FROM permission_groups WHERE name = ?').get(name)
+        if (dup) return JSON.stringify({ error: '权限组名称已存在' })
+        const result = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?,?)').run(name, desc)
+        const gid = result.lastInsertRowid
+        const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
+        for (const code of permissions) insert.run(gid, code)
+        return JSON.stringify({ success: true, id: gid, name, message: '权限组已创建' })
+      }
+      if (action === 'update') {
+        const gid = input.group_id as number
+        if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
+        const existing = db.prepare('SELECT id FROM permission_groups WHERE id = ?').get(gid)
+        if (!existing) return JSON.stringify({ error: '权限组不存在' })
+        if (input.name) { db.prepare('UPDATE permission_groups SET name = ? WHERE id = ?').run(input.name, gid) }
+        if (input.description !== undefined) { db.prepare('UPDATE permission_groups SET description = ? WHERE id = ?').run(input.description, gid) }
+        if (input.permissions) {
+          db.prepare('DELETE FROM group_permissions WHERE group_id = ?').run(gid)
+          const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
+          for (const code of input.permissions as string[]) insert.run(gid, code)
+        }
+        return JSON.stringify({ success: true, message: '权限组已更新' })
+      }
+      if (action === 'delete') {
+        const gid = input.group_id as number
+        if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
+        if (gid <= 2) return JSON.stringify({ error: '无法删除默认权限组' })
+        db.prepare('UPDATE users SET group_id = NULL WHERE group_id = ?').run(gid)
+        db.prepare('DELETE FROM permission_groups WHERE id = ?').run(gid)
+        return JSON.stringify({ success: true, message: '权限组已删除' })
+      }
+      if (action === 'assign') {
+        const gid = input.group_id as number
+        const userIds = input.user_ids as number[] || []
+        if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
+        if (userIds.length === 0) return JSON.stringify({ error: '请提供要分配的用户 ID 列表' })
+        const group = db.prepare('SELECT id FROM permission_groups WHERE id = ?').get(gid)
+        if (!group) return JSON.stringify({ error: '权限组不存在' })
+        const results: any[] = []
+        for (const uid of userIds) {
+          const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(uid) as any
+          if (!user) { results.push({ id: uid, error: '用户不存在' }); continue }
+          db.prepare('UPDATE users SET group_id = ? WHERE id = ?').run(gid, uid)
+          results.push({ id: uid, display_name: user.display_name, success: true })
+        }
+        return JSON.stringify({ total: userIds.length, assigned: results.filter((r: any) => r.success).length, results })
+      }
+      return JSON.stringify({ error: '未知操作: ' + action })
     }
 
     case 'get_point_details': {
@@ -1123,6 +1205,7 @@ function toolLabel(name: string, input: Record<string, unknown>): string {
     case 'get_point_details': return '查询积分明细'
     case 'update_student': return `修改学生 #${input.student_id}`
     case 'delete_students': return `批量删除 ${(input.student_ids as number[] || []).length} 名学生`
+    case 'manage_roles': return `管理权限组: ${input.action}`
     default: return `调用 ${name}`
   }
 }
