@@ -47,6 +47,14 @@ const fileTypeOptions = [
   { label: '.md (Markdown)', value: '.md' },
   { label: '.json (JSON)', value: '.json' },
   { label: '.xml (XML)', value: '.xml' },
+  // 图片类型
+  { label: '.jpg (JPEG 图片)', value: '.jpg' },
+  { label: '.jpeg (JPEG 图片)', value: '.jpeg' },
+  { label: '.png (PNG 图片)', value: '.png' },
+  { label: '.gif (GIF 图片)', value: '.gif' },
+  { label: '.webp (WebP 图片)', value: '.webp' },
+  { label: '.bmp (BMP 图片)', value: '.bmp' },
+  { label: '.svg (SVG 矢量图)', value: '.svg' },
 ]
 
 const selectedFileTypes = computed({
