@@ -8,12 +8,30 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ComponentPublicInstance } from 'vue'
-import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload } from '@lucide/vue'
+import { NCarousel } from 'naive-ui'
+import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload, Newspaper } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
 import { STREAM_CONFIG } from '@/composables/useStreamAnimation'
 const { setResults: setSearchResults } = useSearchPanel()
+
+interface ArticleItem {
+  id: number; title: string; cover_url: string; author: string; created_at: string
+}
+
+const recentArticles = ref<ArticleItem[]>([])
+const articlesLoading = ref(false)
+
+async function loadRecentArticles() {
+  if (!auth.isLoggedIn) return
+  articlesLoading.value = true
+  try {
+    const data = await api.get<ArticleItem[]>('/articles')
+    recentArticles.value = (data || []).slice(0, 4)
+  } catch { recentArticles.value = [] }
+  finally { articlesLoading.value = false }
+}
 
 interface ChatMessage {
   role: string
@@ -175,6 +193,8 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
     terminated.value = false
     stoppedByUser.value = false
     hasConfig.value = false
+  } else {
+    loadRecentArticles()
   }
 })
 
@@ -182,6 +202,7 @@ onMounted(async () => {
   // Load AI feature settings early (needed on homepage too)
   if (auth.isLoggedIn) {
     try { const s = await api.get<any>('/chat/settings'); if (s) settings.value = s } catch {}
+    loadRecentArticles()
   }
 
   // Only load conversation if URL has an encoded ID
@@ -296,6 +317,18 @@ function newConversation() {
   terminated.value = false
   stoppedByUser.value = false
   router.push('/')
+}
+
+function formatDate(d: string) {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+}
+
+function openArticleChat(art: ArticleItem) {
+  if (!auth.isLoggedIn) { emit('login'); return }
+  // Navigate to chat with article context
+  welcomeAction(`搜索公众号文章「${art.title}」的内容`)
 }
 
 function welcomeAction(prompt: string) {
@@ -825,6 +858,30 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             <button class="welcome-btn" @click="welcomeAction('全班学生的积分排行')"><Trophy :size="14" />积分排行</button>
             <button class="welcome-btn" @click="welcomeAction('今天天气怎么样')"><Sun :size="14" />查天气</button>
           </div>
+
+          <!-- ═══ 最新公众号文章轮播 ═══ -->
+          <div v-if="recentArticles.length > 0" class="article-carousel">
+            <div class="carousel-header">
+              <Newspaper :size="15" />
+              <span>最新公众号文章</span>
+            </div>
+            <n-carousel :interval="5000" dot-placement="bottom" show-arrow="hover" draggable>
+              <div v-for="art in recentArticles" :key="art.id" class="carousel-slide">
+                <div class="carousel-card" @click="openArticleChat(art)">
+                  <div class="carousel-cover" v-if="art.cover_url">
+                    <img :src="art.cover_url" :alt="art.title" @error="($event.target as HTMLImageElement).style.display='none'" />
+                  </div>
+                  <div class="carousel-info">
+                    <div class="carousel-title">{{ art.title }}</div>
+                    <div class="carousel-meta">
+                      <span v-if="art.author">{{ art.author }}</span>
+                      <span>{{ formatDate(art.created_at) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </n-carousel>
+          </div>
         </div>
 
         <div v-for="group in messageGroups" :key="group.id" class="msg-group">
@@ -1040,6 +1097,55 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .drag-fade-enter-active, .drag-fade-leave-active { transition: opacity .2s; }
 .drag-fade-enter-from, .drag-fade-leave-to { opacity: 0; }
 
+/* ═══ 公众号文章轮播 ═══ */
+.article-carousel {
+  margin-top: 32px;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.carousel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  justify-content: center;
+}
+.carousel-slide { padding: 0 4px; }
+.carousel-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  min-height: 72px;
+}
+.carousel-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(94,106,210,0.08);
+}
+.carousel-cover {
+  width: 72px; height: 52px; flex-shrink: 0;
+  border-radius: 4px; overflow: hidden;
+  background: var(--surface-1);
+}
+.carousel-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.carousel-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; justify-content: center; text-align: left; }
+.carousel-title {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3;
+}
+.carousel-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--text-muted);
+}
+.carousel-meta span { white-space: nowrap; }
 </style>
 
 

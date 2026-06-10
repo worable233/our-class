@@ -464,9 +464,17 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
 
     case 'list_assignments': {
       const course = input.course as string | undefined
-      const rows = course
-        ? db.prepare('SELECT id, title, course, due_date FROM assignments WHERE course=? ORDER BY due_date LIMIT 50').all(course)
-        : db.prepare('SELECT id, title, course, due_date FROM assignments ORDER BY due_date LIMIT 50').all()
+      const cf = getClassFilter(userClass, userPermissions)
+      let sql = 'SELECT a.id, a.title, a.course, a.due_date FROM assignments a JOIN courses c ON a.course = c.name WHERE 1=1'
+      const params: any[] = []
+      if (course) { sql += ' AND a.course=?'; params.push(course) }
+      if (cf.sql) {
+        const cls = userClass.split(',').filter(Boolean).map(c => c.trim())
+        sql += ` AND c.class IN (${cls.map(() => '?').join(',')})`
+        params.push(...cls)
+      }
+      sql += ' ORDER BY a.due_date LIMIT 50'
+      const rows = db.prepare(sql).all(...params)
       if (rows.length === 0) return JSON.stringify({ error: '暂无作业' })
       return JSON.stringify({ total: rows.length, assignments: rows })
     }
@@ -667,11 +675,19 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const studentGroupSql = "group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
       let rows: any[]
       if (cls) {
+        // 校验班级权限
+        if (!userPermissions.includes('classes.view_all')) {
+          const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+          if (!myClasses.includes(cls)) return JSON.stringify({ error: `无权在班级「${cls}」抽取` })
+        }
         rows = db.prepare(`SELECT display_name, class FROM users WHERE ${studentGroupSql} AND class=? ORDER BY id`).all(cls)
         if (rows.length === 0) {
+          if (!userPermissions.includes('classes.view_all')) {
+            return JSON.stringify({ error: `没有找到班级「${cls}」的学生，请确认班级名是否正确` })
+          }
           const allClasses = db.prepare(`SELECT DISTINCT class FROM users WHERE ${studentGroupSql} AND class!=''`).all() as any[]
           const classList = allClasses.map((r: any) => r.class).join('、')
-          return JSON.stringify({ error: `没有找到班级「${cls}」。可选班级：${classList || '暂无'}。请让用户确认班级名，或不传 class 参数从全部学生中抽取。` })
+          return JSON.stringify({ error: `没有找到班级「${cls}」的学生。可选班级：${classList || '暂无'}。请让用户确认班级名。` })
         }
       } else {
         const cf = getClassFilter(userClass, userPermissions)
