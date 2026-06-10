@@ -67,6 +67,25 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
   ok(res, db.prepare(sql).all(...params))
 })
 
+// GET /api/points/top?days=7 — 最近 N 天积分排行
+router.get('/top', requirePermission('points.read'), (req: Request, res: Response) => {
+  const db = getDb()
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 365)
+  const rows = db.prepare(`
+    SELECT u.id, u.display_name, u.class,
+      SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE 0 END) as total_added,
+      SUM(CASE WHEN p.type = 'deduct' THEN p.amount ELSE 0 END) as total_deducted,
+      SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE -p.amount END) as total
+    FROM point_records p
+    JOIN users u ON p.student_id = u.id
+    WHERE p.date >= date('now', '-' || ? || ' days')
+    GROUP BY u.id
+    ORDER BY total DESC
+    LIMIT 10
+  `).all(days)
+  ok(res, rows)
+})
+
 // POST /api/points
 router.post('/', requirePermission('points.write'), validate(createPointSchema), (req: Request, res: Response) => {
   const db = getDb()
