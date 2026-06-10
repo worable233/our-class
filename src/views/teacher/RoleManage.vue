@@ -5,6 +5,7 @@ import { api } from '@/api/client'
 import {
   NButton, NInput, NAlert, NSpace, NSpin, NSelect, NTabs, NTabPane,
   NModal, NCard, NTag, NCheckbox, NCheckboxGroup, NDivider, NForm, NFormItem,
+  NInputNumber,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 
@@ -18,10 +19,11 @@ interface PermissionGroup { id: number; name: string; description: string; paren
 
 const allPermissions = ref<PermissionDef[]>([])
 const groups = ref<PermissionGroup[]>([])
+const storageQuota = ref<Record<number, number>>({}) // group_id → storage_limit
 const loading = ref(false)
 const showModal = ref(false)
 const editing = ref<number | null>(null)
-const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, group_type: 'custom' as string, permissions: [] as string[] })
+const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, group_type: 'custom' as string, permissions: [] as string[], storage_limit: 100 })
 const saving = ref(false)
 const activeTab = ref('identities')
 const currentUserPerms = computed(() => auth.permissions || [])
@@ -74,12 +76,16 @@ function tagType(count: number) {
 async function load() {
   loading.value = true
   try {
-    const [g, p] = await Promise.all([
+    const [g, p, sq] = await Promise.all([
       api.get<PermissionGroup[]>('/roles/groups'),
       api.get<PermissionDef[]>('/roles/permissions'),
+      api.get<any[]>('/storage/groups').catch(() => []),
     ])
     groups.value = g
     allPermissions.value = p
+    const map: Record<number, number> = {}
+    for (const item of sq) map[item.id] = Math.round((item.storage_limit || 104857600) / 1048576)
+    storageQuota.value = map
   } catch { message.error('加载数据失败') }
   finally { loading.value = false }
 }
@@ -90,13 +96,13 @@ onMounted(load)
 
 function openIdentityNew() {
   editing.value = null
-  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [] }
+  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [], storage_limit: 100 }
   showModal.value = true
 }
 
 function openIdentityEdit(g: PermissionGroup) {
   editing.value = g.id
-  form.value = { name: g.name, description: g.description, class: '', parent_id: null, group_type: g.group_type || 'custom', permissions: [...g.permissions] }
+  form.value = { name: g.name, description: g.description, class: '', parent_id: null, group_type: g.group_type || 'custom', permissions: [...g.permissions], storage_limit: storageQuota.value[g.id] || 100 }
   showModal.value = true
 }
 
@@ -104,12 +110,17 @@ async function saveIdentity() {
   saving.value = true
   try {
     const payload: any = { name: form.value.name, description: form.value.description, permissions: form.value.permissions, group_type: form.value.group_type }
+    let groupId: number
     if (editing.value) {
       await api.put(`/roles/groups/${editing.value}`, payload)
-      message.success('身份组已更新')
+      groupId = editing.value
     } else {
-      await api.post('/roles/groups', payload)
-      message.success('身份组已创建')
+      const created = await api.post<any>('/roles/groups', payload)
+      groupId = created.id
+    }
+    // 保存存储配额
+    if (form.value.storage_limit && form.value.storage_limit > 0) {
+      await api.put(`/storage/groups/${groupId}`, { storage_limit: form.value.storage_limit * 1048576 }).catch(() => {})
     }
     showModal.value = false
     load()
@@ -130,13 +141,13 @@ async function deleteIdentity(id: number) {
 
 function openRoleNew() {
   editing.value = null
-  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [] }
+  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [], storage_limit: 100 }
   showModal.value = true
 }
 
 function openRoleEdit(g: PermissionGroup) {
   editing.value = g.id
-  form.value = { name: g.name, description: g.description, class: g.class, parent_id: g.parent_id, group_type: g.group_type || 'custom', permissions: [...g.permissions] }
+  form.value = { name: g.name, description: g.description, class: g.class, parent_id: g.parent_id, group_type: g.group_type || 'custom', permissions: [...g.permissions], storage_limit: 100 }
   showModal.value = true
 }
 
@@ -189,6 +200,9 @@ async function deleteRole(id: number) {
                   <n-tag v-else size="tiny" :bordered="false" round style="flex-shrink:0; font-size: 11px; opacity: 0.5">
                     自定义
                   </n-tag>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
+                  <span style="font-size:11px;color:var(--text-muted)">💾 {{ storageQuota[g.id] || 100 }} MB</span>
                 </div>
                 <div v-if="g.description" style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">{{ g.description }}</div>
                 <div v-if="g.permissions.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px">
@@ -248,6 +262,10 @@ async function deleteRole(id: number) {
             { label: '教师端', value: 'teacher' },
             { label: '学生端', value: 'student' },
           ]" :disabled="!!editing" />
+        </n-form-item>
+
+        <n-form-item v-if="activeTab === 'identities' && currentUserPerms.includes('roles.manage')" label="存储上限 (MB)">
+          <n-input-number v-model:value="form.storage_limit" :min="1" :max="1048576" style="width:100%;" placeholder="每人默认 100 MB" />
         </n-form-item>
 
         <template v-if="activeTab === 'roles'">

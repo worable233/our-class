@@ -408,6 +408,59 @@ router.delete('/delete', (req: Request, res: Response) => {
   ok(res, { success: true })
 })
 
+// POST /api/storage/batch-delete — 批量删除
+router.post('/batch-delete', (req: Request, res: Response) => {
+  const { id: userId } = req.user!
+  const { paths } = req.body
+  if (!Array.isArray(paths) || paths.length === 0) throw new ValidationError('请指定路径列表')
+  const root = getUserDir(userId)
+  let deleted = 0
+  for (const p of paths) {
+    try {
+      const fp = resolveSafePath(userId, p)
+      if (fp === root) continue
+      if (!existsSync(fp)) continue
+      const st = statSync(fp)
+      if (st.isDirectory()) rmdirSync(fp, { recursive: true })
+      else unlinkSync(fp)
+      deleted++
+    } catch {}
+  }
+  updateStorageUsed(userId)
+  ok(res, { success: true, deleted })
+})
+
+// POST /api/storage/move — 移动文件/文件夹
+router.post('/move', (req: Request, res: Response) => {
+  const { id: userId } = req.user!
+  const { paths, target } = req.body
+  if (!Array.isArray(paths) || paths.length === 0) throw new ValidationError('请指定源路径')
+  if (!target) throw new ValidationError('请指定目标目录')
+  const targetDir = resolveSafePath(userId, target)
+  if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+
+  let moved = 0
+  for (const p of paths) {
+    try {
+      const src = resolveSafePath(userId, p)
+      const root = getUserDir(userId)
+      if (src === root) continue
+      if (!existsSync(src)) continue
+      const name = basename(src)
+      let dest = join(targetDir, name)
+      if (existsSync(dest)) {
+        const ext = extname(name)
+        const base = basename(name, ext)
+        dest = join(targetDir, `${base}_${Date.now()}${ext}`)
+      }
+      renameSync(src, dest)
+      moved++
+    } catch {}
+  }
+  updateStorageUsed(userId)
+  ok(res, { success: true, moved })
+})
+
 // PUT /api/storage/rename — 重命名
 router.put('/rename', (req: Request, res: Response) => {
   const { id: userId } = req.user!

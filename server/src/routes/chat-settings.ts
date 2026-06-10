@@ -45,6 +45,7 @@ const DEFAULT_TOOLS = [
   { tool_name: 'update_student', config_json: '{}', max_result_length: 300, enabled: true },
   { tool_name: 'delete_students', config_json: '{}', max_result_length: 200, enabled: true },
   { tool_name: 'manage_roles', config_json: '{}', max_result_length: 500, enabled: true },
+  { tool_name: 'search_articles', config_json: '{"max_results":5}', max_result_length: 2000, enabled: true },
 ]
 
 // ── Routes ─────────────────────────────────────────────────────────────────

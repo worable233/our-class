@@ -227,6 +227,7 @@ const toolLabels: Record<string, string> = {
   create_student: '👤 创建学生',
   update_student: '✏️ 修改学生',
   delete_student: '🗑️ 删除学生',
+  search_articles: '📰 公众号搜索',
 }
 
 async function saveToolConfig(tc: ToolConfig) {
