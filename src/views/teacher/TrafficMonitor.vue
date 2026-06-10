@@ -133,9 +133,16 @@ async function initGlobe(geoData: any[]) {
         return lerpColor(t, gradient)
       })
 
-    // 控制：关闭缩放，自动旋转 speed 4（雷池一致）
+    // 控制：锁定距离、禁止平移、自动旋转
     const ctrl = globeInstance.controls()
-    if (ctrl) { ctrl.enableZoom = false; ctrl.autoRotate = true; ctrl.autoRotateSpeed = 4 }
+    if (ctrl) {
+      ctrl.enablePan = false
+      ctrl.autoRotate = true
+      ctrl.autoRotateSpeed = 4
+      ctrl.rotateSpeed = 0.8
+      ctrl.minDistance = 250
+      ctrl.maxDistance = 250
+    }
   } catch (e) { console.error('Globe:', e) }
 }
 
