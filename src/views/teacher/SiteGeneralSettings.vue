@@ -127,12 +127,11 @@ onMounted(load)
                   style="width:64px;height:64px;border-radius:12px;overflow:hidden;border:1px solid var(--hairline);background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;"
                 >
                   <img
-                    v-if="settings.site_icon"
-                    :src="settings.site_icon"
+                    :src="settings.site_icon || '/favicon.svg'"
                     style="width:100%;height:100%;object-fit:contain;display:block;"
                     alt="site icon"
+                    @error="($event.target as HTMLImageElement).src='/favicon.svg'"
                   />
-                  <ImageIcon v-else :size="28" style="color:var(--text-muted);" />
                 </div>
                 <div style="display:flex;flex-direction:column;gap:6px;">
                   <NButton size="tiny" @click="handleIconUpload" secondary round>
@@ -148,7 +147,7 @@ onMounted(load)
                   >
                     移除
                   </NButton>
-                  <NText depth="3" style="font-size:11px;">推荐 32×32 或 64×64 PNG</NText>
+                  <NText depth="3" style="font-size:11px;">推荐 32×32 或 64×64 PNG / SVG</NText>
                 </div>
               </div>
             </div>
