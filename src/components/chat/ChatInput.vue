@@ -206,7 +206,32 @@ function onKeydown(e: KeyboardEvent) {
 
 watch(input, () => { nextTick(autoResize) })
 
-defineExpose({ input })
+/** 外部拖拽添加文件（一次一个） */
+function addExternalFile(file: File) {
+  // 清除已有附件
+  const token2 = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  for (const att of attachments.value) {
+    URL.revokeObjectURL(att.url)
+    if (att.uploadId) {
+      fetch(`/api/chat/upload/${att.uploadId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token2}` } }).catch(() => {})
+    }
+  }
+  attachments.value = []
+  // 添加新文件
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  const att: Attachment = {
+    id, file,
+    url: URL.createObjectURL(file),
+    name: file.name,
+    uploading: true,
+    uploaded: false,
+    progress: 0,
+  }
+  attachments.value.push(att)
+  uploadFile(att).catch(() => {})
+}
+
+defineExpose({ input, addExternalFile })
 </script>
 
 <template>

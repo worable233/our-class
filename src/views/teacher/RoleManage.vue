@@ -8,6 +8,7 @@ import {
   NInputNumber,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
+import { HardDrive } from '@lucide/vue'
 
 const message = useMessage()
 const auth = useAuthStore()
@@ -202,7 +203,7 @@ async function deleteRole(id: number) {
                   </n-tag>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
-                  <span style="font-size:11px;color:var(--text-muted)">💾 {{ storageQuota[g.id] || 100 }} MB</span>
+                  <span style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:3px"><HardDrive :size="12" /> {{ storageQuota[g.id] || 100 }} MB</span>
                 </div>
                 <div v-if="g.description" style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">{{ g.description }}</div>
                 <div v-if="g.permissions.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px">

@@ -8,7 +8,7 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ComponentPublicInstance } from 'vue'
-import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun } from '@lucide/vue'
+import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
@@ -81,8 +81,46 @@ const webSearch = ref(true)
 const fileMap = ref<Record<number, any>>({})
 
 const sidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null)
-const inputRef = ref<{ input: string } | null>(null)
+const inputRef = ref<{ input: string; addExternalFile?: (f: File) => void } | null>(null)
 const currentConvId = ref<number | null>(null)
+
+// ── 拖拽上传 ──
+const dragging = ref(false)
+let dragTimer = 0
+
+function onGlobalDragEnter(e: DragEvent) {
+  if (!e.dataTransfer?.types.includes('Files')) return
+  e.preventDefault()
+  dragging.value = true
+}
+function onGlobalDragOver(e: DragEvent) {
+  if (!e.dataTransfer?.types.includes('Files')) return
+  e.preventDefault()
+}
+function onGlobalDragLeave(e: DragEvent) {
+  // 只有当真正离开窗口时才关闭
+  if (e.clientX === 0 && e.clientY === 0) dragging.value = false
+}
+function onGlobalDrop(e: DragEvent) {
+  e.preventDefault()
+  dragging.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  inputRef.value?.addExternalFile?.(file)
+}
+
+onMounted(() => {
+  document.addEventListener('dragenter', onGlobalDragEnter)
+  document.addEventListener('dragover', onGlobalDragOver)
+  document.addEventListener('dragleave', onGlobalDragLeave)
+  document.addEventListener('drop', onGlobalDrop)
+})
+onUnmounted(() => {
+  document.removeEventListener('dragenter', onGlobalDragEnter)
+  document.removeEventListener('dragover', onGlobalDragOver)
+  document.removeEventListener('dragleave', onGlobalDragLeave)
+  document.removeEventListener('drop', onGlobalDrop)
+})
 const messages = ref<ChatMessage[]>([])
 // Group messages into conversation turns (user → response)
 const messageGroups = computed(() => {
@@ -748,6 +786,17 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 </script>
 
 <template>
+  <!-- 全局拖拽上传遮罩 -->
+  <transition name="drag-fade">
+    <div v-if="dragging" class="drag-overlay" @drop.prevent="onGlobalDrop" @dragover.prevent @dragleave.prevent="onGlobalDragLeave">
+      <div class="drag-overlay-content">
+        <Upload :size="40" stroke-width="1.5" />
+        <div class="drag-overlay-title">拖拽到此处上传</div>
+        <div class="drag-overlay-hint">支持图片、文档等文件，仅限单个文件</div>
+      </div>
+    </div>
+  </transition>
+
   <ChatLayout :sidebar-open="props.sidebarOpen" @close-sidebar="emit('closeSidebar')">
     <template #sidebar>
       <ChatSidebar
@@ -957,6 +1006,39 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .continue-btn:active {
   transform: scale(0.96);
 }
+
+/* ── 拖拽遮罩 ── */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.drag-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  padding: 48px;
+  border: 2px dashed rgba(255,255,255,.3);
+  border-radius: 16px;
+}
+.drag-overlay-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+.drag-overlay-hint {
+  font-size: 14px;
+  opacity: .6;
+}
+.drag-fade-enter-active, .drag-fade-leave-active { transition: opacity .2s; }
+.drag-fade-enter-from, .drag-fade-leave-to { opacity: 0; }
 
 </style>
 
