@@ -118,6 +118,11 @@ app.use('/uploads', express.static(join(__dirname, '..', 'storage')))
 
 // ── Routes ────────────────────────────────────────────────────────────
 
+// Health check endpoint (no auth required)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
 // Public routes
 app.use('/api/auth', authRoutes)
 

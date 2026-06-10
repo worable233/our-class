@@ -18,7 +18,7 @@ const createGroupSchema = z.object({
   permissions: z.array(z.string()).optional().default([]),
   parent_id: z.number().int().nullable().optional(),
   class: z.string().optional().default(''),
-  group_type: z.enum(['teacher', 'student', 'custom']).optional().default('custom'),
+  group_type: z.enum(['admin', 'teacher', 'student', 'custom']).optional().default('custom'),
 })
 
 const updateGroupSchema = z.object({
@@ -26,7 +26,7 @@ const updateGroupSchema = z.object({
   description: z.string().optional(),
   permissions: z.array(z.string()).optional(),
   class: z.string().optional(),
-  group_type: z.enum(['teacher', 'student', 'custom']).optional(),
+  group_type: z.enum(['admin', 'teacher', 'student', 'custom']).optional(),
 })
 
 // ── Routes ─────────────────────────────────────────────────────────────────

@@ -57,18 +57,33 @@ function validatePort(port: unknown): string | null {
  * This replaces the old seed data that was removed.
  */
 function ensurePermissionGroups(db: any) {
+  // Ensure tables exist (in case migrations had issues)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS permission_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      group_type TEXT NOT NULL DEFAULT 'custom'
+    );
+    CREATE TABLE IF NOT EXISTS group_permissions (
+      group_id INTEGER NOT NULL,
+      permission_code TEXT NOT NULL,
+      PRIMARY KEY (group_id, permission_code),
+      FOREIGN KEY (group_id) REFERENCES permission_groups(id) ON DELETE CASCADE
+    );
+  `)
+
   const count = db.prepare('SELECT COUNT(*) as c FROM permission_groups').get() as { c: number }
   if (count.c > 0) return
 
-  // Default teacher group — all permissions
-  const teacherGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
-    .run('教师', '默认教师权限组，拥有全部权限', 'teacher')
+  const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')
 
-  // Default student group — basic permissions
-  const studentGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
-    .run('学生', '默认学生权限组，拥有基础权限', 'student')
+  // ── 运维组：拥有所有权限 ──────────────────────────────────────────
+  const adminGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
+    .run('运维', '系统运维管理员，拥有全部权限', 'admin')
 
-  const allPermissions = [
+  const adminPermissions = [
     'students.write',
     'points.read', 'points.write',
     'scores.write',
@@ -79,9 +94,36 @@ function ensurePermissionGroups(db: any) {
     'classes.view_all',
     'tool.student.read', 'tool.student.write',
     'tool.score.read', 'tool.score.write',
-    'tool.assignment',
-    'tool.utility',
+    'tool.assignment', 'tool.utility', 'tool.article',
+    'articles.manage', 'articles.read',
   ]
+  for (const perm of adminPermissions) {
+    insert.run(adminGroup.lastInsertRowid, perm)
+  }
+
+  // ── 教师组：教学相关权限（无系统管理权限） ─────────────────────────
+  const teacherGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
+    .run('教师', '默认教师权限组，拥有教学管理权限', 'teacher')
+
+  const teacherPermissions = [
+    'students.write',
+    'points.read', 'points.write',
+    'scores.write',
+    'assignments.write',
+    'chat.access', 'chat.unlimited',
+    'tool.student.read', 'tool.student.write',
+    'tool.score.read', 'tool.score.write',
+    'tool.assignment', 'tool.utility', 'tool.article',
+    'articles.manage', 'articles.read',
+  ]
+  for (const perm of teacherPermissions) {
+    insert.run(teacherGroup.lastInsertRowid, perm)
+  }
+
+  // ── 学生组：基础权限 ─────────────────────────────────────────────
+  const studentGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
+    .run('学生', '默认学生权限组，拥有基础权限', 'student')
+
   const studentPermissions = [
     'points.read',
     'assignments.submit',
@@ -89,24 +131,31 @@ function ensurePermissionGroups(db: any) {
     'tool.student.read',
     'tool.score.read',
     'tool.assignment',
+    'articles.read',
   ]
-
-  const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')
-  for (const perm of allPermissions) {
-    insert.run(teacherGroup.lastInsertRowid, perm)
-  }
   for (const perm of studentPermissions) {
     insert.run(studentGroup.lastInsertRowid, perm)
   }
 }
 
 const distPath = join(PROJECT_ROOT, 'dist')
+const publicPath = join(PROJECT_ROOT, 'public')
 
 const app = express()
 
 // ── CORS (needed when accessed from different origin) ─────────────────
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
+
+// Serve favicon
+app.get('/favicon.ico', (_req, res) => {
+  const faviconPath = join(publicPath, 'favicon.ico')
+  if (existsSync(faviconPath)) {
+    res.sendFile(faviconPath)
+  } else {
+    res.status(404).end()
+  }
+})
 
 // Serve built frontend (setup wizard reuses it with /setup route)
 if (existsSync(distPath)) {
@@ -161,7 +210,7 @@ app.post('/api/setup/admin', async (req, res) => {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
     if (existing) return res.status(409).json({ error: '用户名已存在' })
 
-    const groupId = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'teacher' LIMIT 1").get() as any
+    const groupId = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'admin' LIMIT 1").get() as any
     if (!groupId) return res.status(500).json({ error: '权限组初始化失败' })
 
     // Hash password with bcrypt before storing
@@ -239,6 +288,7 @@ app.post('/api/setup/config', (req, res) => {
 app.post('/api/setup/apply', async (req, res) => {
   const { use_pm2 } = req.body
   const port = getState().port || 3000
+  const log: string[] = []
 
   // Validate: admin and config must be done
   const state = getState()
@@ -261,10 +311,30 @@ app.post('/api/setup/apply', async (req, res) => {
   }
 
   try {
-    // Install PM2
-    if (use_pm2) {
-      execSync('npm install -g pm2 2>&1', { encoding: 'utf-8', timeout: 120000 })
+    // 1. Build frontend
+    log.push('[1/3] 构建前端...')
+    try {
+      execSync('npm run build-only 2>&1', { encoding: 'utf-8', timeout: 120000, cwd: PROJECT_ROOT })
+      log.push('✅ 前端构建完成')
+    } catch (buildErr: any) {
+      log.push('⚠️ 前端构建失败: ' + buildErr.message)
+      // Continue anyway - backend can still work
     }
+
+    // 2. Install PM2 if requested
+    if (use_pm2) {
+      log.push('[2/3] 安装 PM2...')
+      try {
+        execSync('npm install -g pm2 2>&1', { encoding: 'utf-8', timeout: 120000 })
+        log.push('✅ PM2 安装完成')
+      } catch (pm2Err: any) {
+        log.push('⚠️ PM2 安装失败: ' + pm2Err.message)
+        // Fall back to direct start
+      }
+    }
+
+    // 3. Start server
+    log.push('[3/3] 启动服务...')
 
     // Write ecosystem.config.js
     const ecoConfig = {
@@ -280,12 +350,20 @@ app.post('/api/setup/apply', async (req, res) => {
     writeFileSync(join(PROJECT_ROOT, 'ecosystem.config.js'),
       `module.exports = { apps: [${JSON.stringify(ecoConfig, null, 2)}] }`)
 
+    let started = false
     if (use_pm2) {
-      // Use 'pm2' directly (just installed globally) rather than 'npx pm2'
-      execSync(`cd "${PROJECT_ROOT}" && pm2 start ecosystem.config.js 2>&1`, { encoding: 'utf-8', timeout: 15000 })
-      execSync(`cd "${PROJECT_ROOT}" && pm2 save 2>&1`, { encoding: 'utf-8', timeout: 10000 })
-    } else {
-      // 直接启动（后台进程）— 使用 stdio: 'ignore' 确保父进程退出后子进程独立运行
+      try {
+        execSync(`cd "${PROJECT_ROOT}" && pm2 start ecosystem.config.js 2>&1`, { encoding: 'utf-8', timeout: 15000 })
+        execSync(`cd "${PROJECT_ROOT}" && pm2 save 2>&1`, { encoding: 'utf-8', timeout: 10000 })
+        started = true
+        log.push('✅ PM2 启动成功')
+      } catch (pm2StartErr: any) {
+        log.push('⚠️ PM2 启动失败，尝试直接启动...')
+      }
+    }
+
+    if (!started) {
+      // Direct start
       const child = spawn('npx', ['tsx', 'src/index.ts'], {
         cwd: join(PROJECT_ROOT, 'server'),
         stdio: 'ignore',
@@ -295,13 +373,14 @@ app.post('/api/setup/apply', async (req, res) => {
         console.error('[setup] failed to spawn server:', err)
       })
       child.unref()
+      log.push('✅ 服务启动成功')
     }
 
     saveState({ step: 'done', pm2_installed: !!use_pm2 })
-    res.json({ success: true, port, pm2: !!use_pm2 })
+    res.json({ success: true, port, pm2: !!use_pm2, log })
   } catch (e: any) {
     console.error('[setup] apply error:', e)
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ error: e.message, log })
   }
 })
 
