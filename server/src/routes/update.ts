@@ -137,15 +137,12 @@ router.post('/check', async (req: Request, res: Response) => {
     })()
     const pingTimeout = settings.ping_timeout || 3
 
-    // ping
+    // fetch（直接 fetch，跳过 ping — ICMP 无法通过 HTTP 代理）
     try {
-      execSync(`ping -c 1 -t ${pingTimeout} github.com 2>&1`, execOpts({ encoding: 'utf-8', timeout: (pingTimeout + 2) * 1000 }))
+      execSync('git fetch origin main 2>&1', execOpts({ encoding: 'utf-8', timeout: 30000, cwd: PROJECT_ROOT }))
     } catch {
-      return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub')
+      return fail(res, 400, 'NETWORK_ERROR', '无法连接到 GitHub，请检查网络或代理设置')
     }
-
-    // fetch
-    execSync('git fetch origin main 2>&1', execOpts({ encoding: 'utf-8', timeout: 15000, cwd: PROJECT_ROOT }))
 
     // compare
     const localSha = execSync('git rev-parse --short HEAD', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
@@ -208,9 +205,7 @@ router.post('/apply', async (req: Request, res: Response) => {
     emit('success', { message: 'Git 可用' })
 
     emit('step', { message: '正在连接 GitHub...' })
-    try { execSync('ping -c 1 -t 3 github.com 2>&1', execOpts({ encoding: 'utf-8', timeout: 5000 })) }
-    catch { emit('error', { message: '无法连接到 GitHub' }); return }
-
+    // 直接尝试拉取（跳过 ping — ICMP 无法通过 HTTP 代理）
     for (const [label, cmd, args, opts, critical] of [
       ['拉取代码', 'git', ['fetch', 'origin', 'main'], { timeout: 30000 }, true],
       ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000 }, true],
