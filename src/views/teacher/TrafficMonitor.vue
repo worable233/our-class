@@ -273,7 +273,7 @@ onUnmounted(() => {
 .globe-layout {
   display: flex;
   gap: 12px;
-  min-height: 460px;
+  min-height: 520px;
 }
 .geo-panel {
   width: 300px;
@@ -289,7 +289,7 @@ onUnmounted(() => {
 /* ── Globe wrap ──────────────────────────── */
 .globe-wrap {
   flex: 1;
-  min-height: 420px;
+  min-height: 480px;
   position: relative;
   border-radius: 8px;
   overflow: hidden;
@@ -327,16 +327,22 @@ html:not(.dark) .globe-wrap::after {
   background: radial-gradient(circle, rgba(15,198,194,0.10) 0%, rgba(15,198,194,0.06) 30%, rgba(15,198,194,0.02) 60%, transparent 80%);
 }
 
+/* 中等宽度叠放时，地球仪高度不小于宽度 */
+@media (max-width: 900px) and (min-width: 641px) {
+  .globe-wrap {
+    min-height: 420px;
+  }
+}
+
 @media (max-width: 640px) {
   .globe-wrap {
-    min-height: 260px;
-    height: 300px;
+    min-height: 360px;
   }
   .globe-wrap::before {
-    width: min(90%, 280px);
+    width: min(85%, 320px);
   }
   .globe-wrap::after {
-    width: min(96%, 320px);
+    width: min(92%, 360px);
   }
 }
 </style>
