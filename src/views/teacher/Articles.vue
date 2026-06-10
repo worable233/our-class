@@ -6,7 +6,7 @@ import {
   NButton, NInput, NModal, NSpin, NEmpty, NText, NTable, NTag, NIcon,
   NAlert, NSpace, NCard, NDivider, NScrollbar,
 } from 'naive-ui'
-import { Plus, ExternalLink, Trash2, Eye, Globe, Loader2, Link as LinkIcon } from '@lucide/vue'
+import { Plus, ExternalLink, Trash2, Eye, Globe, Loader2, RefreshCw, Link as LinkIcon } from '@lucide/vue'
 
 interface Article {
   id: number
@@ -26,12 +26,31 @@ const message = useMessage()
 const articles = ref<Article[]>([])
 const loading = ref(true)
 const fetching = ref(false)
+const refreshingId = ref<number | null>(null)
 const articleUrl = ref('')
 
 // Detail modal
 const showDetail = ref(false)
 const detailArticle = ref<Article | null>(null)
 const detailLoading = ref(false)
+
+async function refreshArticle(article: Article) {
+  refreshingId.value = article.id
+  try {
+    await api.post(`/articles/${article.id}/refresh`, {})
+    message.success('文章已刷新')
+    load()
+    // If detail modal is open for this article, reload it too
+    if (showDetail.value && detailArticle.value?.id === article.id) {
+      const full = await api.get<Article>(`/articles/${article.id}`)
+      detailArticle.value = full
+    }
+  } catch (e: any) {
+    message.error(e.message || '刷新失败')
+  } finally {
+    refreshingId.value = null
+  }
+}
 
 function load() {
   loading.value = true
@@ -103,6 +122,12 @@ function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function renderMarkdown(md: string): string {
@@ -257,6 +282,16 @@ onMounted(load)
                 <NButton
                   size="tiny"
                   quaternary
+                  @click="refreshArticle(article)"
+                  :loading="refreshingId === article.id"
+                  :disabled="refreshingId !== null"
+                >
+                  <template #icon><RefreshCw :size="13" /></template>
+                  刷新
+                </NButton>
+                <NButton
+                  size="tiny"
+                  quaternary
                   type="primary"
                   @click="openDetail(article)"
                 >
@@ -299,9 +334,10 @@ onMounted(load)
             <h2 style="font-size:20px;font-weight:700;margin:0 0 6px;line-height:1.4">
               {{ detailArticle.title }}
             </h2>
-            <div style="display:flex;gap:12px;font-size:13px;color:var(--text-muted);margin-bottom:16px">
+            <div style="display:flex;gap:12px;font-size:13px;color:var(--text-muted);margin-bottom:16px;flex-wrap:wrap">
               <span v-if="detailArticle.author">{{ detailArticle.author }}</span>
-              <span>{{ formatDate(detailArticle.created_at) }}</span>
+              <span>创建 {{ formatDate(detailArticle.created_at) }}</span>
+              <span v-if="detailArticle.updated_at !== detailArticle.created_at">更新 {{ formatDateTime(detailArticle.updated_at) }}</span>
               <a
                 :href="detailArticle.url"
                 target="_blank"
@@ -327,19 +363,36 @@ onMounted(load)
       </NSpin>
 
       <template #footer>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <NButton
-            v-if="detailArticle"
-            type="error"
-            quaternary
-            size="small"
-            @click="confirmDelete(detailArticle)"
-          >
-            <template #icon><Trash2 :size="14" /></template>
-            删除
-          </NButton>
-          <span style="flex:1" />
-          <NButton quaternary size="small" @click="closeDetail">关闭</NButton>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="display:flex;gap:6px">
+            <NButton
+              v-if="detailArticle"
+              size="small"
+              quaternary
+              @click="refreshArticle(detailArticle)"
+              :loading="refreshingId === detailArticle?.id"
+              :disabled="refreshingId !== null"
+            >
+              <template #icon><RefreshCw :size="14" /></template>
+              刷新
+            </NButton>
+            <NButton
+              v-if="detailArticle"
+              type="error"
+              quaternary
+              size="small"
+              @click="confirmDelete(detailArticle)"
+            >
+              <template #icon><Trash2 :size="14" /></template>
+              删除
+            </NButton>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <NText v-if="detailArticle" depth="3" style="font-size:12px">
+              更新于 {{ formatDateTime(detailArticle.updated_at) }}
+            </NText>
+            <NButton quaternary size="small" @click="closeDetail">关闭</NButton>
+          </div>
         </div>
       </template>
     </NModal>

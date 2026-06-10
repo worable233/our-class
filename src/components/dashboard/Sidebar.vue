@@ -31,7 +31,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/roles': [],
   '/teacher/settings': ['chat.config'],
   '/teacher/site-data': ['students.write'],
-  '/teacher/articles': ['points.read'],
+  '/teacher/articles': ['articles.manage'],
   '/teacher/skills': ['chat.config'],
   '/teacher/logs': ['audit_logs.read'],
   '/teacher/update': ['chat.config'],

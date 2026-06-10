@@ -59,7 +59,7 @@ const router = createRouter({
           path: 'articles',
           name: 'teacher-articles',
           component: () => import('@/views/teacher/Articles.vue'),
-          meta: { permissions: ['points.read'] },
+          meta: { permissions: ['articles.manage'] },
         },
         {
           path: 'point-details',

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, rmdirSync, createReadStream } from 'fs'
+import { existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, rmdirSync, createReadStream, readFileSync, writeFileSync, appendFileSync, rmSync } from 'fs'
 import { join, extname, basename, dirname, relative } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname as pathDirname } from 'path'
@@ -101,6 +101,120 @@ function checkQuota(userId: number, neededBytes: number): void {
     throw new ValidationError(`存储空间不足，剩余 ${fmtSize(Math.max(0, free))}，需要 ${fmtSize(neededBytes)}`)
   }
 }
+
+// ── Chunked upload ───────────────────────────────────────────────────
+const CHUNK_DIR = join(STORAGE_ROOT, '_chunks')
+if (!existsSync(CHUNK_DIR)) mkdirSync(CHUNK_DIR, { recursive: true })
+
+/** 获取分片上传状态（已接收的分片索引） */
+router.get('/upload/chunk/:identifier', (req: Request, res: Response) => {
+  const { id: userId } = req.user!
+  const identifier = req.params.identifier
+  if (!identifier) throw new ValidationError('缺少 identifier')
+  const chunkDir = join(CHUNK_DIR, identifier)
+  if (!existsSync(chunkDir)) return ok(res, { received: [], total_chunks: 0 })
+  const files = readdirSync(chunkDir).filter(f => /^\d+$/.test(f)).map(Number).sort((a, b) => a - b)
+  const metaPath = join(chunkDir, '_meta.json')
+  let totalChunks = 0
+  try {
+    const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
+    totalChunks = meta.total_chunks || 0
+  } catch {}
+  ok(res, { received: files, total_chunks: totalChunks })
+})
+
+/** 上传一个分片 */
+const chunkUploader = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, CHUNK_DIR),
+    filename: (_req, file, cb) => cb(null, `_chunk_${uuidv4()}_${file.originalname}`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per chunk
+})
+
+router.post('/upload/chunk', (req: Request, res: Response) => {
+  const { id: userId } = req.user!
+  chunkUploader.single('file')(req, res, (err: any) => {
+    if (err) return fail(res, 400, 'CHUNK_ERROR', err.message || '分片上传失败')
+    if (!req.file) return fail(res, 400, 'NO_FILE', '请选择文件')
+
+    const { identifier, chunk_index, total_chunks, path: targetPath, original_name } = req.body
+    if (!identifier || chunk_index === undefined || !total_chunks) {
+      try { unlinkSync(req.file.path) } catch {}
+      return fail(res, 400, 'VALIDATION', '缺少分片参数')
+    }
+
+    const chunkDir = join(CHUNK_DIR, identifier)
+    if (!existsSync(chunkDir)) mkdirSync(chunkDir, { recursive: true })
+
+    // 保存分片
+    const chunkFile = join(chunkDir, String(chunk_index))
+    try { unlinkSync(chunkFile) } catch {}
+    renameSync(req.file.path, chunkFile)
+
+    // 写入元数据
+    const metaPath = join(chunkDir, '_meta.json')
+    writeFileSync(metaPath, JSON.stringify({
+      identifier,
+      total_chunks: Number(total_chunks),
+      original_name: original_name || 'untitled',
+      target_path: targetPath || '',
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    }))
+
+    // 检查是否所有分片已到齐
+    const existing = readdirSync(chunkDir).filter(f => /^\d+$/.test(f))
+    const allReceived = existing.length >= Number(total_chunks)
+
+    if (allReceived) {
+      // 组装文件
+      const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
+      const targetDir = resolveSafePath(userId, meta.target_path || '')
+      if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+
+      // 处理文件名冲突
+      let finalName = basename(meta.original_name || 'untitled')
+      const destPath = join(targetDir, finalName)
+      if (existsSync(destPath)) {
+        const ext = extname(finalName)
+        const base = basename(finalName, ext)
+        finalName = `${base}_${Date.now()}${ext}`
+      }
+
+      // 合并分片
+      const assembledPath = join(targetDir, `_assembling_${uuidv4()}`)
+      try {
+        const chunks = existing.map(Number).sort((a, b) => a - b)
+        for (const idx of chunks) {
+          const chunkData = readFileSync(join(chunkDir, String(idx)))
+          appendFileSync(assembledPath, chunkData)
+        }
+        // 检查配额
+        const st = statSync(assembledPath)
+        checkQuota(userId, st.size)
+        // 移动到最终位置
+        const finalPath = join(targetDir, finalName)
+        renameSync(assembledPath, finalPath)
+        // 清理分片目录
+        rmSync(chunkDir, { recursive: true, force: true })
+        updateStorageUsed(userId)
+        return ok(res, {
+          done: true,
+          name: finalName,
+          path: meta.target_path ? `${meta.target_path}/${finalName}` : finalName,
+          size: st.size,
+          size_display: fmtSize(st.size),
+        })
+      } catch (e: any) {
+        try { unlinkSync(assembledPath) } catch {}
+        throw e
+      }
+    }
+
+    ok(res, { done: false, received: existing.length, total: Number(total_chunks) })
+  })
+})
 
 // ── Multer config ────────────────────────────────────────────────────
 const uploadMulter = multer({

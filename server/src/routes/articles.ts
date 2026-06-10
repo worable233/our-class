@@ -148,7 +148,7 @@ function extractAuthor($: cheerio.CheerioAPI): string {
 // POST /api/articles/fetch — fetch a WeChat article and save to DB
 router.post(
   '/fetch',
-  requirePermission('points.read'),
+  requirePermission('articles.manage'),
   validate(fetchArticleSchema),
   async (req: Request, res: Response) => {
     const db = getDb()
@@ -254,6 +254,119 @@ router.post(
     // 9. Return
     const article = db.prepare('SELECT * FROM articles WHERE id = ?').get(articleId) as any
     ok(res, article)
+  },
+)
+
+// POST /api/articles/:id/refresh — re-fetch an existing article by its URL
+router.post(
+  '/:id/refresh',
+  requirePermission('articles.manage'),
+  async (req: Request, res: Response) => {
+    const db = getDb()
+    const id = Number(req.params.id)
+    if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')
+
+    const existing = db.prepare('SELECT * FROM articles WHERE id = ?').get(id) as any
+    if (!existing) throw new NotFoundError('文章不存在')
+
+    const url = existing.url
+    const userId = req.user!.id
+
+    // 1. Fetch page
+    let html: string
+    try {
+      const resp = await fetch(url, {
+        signal: AbortSignal.timeout(30000),
+        headers: { 'User-Agent': UA },
+      })
+      if (!resp.ok) {
+        return fail(res, 400, 'FETCH_FAILED', `无法访问该页面 (HTTP ${resp.status})`)
+      }
+      html = await resp.text()
+    } catch (err: any) {
+      if (err.name === 'TimeoutError' || err.code === 'ETIMEOUT' || err.name === 'AbortError') {
+        return fail(res, 400, 'TIMEOUT', '请求超时，请稍后重试')
+      }
+      return fail(res, 400, 'FETCH_FAILED', '无法获取页面内容，请检查链接是否有效')
+    }
+
+    // 2. Parse HTML
+    const $ = cheerio.load(html)
+    const title = extractTitle($)
+    let cover = extractCover($)
+    const author = extractAuthor($)
+
+    if (!title) {
+      return fail(res, 400, 'CONTENT_NOT_FOUND', '未能解析到文章标题')
+    }
+
+    const contentContainer = findContentContainer($)
+    if (!contentContainer || contentContainer.html() === null) {
+      return fail(res, 400, 'CONTENT_NOT_FOUND', '未能提取到文章正文内容')
+    }
+
+    const contentEl = contentContainer as cheerio.Cheerio<any>
+    contentEl.find('script, style, iframe, svg, .js_pay_article, .reward_area, .rich_media_tool').remove()
+
+    // 3. Clean up old images
+    const articlesImgDir = join(ARTICLES_DIR)
+    if (existsSync(articlesImgDir)) {
+      const dirs = readdirSync(articlesImgDir)
+      for (const dir of dirs) {
+        if (dir.startsWith(`${id}-`)) {
+          const fullPath = join(articlesImgDir, dir)
+          try {
+            const files = readdirSync(fullPath)
+            for (const f of files) unlinkSync(join(fullPath, f))
+            rmdirSync(fullPath)
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
+    // 4. Download new images
+    const dirTag = uuidv4().slice(0, 8)
+    const articleDir = join(ARTICLES_DIR, `${id}-${dirTag}`)
+    if (!existsSync(articleDir)) mkdirSync(articleDir, { recursive: true })
+
+    const imgPromises: Promise<void>[] = []
+    contentEl.find('img').each((_i: number, el: any) => {
+      const $el = $(el)
+      const imgUrl = $el.attr('data-src') || $el.attr('data-croporisrc') || $el.attr('src') || ''
+      if (!imgUrl) return
+
+      const promise = downloadImage(imgUrl, articleDir).then(localPath => {
+        if (localPath) {
+          $el.removeAttr('width').removeAttr('height').removeAttr('style')
+          $el.removeAttr('data-src').removeAttr('data-croporisrc').removeAttr('data-ratio')
+          $el.removeAttr('data-w').removeAttr('data-type').removeAttr('data-s')
+          $el.attr('src', localPath)
+        }
+      })
+      imgPromises.push(promise)
+    })
+
+    if (cover && cover.startsWith('http')) {
+      const coverPromise = downloadImage(cover, articleDir).then(localPath => {
+        if (localPath) cover = localPath
+      })
+      imgPromises.push(coverPromise)
+    }
+
+    await Promise.allSettled(imgPromises)
+
+    // 5. Convert to Markdown and update
+    const cleanedHtml = contentEl.html() || ''
+    const contentMd = turndown.turndown(cleanedHtml)
+
+    db.prepare(
+      'UPDATE articles SET title = ?, content_md = ?, cover_url = ?, author = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(title, contentMd, cover, author, id)
+
+    writeAuditLog(userId, req.user!.display_name, 'refresh_article', 'article', id, { url, title })
+
+    const updated = db.prepare('SELECT * FROM articles WHERE id = ?').get(id) as any
+    ok(res, updated)
   },
 )
 

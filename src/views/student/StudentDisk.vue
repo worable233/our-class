@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useMessage, useDialog } from 'naive-ui'
+import { useUploadManager } from '@/composables/useUploadManager'
+import UploadPanel from '@/components/chat/UploadPanel.vue'
 import {
   NCard, NButton, NProgress, NModal, NForm, NFormItem, NInput,
   NSpace, NSpin, NEmpty, NText, NEllipsis,
@@ -14,6 +16,7 @@ import {
 
 const message = useMessage()
 const dialog = useDialog()
+const { startUpload } = useUploadManager()
 
 interface FileEntry {
   name: string; path: string; is_dir: boolean; size: number
@@ -74,29 +77,44 @@ async function createFolder() {
 function triggerUpload() {
   const input = document.createElement('input')
   input.type = 'file'; input.multiple = true
-  input.onchange = () => uploadFiles(Array.from(input.files || []))
+  input.onchange = () => { for (const file of Array.from(input.files || [])) startUpload(file, currentPath.value) }
   input.click()
 }
 
-async function uploadFiles(files: File[]) {
-  if (!files.length) return
-  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-  uploading.value = files.length; uploadedCount.value = 0
-  await Promise.all(files.map(async (file) => {
-    const fd = new FormData(); fd.append('file', file); fd.append('path', currentPath.value)
-    try {
-      const res = await fetch('/api/storage/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
-      const body = await res.json()
-      if (body.success) uploadedCount.value++
-    } catch {}
-  }))
-  const count = uploadedCount.value; uploading.value = 0; uploadedCount.value = 0
-  if (count > 0) { message.success(`成功上传 ${count} 个文件`); await loadList(currentPath.value); await loadInfo() }
+function traverseFiles(entry: any, path: string, files: { file: File; path: string }[]): Promise<void> {
+  return new Promise((resolve) => {
+    if (entry.isFile) { entry.file((f: File) => { files.push({ file: f, path }); resolve() }) }
+    else if (entry.isDirectory) {
+      const dirReader = entry.createReader()
+      const readAll = () => {
+        dirReader.readEntries(async (entries: any[]) => {
+          if (entries.length === 0) { resolve(); return }
+          for (const e of entries) await traverseFiles(e, path ? `${path}/${e.name}` : e.name, files)
+          readAll()
+        })
+      }
+      readAll()
+    } else resolve()
+  })
 }
 
-function onDragOver(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.add('drag-over') }
-function onDragLeave(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.remove('drag-over') }
-function onDrop(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.remove('drag-over'); if (e.dataTransfer?.files.length) uploadFiles(Array.from(e.dataTransfer.files)) }
+let dragCounter = 0
+function onDragOver(e: DragEvent) { e.preventDefault() }
+function onDragEnter(e: DragEvent) { e.preventDefault(); dragCounter++; if (dragCounter === 1) (e.currentTarget as HTMLElement)?.classList.add('drag-over') }
+function onDragLeave(e: DragEvent) { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; (e.currentTarget as HTMLElement)?.classList.remove('drag-over') } }
+async function onDrop(e: DragEvent) {
+  e.preventDefault(); dragCounter = 0; (e.currentTarget as HTMLElement)?.classList.remove('drag-over')
+  const items = e.dataTransfer?.items
+  if (!items?.length) return
+  const fileList: { file: File; path: string }[] = []
+  for (const item of Array.from(items)) {
+    const entry = item.webkitGetAsEntry?.()
+    if (entry) await traverseFiles(entry, currentPath.value ? `${currentPath.value}/${entry.name}` : entry.name, fileList)
+    else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
+  }
+  for (const { file, path } of fileList) startUpload(file, path)
+  message.success(`已添加 ${fileList.length} 个文件到上传队列`)
+}
 
 function openRename(entry: FileEntry) { renameTarget.value = entry; renameValue.value = entry.name; showRenameModal.value = true }
 async function confirmRename() {
@@ -166,13 +184,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
       </div>
     </div>
 
-    <transition name="fade">
-      <n-card v-if="uploading > 0" :bordered="true" size="tiny" style="padding:0;margin-bottom:4px;">
-        <NProgress :value="(uploadedCount / uploading) * 100" :height="16" :border-radius="6" :indicator-placement="'inside'" style="flex:1;" />
-      </n-card>
-    </transition>
-
-    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;" @dragover="onDragOver" @dragenter="onDragEnter" @dragleave="onDragLeave" @drop="onDrop">
       <n-spin :show="loading" style="min-height:200px;">
         <template v-if="entries.length > 0">
           <div class="file-grid">
@@ -206,6 +218,8 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
       <n-form><n-form-item label="新名称"><n-input v-model:value="renameValue" placeholder="输入新名称" @keyup.enter="confirmRename" /></n-form-item></n-form>
       <template #footer><NSpace justify="end"><NButton quaternary @click="showRenameModal = false">取消</NButton><NButton type="primary" @click="confirmRename" :disabled="!renameValue.trim()" round>确定</NButton></NSpace></template>
     </n-modal>
+
+    <UploadPanel />
   </div>
 </template>
 
