@@ -152,6 +152,25 @@ else {
     Write-Host "  查看日志: Get-Content $env:TEMP\ourclass-setup.log"
 }
 
+# 自动打开 Edge 浏览器访问配置向导
+$setupUrl = "http://localhost:3001/setup"
+Write-Info "正在打开 Edge 浏览器..."
+try {
+    # 尝试启动 Edge
+    Start-Process "msedge" -ArgumentList $setupUrl -ErrorAction Stop
+    Write-Ok "已打开 Edge 浏览器"
+}
+catch {
+    try {
+        # 备用：使用默认浏览器
+        Write-Warn "未找到 Edge，尝试使用默认浏览器"
+        Start-Process $setupUrl
+    }
+    catch {
+        Write-Warn "无法自动打开浏览器，请手动访问: $setupUrl"
+    }
+}
+
 Write-Host ""
 Write-Host "  提示: 安装完成后可关闭此窗口"
 Write-Host "        配置向导将继续在后台运行"

@@ -154,6 +154,31 @@ else
   warn "配置向导可能未正常启动，查看日志: cat /tmp/ourclass-setup.log"
 fi
 
+# 自动打开 Edge 浏览器访问配置向导
+SETUP_URL="http://localhost:3001/setup"
+info "正在打开 Edge 浏览器..."
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  if open -a "Microsoft Edge" "$SETUP_URL" 2>/dev/null; then
+    ok "已打开 Edge 浏览器"
+  else
+    warn "未找到 Edge，尝试使用默认浏览器"
+    open "$SETUP_URL" 2>/dev/null || true
+  fi
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  # Linux
+  if command -v microsoft-edge &>/dev/null; then
+    microsoft-edge "$SETUP_URL" &>/dev/null &
+    ok "已打开 Edge 浏览器"
+  elif command -v microsoft-edge-stable &>/dev/null; then
+    microsoft-edge-stable "$SETUP_URL" &>/dev/null &
+    ok "已打开 Edge 浏览器"
+  else
+    warn "未找到 Edge，尝试使用默认浏览器"
+    xdg-open "$SETUP_URL" 2>/dev/null || true
+  fi
+fi
+
 echo -e "  提示: 安装完成后可按 Ctrl+C 退出此脚本"
 echo -e "        配置向导将继续在后台运行"
 echo ""
