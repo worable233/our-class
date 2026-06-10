@@ -15,6 +15,13 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
+let resizeObserver: ResizeObserver | null = null
+
+// 响应式断点
+const isNarrow = ref(window.innerWidth < 640)
+function onResize() {
+  isNarrow.value = window.innerWidth < 640
+}
 
 // 筛选状态
 const activeView = ref('3d')
@@ -143,16 +150,22 @@ function fmtBytes(b: number): string {
   return b + ' B'
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  resizeObserver = new ResizeObserver(onResize)
+  resizeObserver.observe(document.body)
+  onResize()
+})
 onUnmounted(() => {
   try { if (globeInstance && typeof globeInstance._destructor === 'function') globeInstance._destructor() } catch {}
   globeInstance = null
+  if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
 
 <template>
   <div style="height:100%;display:flex;flex-direction:column;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0">
+    <div :style="{display:'flex',alignItems:isNarrow?'flex-start':'center',justifyContent:'space-between',marginBottom:'20px',flexShrink:0,flexDirection:isNarrow?'column':'row',gap:'8px'}">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">流量监控</NText>
         <NText depth="3" style="display:block;margin:0;font-size:14px;">实时监控网站访问流量与 API 调用情况</NText>
@@ -165,7 +178,7 @@ onUnmounted(() => {
     <NSpin :show="loading" style="flex:1;min-height:500px">
       <div v-if="data" style="display:flex;flex-direction:column;gap:16px;">
         <!-- Stats Cards -->
-        <n-grid :cols="8" :x-gap="8" :y-gap="8">
+        <n-grid :cols="isNarrow ? 2 : 8" :x-gap="8" :y-gap="8">
           <n-gi v-for="s in [
             { v: fmtCompact(data.requests), l: '总请求数', c: '#0FC6C2', icon: Activity, bytes: false },
             { v: fmtCompact(data.pv), l: 'GET 请求（PV）', c: '#5E6AD2', icon: Eye, bytes: false },
@@ -191,9 +204,9 @@ onUnmounted(() => {
         </n-grid>
 
         <!-- Globe Area -->
-        <div style="display:flex;gap:12px;min-height:460px;">
+        <div :style="{display:'flex',gap:'12px',minHeight:'460px',flexDirection:isNarrow?'column':'row'}">
           <div ref="globeEl" class="globe-wrap"></div>
-          <n-card size="small" :bordered="true" style="width:300px;flex-shrink:0;display:flex;flex-direction:column;">
+          <n-card size="small" :bordered="true" :style="{flexShrink:0,display:'flex',flexDirection:'column',width:isNarrow?'100%':'300px',maxHeight:isNarrow?'240px':'none'}">
             <template #header>
               <span style="font-size:13px;font-weight:600;">地理位置</span>
             </template>
@@ -258,5 +271,18 @@ html:not(.dark) .globe-wrap::before {
 }
 html:not(.dark) .globe-wrap::after {
   background: radial-gradient(circle, rgba(15,198,194,0.10) 0%, rgba(15,198,194,0.06) 30%, rgba(15,198,194,0.02) 60%, transparent 80%);
+}
+
+@media (max-width: 640px) {
+  .globe-wrap {
+    min-height: 260px;
+    height: 300px;
+  }
+  .globe-wrap::before {
+    width: min(90%, 280px);
+  }
+  .globe-wrap::after {
+    width: min(96%, 320px);
+  }
 }
 </style>
