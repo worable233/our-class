@@ -286,7 +286,8 @@ async function load() {
     })
     const body = await res.json()
     if (body.success) {
-      logs.value = body.data || []
+      // 过滤掉积分操作的审计日志（页面不需要显示加分/扣分）
+      logs.value = (body.data || []).filter((log: AuditLog) => log.action !== 'add_points' && log.action !== 'deduct_points')
       meta.value = body.meta || null
     } else {
       throw new Error(body.error?.message || '加载失败')
@@ -304,7 +305,7 @@ async function loadTypes() {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     const body = await res.json()
-    if (body.success) entityTypes.value = body.data || []
+    if (body.success) entityTypes.value = (body.data || []).filter((t: string) => t !== 'point')
   } catch {}
 }
 
