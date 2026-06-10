@@ -13,6 +13,7 @@ import { ok, fail } from '../lib/response.js'
 import { writeAuditLog } from './audit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
 
 const router = Router()
 
@@ -315,6 +316,17 @@ const TOOLS: ToolDef[] = [
       properties: {
         avatar_url: { type: 'string', description: '新头像图片的 URL（用户上传图片后得到的地址，可选）' },
         nickname: { type: 'string', description: '新的显示昵称（可选）' },
+      },
+    },
+  },
+  {
+    name: 'browse_files',
+    description: '浏览用户网盘中的文件和目录。像 ls/cd 一样操作，列出目录内容。只能访问当前用户自己的文件，无法访问别人的。返回文件列表含名称、大小、修改时间、类型。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '目录路径。相对于用户网盘根目录，留空或 "/" 查看根目录。示例："/upload/", "/文档/"' },
+        show_hidden: { type: 'boolean', description: '是否显示隐藏文件（以 . 开头的文件），默认 false' },
       },
     },
   },
@@ -794,6 +806,44 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       if (input.nickname !== undefined) changes.push(`昵称 → ${input.nickname}`)
       if (input.avatar_url !== undefined) changes.push('头像已更新')
       return JSON.stringify({ success: true, message: `已更新：${changes.join('，')}`, profile: { display_name: updated.display_name, nickname: updated.nickname, avatar: updated.avatar } })
+    }
+
+    case 'browse_files': {
+      const browsePath = (input.path as string) || ''
+      const showHidden = input.show_hidden === true
+      const root = join(STORAGE_ROOT, `user_${userId}`)
+      if (!existsSync(root)) mkdirSync(root, { recursive: true })
+      const safe = browsePath.replace(/^\/+/, '').replace(/\\/g, '/')
+      const dirPath = join(root, safe)
+      if (!dirPath.startsWith(root + '/') && dirPath !== root) return JSON.stringify({ error: '路径越权' })
+      if (!existsSync(dirPath)) return JSON.stringify({ error: `目录不存在：${browsePath || '/'}` })
+      if (!statSync(dirPath).isDirectory()) return JSON.stringify({ error: '路径不是目录' })
+      const items = readdirSync(dirPath)
+        .filter(name => showHidden || !name.startsWith('.'))
+        .map(name => {
+          const fp = join(dirPath, name)
+          const st = statSync(fp)
+          const isDir = st.isDirectory()
+          return {
+            name,
+            type: isDir ? 'dir' : 'file',
+            size: isDir ? 0 : st.size,
+            modified: st.mtime.toISOString(),
+          }
+        })
+        .sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+          return a.name.localeCompare(b.name, 'zh-CN')
+        })
+      const parent = safe ? pathDirname(safe).replace(/\\/g, '/') : null
+      const usage = db.prepare('SELECT storage_used, storage_limit FROM user_storage WHERE user_id = ?').get(userId) as any
+      return JSON.stringify({
+        path: browsePath || '/',
+        parent: parent || null,
+        total: items.length,
+        items,
+        storage: usage ? { used: usage.storage_used, limit: usage.storage_limit } : undefined,
+      })
     }
 
     case 'manage_roles': {
@@ -1423,6 +1473,7 @@ function toolLabel(name: string, input: Record<string, unknown>): string {
     case 'update_student': return `修改学生 #${input.student_id}`
     case 'delete_students': return `批量删除 ${(input.student_ids as number[] || []).length} 名学生`
     case 'update_self_profile': return '修改个人资料'
+    case 'browse_files': return `浏览目录: ${(input.path as string) || '/'}`
     case 'manage_roles': return `管理权限组: ${input.action}`
     default: return `调用 ${name}`
   }
