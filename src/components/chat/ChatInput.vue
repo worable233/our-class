@@ -242,35 +242,40 @@ defineExpose({ input, addExternalFile })
         v-for="att in attachments"
         :key="att.id"
         class="photo-item"
-        :class="{ 'is-doc': !isImage(att.file), uploading: att.uploading, error: att.error }"
+        :class="{ 'is-doc': !isImage(att.file), uploading: att.uploading && att.progress < 100, error: att.error }"
         :title="att.name"
       >
-        <template v-if="isImage(att.file)">
-          <img :src="att.url" :alt="att.name" class="photo-thumb" />
+        <!-- 上传中：白底 + 进度条 -->
+        <template v-if="att.uploading && att.progress < 100">
+          <div class="upload-progress-bg">
+            <div class="upload-progress-bar-track">
+              <div class="upload-progress-bar-fill" :style="{ width: att.progress + '%' }" />
+            </div>
+            <span class="upload-progress-text">{{ att.progress }}%</span>
+            <span class="upload-progress-name">{{ att.name }}</span>
+          </div>
         </template>
+        <!-- 上传完成：显示预览 -->
         <template v-else>
-          <div class="doc-icon-wrap">
-            <component :is="fileIcon(att.file)" :size="24" stroke-width="1.5" />
-          </div>
-          <div class="doc-info">
-            <span class="doc-name">{{ att.name }}</span>
-            <span class="doc-size">{{ formatSize(att.file.size) }}</span>
-          </div>
+          <template v-if="isImage(att.file)">
+            <img :src="att.url" :alt="att.name" class="photo-thumb" />
+          </template>
+          <template v-else>
+            <div class="doc-icon-wrap">
+              <component :is="fileIcon(att.file)" :size="24" stroke-width="1.5" />
+            </div>
+            <div class="doc-info">
+              <span class="doc-name">{{ att.name }}</span>
+              <span class="doc-size">{{ formatSize(att.file.size) }}</span>
+            </div>
+          </template>
         </template>
-        <!-- Upload progress / error -->
-        <div v-if="att.uploading" class="photo-uploading">
-          <div class="upload-progress-ring">
-            <svg viewBox="0 0 36 36" class="progress-circle">
-              <path class="progress-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-              <path class="progress-fill" :stroke-dasharray="`${att.progress}, 100`" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-            </svg>
-            <span class="progress-pct">{{ att.progress }}%</span>
-          </div>
-        </div>
-        <div v-else-if="att.error" class="photo-error">
+        <!-- Error overlay -->
+        <div v-if="att.error" class="photo-error">
           <span class="photo-error-text">{{ att.error }}</span>
         </div>
-        <div v-else class="photo-overlay" @click="removeAttachment(att.id)">
+        <!-- Delete overlay (only when uploaded) -->
+        <div v-else-if="att.uploaded && !att.uploading" class="photo-overlay" @click="removeAttachment(att.id)">
           <X :size="14" />
         </div>
       </div>
@@ -536,31 +541,44 @@ html.dark .send-btn.on { background: #fff; color: #1d1d1d; }
   transition: opacity .15s;
 }
 .photo-item:hover .photo-overlay { opacity: 1; }
-.photo-uploading {
-  position: absolute;
-  inset: 0;
+.upload-progress-bg {
+  width: 100%;
+  height: 100%;
+  background: #fff;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,.35);
-  color: #fff;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
 }
-.upload-progress-ring {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.upload-progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  overflow: hidden;
 }
-.progress-circle { width: 36px; height: 36px; transform: rotate(-90deg); }
-.progress-bg { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
-.progress-fill { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray .2s; }
-.progress-pct {
-  position: absolute;
-  font-size: 9px;
+.upload-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width .2s ease;
+}
+.upload-progress-text {
+  font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--accent);
+  line-height: 1;
+}
+.upload-progress-name {
+  font-size: 9px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
   line-height: 1;
 }
 .photo-error {
