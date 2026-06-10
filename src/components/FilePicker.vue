@@ -92,20 +92,6 @@ const breadcrumbs = computed(() => {
 const hasBack = computed(() => historyIndex.value > 0)
 const hasForward = computed(() => historyIndex.value < pathHistory.value.length - 1)
 
-// Sidebar quick-access roots
-const rootPaths = computed(() => {
-  const dirs = new Set<string>()
-  dirs.add('')
-  // Collect top-level directories from entries
-  for (const e of entries.value) {
-    if (e.is_dir) {
-      const top = e.path.split('/')[0]
-      if (top) dirs.add(top)
-    }
-  }
-  return Array.from(dirs).sort()
-})
-
 // ── Navigation ──
 
 function pushHistory(path: string) {
@@ -375,15 +361,6 @@ function fmtDate(iso: string) {
         <div class="fp-sidebar-section-title">位置</div>
         <div class="fp-sidebar-item" :class="{ active: currentPath === '' }" @click="goHome">
           <Home :size="15" /> 根目录
-        </div>
-        <div
-          v-for="rp in rootPaths" :key="rp"
-          v-show="rp !== ''"
-          class="fp-sidebar-item"
-          :class="{ active: currentPath === rp || currentPath.startsWith(rp + '/') }"
-          @click="navigateTo(rp)"
-        >
-          <Folder :size="15" style="color:#f0a020;" /> {{ rp }}
         </div>
       </div>
 
