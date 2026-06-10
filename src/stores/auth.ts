@@ -49,7 +49,13 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = { ...user.value, permissions: perms }
           localStorage.setItem('ourclass_user', JSON.stringify(user.value))
         }
-      } catch {} // Silently fail — user will see restricted UI
+      } catch (e: any) {
+        // Token expired or invalid — clear auth state to prevent cascading 401s
+        if (e.message?.includes('401') || e.message?.includes('未登录') || e.message?.includes('Unauthorized')) {
+          user.value = null
+          localStorage.removeItem('ourclass_user')
+        }
+      }
     })()
     await _permPromise
     _permPromise = null

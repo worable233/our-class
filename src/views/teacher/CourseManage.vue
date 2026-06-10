@@ -5,9 +5,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useMessage, useDialog } from 'naive-ui'
 import {
   NCard, NButton, NModal, NForm, NFormItem, NInput, NSelect, NSpace,
-  NSpin, NEmpty, NTag, NText, NButtonGroup, NUpload, NUploadDragger,
+  NSpin, NEmpty, NTag, NText, NButtonGroup,
 } from 'naive-ui'
 import { Plus, Trash2, Edit3, BookOpen, Upload, Image } from '@lucide/vue'
+import FilePicker from '@/components/FilePicker.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -27,6 +28,8 @@ const editing = ref<Course | null>(null)
 const form = ref({ name: '', description: '', class: '' })
 const saving = ref(false)
 const coverUploading = ref(false)
+const showCoverPicker = ref(false)
+const pickingCourseId = ref<number | null>(null)
 
 async function load() {
   loading.value = true
@@ -88,29 +91,26 @@ async function remove(id: number) {
 }
 
 async function uploadCover(courseId: number) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    coverUploading.value = true
-    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const res = await fetch(`/api/courses/${courseId}/cover`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      })
-      const body = await res.json()
-      if (body.success) { message.success('封面已上传'); await load() }
-      else throw new Error(body.error?.message || '上传失败')
-    } catch (e: any) { message.error(e.message || '上传失败') }
-    finally { coverUploading.value = false }
+  pickingCourseId.value = courseId
+  showCoverPicker.value = true
+}
+
+async function onCoverPick(files: { name: string; path: string; size: number }[]) {
+  if (files.length === 0 || pickingCourseId.value === null) return
+  const f = files[0]; if (!f) return
+  coverUploading.value = true
+  try {
+    const r = await api.post<{ cover_url: string }>(`/courses/${pickingCourseId.value}/cover-from-disk`, {
+      disk_path: f.path,
+    })
+    message.success('封面已设置')
+    await load()
+  } catch (e: any) { message.error(e.message || '设置封面失败') }
+  finally {
+    coverUploading.value = false
+    showCoverPicker.value = false
+    pickingCourseId.value = null
   }
-  input.click()
 }
 
 function fmtDate(iso: string) {
@@ -185,6 +185,14 @@ onMounted(load)
         </NSpace>
       </template>
     </n-modal>
+
+    <!-- ═══ 封面选择器 ═══ -->
+    <FilePicker
+      v-model:show="showCoverPicker"
+      :accept="['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']"
+      :multiple="false"
+      @confirm="onCoverPick"
+    />
   </div>
 </template>
 

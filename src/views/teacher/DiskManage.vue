@@ -3,15 +3,16 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useMessage, useDialog } from 'naive-ui'
 import {
-  NCard, NButton, NProgress, NModal, NForm, NFormItem, NInput,
+  NCard, NButton, NProgress, NModal, NForm, NFormItem, NInput, NInputNumber,
   NSpace, NSpin, NEmpty, NText, NIcon, NCheckbox, NButtonGroup, NTag,
+  NRadioGroup, NRadioButton,
 } from 'naive-ui'
 import { useUploadManager } from '@/composables/useUploadManager'
 import UploadPanel from '@/components/chat/UploadPanel.vue'
 import {
   Folder, File, FileText, FileImage, FileSpreadsheet, FileType, Archive,
   Image, Music, Video, ChevronRight, Upload, Plus, Trash2, Download, Edit3,
-  HardDrive, RefreshCw, MoveRight, GripVertical, CheckSquare,
+  HardDrive, RefreshCw, MoveRight, GripVertical, CheckSquare, Replace,
 } from '@lucide/vue'
 
 const message = useMessage()
@@ -53,6 +54,72 @@ const showMoveModal = ref(false)
 const moveTargets = ref<string[]>([])
 const moveDir = ref('')
 const moveDirs = ref<string[]>([])
+
+// 批量重命名
+const showBatchRenameModal = ref(false)
+const batchRenameMode = ref<'replace' | 'prefix' | 'suffix' | 'number'>('replace')
+const batchRenameFind = ref('')
+const batchRenameReplace = ref('')
+const batchRenameText = ref('')
+const batchRenamePattern = ref('_{n}')
+const batchRenameStart = ref(1)
+
+async function openBatchRename() {
+  const paths = Array.from(selectedPaths.value)
+  if (paths.length === 0) { message.warning('请选择文件'); return }
+  batchRenameMode.value = 'replace'
+  batchRenameFind.value = ''
+  batchRenameReplace.value = ''
+  batchRenameText.value = ''
+  batchRenamePattern.value = '_{n}'
+  batchRenameStart.value = 1
+  showBatchRenameModal.value = true
+}
+
+function previewBatchName(oldName: string, index: number): string {
+  const ext = oldName.includes('.') ? oldName.substring(oldName.lastIndexOf('.')) : ''
+  const base = ext ? oldName.substring(0, oldName.lastIndexOf('.')) : oldName
+  switch (batchRenameMode.value) {
+    case 'replace': return oldName.replaceAll(batchRenameFind.value, batchRenameReplace.value)
+    case 'prefix': return (batchRenameText.value || '') + oldName
+    case 'suffix': return base + (batchRenameText.value || '') + ext
+    case 'number': {
+      const num = (batchRenameStart.value || 1) + index
+      return batchRenamePattern.value.replace(/\{n\}/g, String(num).padStart(String(selectedPaths.value.size).length, '0'))
+    }
+    default: return oldName
+  }
+}
+
+async function confirmBatchRename() {
+  const paths = Array.from(selectedPaths.value)
+  if (paths.length === 0) { message.warning('请选择文件'); return }
+  try {
+    const body: any = { paths, mode: batchRenameMode.value }
+    switch (batchRenameMode.value) {
+      case 'replace':
+        body.find = batchRenameFind.value
+        body.replace = batchRenameReplace.value
+        if (!batchRenameFind.value) { message.warning('请输入查找内容'); return }
+        break
+      case 'prefix':
+      case 'suffix':
+        body.text = batchRenameText.value
+        if (!batchRenameText.value) { message.warning('请输入文本内容'); return }
+        break
+      case 'number':
+        body.pattern = batchRenamePattern.value
+        body.start = batchRenameStart.value
+        if (!batchRenamePattern.value.includes('{n}')) { message.warning('序号模式需要包含 {n} 占位符'); return }
+        break
+    }
+    const r = await api.post<{ renamed: number }>('/storage/batch-rename', body)
+    message.success(`已重命名 ${r.renamed} 个项目`)
+    showBatchRenameModal.value = false
+    selectedPaths.value = new Set()
+    await loadList(currentPath.value)
+  } catch (e: any) { message.error(e.message || '批量重命名失败') }
+}
 
 // ── Breadcrumb ───────────────────────────────────────────────────────
 const breadcrumbs = computed(() => {
@@ -140,8 +207,13 @@ async function onDrop(e: DragEvent) {
   const fileList: { file: File; path: string }[] = []
   for (const item of Array.from(items)) {
     const entry = item.webkitGetAsEntry?.()
-    if (entry) await traverseFiles(entry, currentPath.value ? `${currentPath.value}/${entry.name}` : entry.name, fileList)
-    else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
+    if (entry) {
+      if (entry.isFile) {
+        const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value })
+      } else {
+        await traverseFiles(entry, currentPath.value ? `${currentPath.value}/${entry.name}` : entry.name, fileList)
+      }
+    } else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
   }
   // 回退：若 webkitGetAsEntry 不可用（Firefox/Safari），直接用 files
   if (fileList.length === 0 && e.dataTransfer?.files.length) {
@@ -280,6 +352,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
       <CheckSquare :size="15" style="color:var(--accent);" />
       <span style="color:var(--text-primary);font-weight:500;">已选 {{ selectedPaths.size }} 项</span>
       <div style="flex:1" />
+      <NButton size="tiny" secondary @click="openBatchRename" round><template #icon><Replace :size="13" /></template>批量重命名</NButton>
       <NButton size="tiny" secondary @click="openMove" round><template #icon><MoveRight :size="13" /></template>移动到</NButton>
       <NButton size="tiny" secondary type="error" @click="batchDelete" round><template #icon><Trash2 :size="13" /></template>批量删除</NButton>
       <NButton size="tiny" quaternary @click="selectedPaths = new Set()" round>取消选择</NButton>
@@ -376,6 +449,72 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
         <NSpace justify="end">
           <NButton quaternary @click="showMoveModal = false">取消</NButton>
           <NButton type="primary" @click="confirmMove" round>移动到此处</NButton>
+        </NSpace>
+      </template>
+    </n-modal>
+
+    <!-- ═══ 批量重命名 Modal ═══ -->
+    <n-modal v-model:show="showBatchRenameModal" preset="card" title="批量重命名" style="width:460px;" :mask-closable="false">
+      <div style="margin-bottom:16px;font-size:13px;color:var(--text-muted);">
+        已选 <strong>{{ selectedPaths.size }}</strong> 项
+      </div>
+
+      <!-- 模式选择 -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text-primary);">重命名模式</div>
+        <NRadioGroup v-model:value="batchRenameMode">
+          <div style="display:flex;gap:8px;">
+            <NRadioButton value="replace" style="flex:1;">查找替换</NRadioButton>
+            <NRadioButton value="prefix" style="flex:1;">添加前缀</NRadioButton>
+            <NRadioButton value="suffix" style="flex:1;">添加后缀</NRadioButton>
+            <NRadioButton value="number" style="flex:1;">序号模式</NRadioButton>
+          </div>
+        </NRadioGroup>
+      </div>
+
+      <!-- 替换模式 -->
+      <n-form v-if="batchRenameMode === 'replace'" :show-label="true">
+        <n-form-item label="查找"><n-input v-model:value="batchRenameFind" placeholder="输入要查找的文本" /></n-form-item>
+        <n-form-item label="替换为"><n-input v-model:value="batchRenameReplace" placeholder="留空则删除" /></n-form-item>
+      </n-form>
+
+      <!-- 前缀/后缀模式 -->
+      <n-form v-if="batchRenameMode === 'prefix' || batchRenameMode === 'suffix'" :show-label="true">
+        <n-form-item :label="batchRenameMode === 'prefix' ? '前缀文本' : '后缀文本'">
+          <n-input v-model:value="batchRenameText" :placeholder="batchRenameMode === 'prefix' ? '添加在文件名前面' : '添加在文件名后面（扩展名前）'" />
+        </n-form-item>
+      </n-form>
+
+      <!-- 序号模式 -->
+      <n-form v-if="batchRenameMode === 'number'" :show-label="true">
+        <n-form-item label="命名模板">
+          <n-input v-model:value="batchRenamePattern" placeholder="例: 照片_{n}" />
+        </n-form-item>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:-8px;margin-bottom:12px;">
+          使用 <code style="background:var(--surface-2);padding:1px 5px;border-radius:3px;">{n}</code> 表示序号，自动补零
+        </div>
+        <n-form-item label="起始编号">
+          <n-input-number v-model:value="batchRenameStart" :min="0" :max="9999" style="width:120px;" />
+        </n-form-item>
+      </n-form>
+
+      <!-- 预览 -->
+      <div v-if="batchRenameMode && selectedPaths.size > 0" style="margin-top:4px;">
+        <div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--text-muted);">预览（前 5 项）</div>
+        <div style="max-height:120px;overflow-y:auto;background:var(--surface-2);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;flex-direction:column;gap:4px;">
+          <div v-for="(entry, i) in entries.filter(e => selectedPaths.has(e.path)).slice(0, 5)" :key="entry.path" style="display:flex;gap:8px;align-items:center;">
+            <span style="color:var(--text-muted);flex-shrink:0;">{{ i + 1 }}.</span>
+            <span style="color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">{{ entry.name }}</span>
+            <span style="color:var(--text-muted);">→</span>
+            <span style="color:var(--accent);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">{{ previewBatchName(entry.name, i) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <NSpace justify="end">
+          <NButton quaternary @click="showBatchRenameModal = false">取消</NButton>
+          <NButton type="primary" @click="confirmBatchRename" round>开始重命名</NButton>
         </NSpace>
       </template>
     </n-modal>

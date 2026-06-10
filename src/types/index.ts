@@ -60,10 +60,18 @@ export interface Submission {
   student_name?: string
   class?: string
   content: string
+  files?: string // JSON string of file entries
   submitted_at: string
   score: number | null
   feedback: string
   status: string
+}
+
+export interface SubmissionFile {
+  name: string
+  size: number
+  size_display: string
+  path: string
 }
 
 export interface PointRecord {

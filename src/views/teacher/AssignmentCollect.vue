@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import type { Assignment, Submission, Student } from '@/types'
+import type { Assignment, Submission, SubmissionFile, Student } from '@/types'
 import {
   NButton, NCard, NModal, NInput, NSelect, NDatePicker, NForm, NFormItem, NSpace,
   NTag, NSpin, NEmpty, NText, NInputNumber, NAvatar, NList, NListItem,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Plus, Eye, X } from '@lucide/vue'
+import { Plus, Eye, X, Download, File as FileIcon } from '@lucide/vue'
 
 const auth = useAuthStore()
 
@@ -76,6 +76,26 @@ async function grade(submissionId: number) {
   const sub = submissions.value.find(s => s.id === submissionId)
   if (sub) { sub.score = input.score; sub.feedback = input.feedback; sub.status = 'graded' }
 }
+
+  function parseSubmissionFiles(s: Submission): SubmissionFile[] {
+    if (!s.files) return []
+    try { return JSON.parse(s.files) } catch { return [] }
+  }
+
+  async function downloadSubmissionFile(submissionId: number, file: SubmissionFile) {
+    const token = auth.user?.token || ''
+    try {
+      const res = await fetch(`/api/assignments/submissions/${submissionId}/download?path=${encodeURIComponent(file.path)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) { alert('下载失败'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = file.name; a.click()
+      URL.revokeObjectURL(url)
+    } catch { alert('下载失败') }
+  }
 
   useRefresh(load)
 onMounted(load)
@@ -231,6 +251,20 @@ onMounted(load)
 
               <NText v-if="s.content" depth="2" style="display:block;margin-bottom:8px;font-size:13px;line-height:1.5">{{ s.content }}</NText>
               <NText v-else depth="3" style="display:block;margin-bottom:8px;font-size:13px;font-style:italic">未提交内容</NText>
+
+              <!-- 提交的附件 -->
+              <div v-if="parseSubmissionFiles(s).length > 0" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">
+                <div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-bottom:2px;">附件</div>
+                <div v-for="(f, fi) in parseSubmissionFiles(s)" :key="fi"
+                  style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-radius:4px;font-size:12px;cursor:pointer;"
+                  @click="downloadSubmissionFile(s.id, f)"
+                >
+                  <FileIcon :size="14" style="color:var(--accent);flex-shrink:0;" />
+                  <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.name }}</span>
+                  <span style="color:var(--text-muted);font-size:11px;flex-shrink:0;">{{ f.size_display }}</span>
+                  <Download :size="13" style="color:var(--accent);flex-shrink:0;" />
+                </div>
+              </div>
 
               <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--hairline)">
                 <NText depth="3">提交于 {{ s.submitted_at?.slice(0, 10) || '—' }}</NText>

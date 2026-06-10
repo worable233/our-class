@@ -129,14 +129,26 @@ function seedAllData(db: Database.Database) {
     }
   }
 
-  // Seed assignments
-  const insertAssignment = db.prepare(
-    'INSERT INTO assignments (title, description, due_date, course, created_by) VALUES (?, ?, ?, ?, ?)',
+  // Seed courses (so assignments can link to them)
+  const insertCourse = db.prepare(
+    'INSERT INTO courses (name, description, class, created_by) VALUES (?, ?, ?, ?)',
   )
-  insertAssignment.run('第三章练习题', '完成课本第三章所有练习题，写在作业本上拍照提交。', '2026-06-05', '数学', 1)
-  insertAssignment.run('英语作文：我的梦想', '写一篇不少于120词的英语作文，主题为"My Dream"。', '2026-06-07', '英语', 1)
-  insertAssignment.run('物理实验报告', '完成自由落体实验并撰写实验报告，包含实验数据和分析。', '2026-06-10', '物理', 1)
-  insertAssignment.run('语文阅读理解', '完成课文《荷塘月色》的阅读理解题目，共10道题。', '2026-06-03', '语文', 1)
+  const seededCourses: { id: number; name: string }[] = []
+  for (const name of courses) {
+    const r = insertCourse.run(name, `${name}课程`, '高三(1)班', 1)
+    seededCourses.push({ id: r.lastInsertRowid as number, name })
+  }
+  const courseMap: Record<string, number> = {}
+  seededCourses.forEach(c => { courseMap[c.name] = c.id })
+
+  // Seed assignments (linked to courses)
+  const insertAssignment = db.prepare(
+    'INSERT INTO assignments (title, description, due_date, course, course_id, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+  )
+  insertAssignment.run('第三章练习题', '完成课本第三章所有练习题，写在作业本上拍照提交。', '2026-06-05', '数学', courseMap['数学'], 1)
+  insertAssignment.run('英语作文：我的梦想', '写一篇不少于120词的英语作文，主题为"My Dream"。', '2026-06-07', '英语', courseMap['英语'], 1)
+  insertAssignment.run('物理实验报告', '完成自由落体实验并撰写实验报告，包含实验数据和分析。', '2026-06-10', '物理', courseMap['物理'], 1)
+  insertAssignment.run('语文阅读理解', '完成课文《荷塘月色》的阅读理解题目，共10道题。', '2026-06-03', '语文', courseMap['语文'], 1)
 
   // Seed submissions
   const insertSubmission = db.prepare(

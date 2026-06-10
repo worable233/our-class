@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { existsSync, mkdirSync, renameSync, unlinkSync } from 'fs'
-import { join, extname } from 'path'
+import { existsSync, mkdirSync, renameSync, unlinkSync, copyFileSync } from 'fs'
+import { join, extname, basename } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import multer from 'multer'
@@ -13,6 +13,7 @@ import { ok, fail } from '../lib/response.js'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
 const COVER_DIR = join(__dirname, '..', '..', 'uploads', 'course_covers')
 if (!existsSync(COVER_DIR)) mkdirSync(COVER_DIR, { recursive: true })
 
@@ -47,7 +48,7 @@ const coverUploader = multer({
   },
 })
 
-// GET /api/courses — 课程列表（教师可查看自己权限范围内的班级的课程）
+// GET /api/courses — 课程列表
 router.get('/', (req: Request, res: Response) => {
   const db = getDb()
   const { id: userId, permissions, class: userClass } = req.user!
@@ -88,7 +89,6 @@ router.post('/', requirePermission('points.read'), validate(createSchema), (req:
   const { name, description, class: courseClass } = req.body
   const { id: userId, permissions, class: userClass } = req.user!
 
-  // 检查班级权限
   if (!permissions.includes('classes.view_all')) {
     const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
     if (!allowed.includes(courseClass)) return fail(res, 403, 'FORBIDDEN', '无权在该班级创建课程')
@@ -126,7 +126,7 @@ router.put('/:id', requirePermission('points.read'), validate(updateSchema), (re
   ok(res, updated)
 })
 
-// POST /api/courses/:id/cover — 上传封面图
+// POST /api/courses/:id/cover — 上传封面图（本地上传）
 router.post('/:id/cover', (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
@@ -145,7 +145,6 @@ router.post('/:id/cover', (req: Request, res: Response) => {
 
     const coverUrl = `/uploads/course_covers/${req.file.filename}`
 
-    // 删除旧封面
     if (course.cover_url) {
       const oldPath = join(__dirname, '..', '..', course.cover_url)
       try { if (existsSync(oldPath)) unlinkSync(oldPath) } catch {}
@@ -154,6 +153,44 @@ router.post('/:id/cover', (req: Request, res: Response) => {
     db.prepare("UPDATE courses SET cover_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(coverUrl, id)
     ok(res, { cover_url: coverUrl })
   })
+})
+
+// POST /api/courses/:id/cover-from-disk — 从用户网盘选择封面图
+router.post('/:id/cover-from-disk', (req: Request, res: Response) => {
+  const db = getDb()
+  const id = Number(req.params.id)
+  if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')
+
+  const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(id) as any
+  if (!course) throw new NotFoundError('课程不存在')
+
+  const { disk_path } = req.body
+  if (!disk_path) return fail(res, 400, 'VALIDATION', '请指定文件路径')
+
+  const userId = req.user!.id
+  const root = join(STORAGE_ROOT, `user_${userId}`)
+  const safe = disk_path.replace(/^\/+/, '')
+  const srcPath = join(root, safe)
+  if (!srcPath.startsWith(root + '/') || !existsSync(srcPath)) {
+    return fail(res, 404, 'NOT_FOUND', '文件不存在')
+  }
+
+  const ext = extname(srcPath).toLowerCase()
+  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+  if (!imageExts.includes(ext)) return fail(res, 400, 'INVALID_TYPE', '仅支持图片格式')
+
+  const filename = `cover_${uuidv4()}${ext}`
+  const destPath = join(COVER_DIR, filename)
+  copyFileSync(srcPath, destPath)
+  const coverUrl = `/uploads/course_covers/${filename}`
+
+  if (course.cover_url) {
+    const oldPath = join(__dirname, '..', '..', course.cover_url)
+    try { if (existsSync(oldPath)) unlinkSync(oldPath) } catch {}
+  }
+
+  db.prepare("UPDATE courses SET cover_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(coverUrl, id)
+  ok(res, { cover_url: coverUrl })
 })
 
 // DELETE /api/courses/:id — 删除课程
@@ -165,7 +202,6 @@ router.delete('/:id', requirePermission('points.read'), (req: Request, res: Resp
   const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(id) as any
   if (!course) throw new NotFoundError('课程不存在')
 
-  // 删除封面文件
   if (course.cover_url) {
     const filePath = join(__dirname, '..', '..', course.cover_url)
     try { if (existsSync(filePath)) unlinkSync(filePath) } catch {}

@@ -5,7 +5,8 @@ import { useAuthStore } from '@/stores/auth'
 import type { Assignment } from '@/types'
 import { NButton, NCard, NModal, NInput, NForm, NFormItem, NSpace, NTag, NSpin, NEmpty, NText } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Calendar } from '@lucide/vue'
+import { Calendar, Upload, FolderOpen, X, File } from '@lucide/vue'
+import FilePicker from '@/components/FilePicker.vue'
 
 const auth = useAuthStore()
 const assignments = ref<Assignment[]>([])
@@ -13,6 +14,15 @@ const loading = ref(true)
 const showSubmit = ref(false)
 const submittingId = ref<number | null>(null)
 const submitContent = ref('')
+
+// 文件上传
+const selectedFiles = ref<{ file: File; name: string }[]>([])
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+// 网盘文件选择器（使用 FilePicker 组件）
+const showDiskPicker = ref(false)
+const diskPickedFiles = ref<{ name: string; path: string; size: number; size_display: string }[]>([])
 
 async function load() {
   loading.value = true
@@ -25,25 +35,82 @@ useRefresh(load)
 function openSubmit(assignmentId: number) {
   submittingId.value = assignmentId
   submitContent.value = ''
+  selectedFiles.value = []
+  diskPickedFiles.value = []
   showSubmit.value = true
-}
-
-async function submit() {
-  if (submittingId.value === null) return
-  await api.post(`/assignments/${submittingId.value}/submit`, {
-    student_id: auth.user?.id,
-    content: submitContent.value,
-  })
-  showSubmit.value = false
-  submittingId.value = null
-  submitContent.value = ''
-  await load()
 }
 
 function handleClose() {
   showSubmit.value = false
   submittingId.value = null
   submitContent.value = ''
+  selectedFiles.value = []
+  diskPickedFiles.value = []
+}
+
+function handleFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files) return
+  for (const file of Array.from(input.files)) {
+    selectedFiles.value.push({ file, name: file.name })
+  }
+  input.value = ''
+}
+
+function removeFile(index: number) {
+  selectedFiles.value.splice(index, 1)
+}
+
+function removeDiskFile(path: string) {
+  diskPickedFiles.value = diskPickedFiles.value.filter(f => f.path !== path)
+}
+
+function onDiskPick(files: { name: string; path: string; size: number; size_display: string }[]) {
+  // Merge, dedup by path
+  const existing = new Set(diskPickedFiles.value.map(f => f.path))
+  for (const f of files) {
+    if (!existing.has(f.path)) {
+      diskPickedFiles.value.push(f)
+      existing.add(f.path)
+    }
+  }
+  showDiskPicker.value = false
+}
+
+async function submit() {
+  if (submittingId.value === null) return
+  uploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('student_id', String(auth.user?.id))
+    formData.append('content', submitContent.value)
+
+    // 本地上传的文件
+    for (const sf of selectedFiles.value) {
+      formData.append('file', sf.file, sf.name)
+    }
+
+    // 从网盘选择的文件
+    if (diskPickedFiles.value.length > 0) {
+      formData.append('disk_files', JSON.stringify(
+        diskPickedFiles.value.map(f => ({ name: f.name, disk_path: f.path }))
+      ))
+    }
+
+    await fetch(`/api/assignments/${submittingId.value}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth.user?.token}` },
+      body: formData,
+    }).then(r => r.json()).then(body => {
+      if (!body.success) throw new Error(body.error?.message || '提交失败')
+    })
+
+    handleClose()
+    await load()
+  } catch (e: any) {
+    alert(e.message || '提交失败')
+  }
+  finally { uploading.value = false }
 }
 
 onMounted(load)
@@ -51,12 +118,8 @@ onMounted(load)
 
 <template>
   <div>
-
     <n-spin :show="loading">
-      <div
-        v-if="!loading && assignments.length === 0"
-        style="display: flex; justify-content: center; padding: 48px 0"
-      >
+      <div v-if="!loading && assignments.length === 0" style="display: flex; justify-content: center; padding: 48px 0">
         <n-empty description="暂无作业" />
       </div>
       <div v-else style="display: flex; flex-direction: column; gap: 16px">
@@ -103,27 +166,74 @@ onMounted(load)
       </div>
     </n-spin>
 
-    <!-- Submit Modal -->
+    <!-- ═══ 提交作业 Modal ═══ -->
     <n-modal
       v-model:show="showSubmit"
       preset="card"
       title="提交作业"
-      style="width: 500px"
+      style="width: 560px"
       :mask-closable="false"
       @update:show="(val) => { if (!val) handleClose() }"
     >
       <n-form>
         <n-form-item label="作业内容">
-          <n-input type="textarea" v-model:value="submitContent" placeholder="输入作业内容或备注..." />
+          <n-input type="textarea" v-model:value="submitContent" placeholder="输入作业内容或备注..." :rows="3" />
+        </n-form-item>
+
+        <!-- 文件上传区 -->
+        <n-form-item label="上传文件">
+          <div style="width:100%;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;gap:8px;">
+              <NButton size="small" secondary @click="fileInput?.click()">
+                <template #icon><Upload :size="14" /></template>
+                选择文件
+              </NButton>
+              <NButton size="small" secondary @click="showDiskPicker = true">
+                <template #icon><FolderOpen :size="14" /></template>
+                从网盘选择
+              </NButton>
+            </div>
+            <input ref="fileInput" type="file" multiple style="display:none" @change="handleFileSelected" @click="(e: any) => e.target.value = null" />
+
+            <!-- 已选文件列表 -->
+            <div v-if="selectedFiles.length > 0 || diskPickedFiles.length > 0" style="display:flex;flex-direction:column;gap:4px;">
+              <div v-for="(f, i) in selectedFiles" :key="'local'+i"
+                style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-radius:4px;font-size:12px;"
+              >
+                <File :size="14" style="color:var(--accent);flex-shrink:0;" />
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.name }}</span>
+                <X :size="14" style="cursor:pointer;color:var(--text-muted);flex-shrink:0;" @click="removeFile(i)" />
+              </div>
+              <div v-for="f in diskPickedFiles" :key="'disk'+f.path"
+                style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-radius:4px;font-size:12px;"
+              >
+                <FolderOpen :size="14" style="color:#f0a020;flex-shrink:0;" />
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.name }}</span>
+                <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">{{ f.size_display }}</span>
+                <X :size="14" style="cursor:pointer;color:var(--text-muted);flex-shrink:0;" @click="removeDiskFile(f.path)" />
+              </div>
+            </div>
+            <span v-else style="font-size:12px;color:var(--text-muted);">可选，支持上传文件或从个人网盘选择</span>
+          </div>
         </n-form-item>
       </n-form>
       <template #footer>
         <div style="display: flex; gap: 8px; justify-content: flex-end">
           <n-button @click="handleClose">取消</n-button>
-          <n-button type="primary" @click="submit" :disabled="!submitContent">提交</n-button>
+          <n-button type="primary" @click="submit" :loading="uploading" :disabled="!submitContent && selectedFiles.length === 0 && diskPickedFiles.length === 0">
+            提交
+          </n-button>
         </div>
       </template>
     </n-modal>
+
+    <!-- ═══ 可复用文件选择器 ═══ -->
+    <FilePicker
+      v-model:show="showDiskPicker"
+      :accept="['*']"
+      multiple
+      @confirm="onDiskPick"
+    />
   </div>
 </template>
 
