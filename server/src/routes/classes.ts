@@ -6,15 +6,29 @@ import { ok, fail } from '../lib/response.js'
 const router = Router()
 
 // GET /api/classes — 班级列表（含人数统计）
-router.get('/', requirePermission('students.write'), (_req: Request, res: Response) => {
+router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+
+  let where = ''
+  const params: unknown[] = []
+  if (!hasViewAll) {
+    const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      where = `WHERE c.name IN (${myClasses.map(() => '?').join(',')})`
+      params.push(...myClasses)
+    }
+  }
+
   const rows = db.prepare(`
     SELECT c.id, c.name, COUNT(u.id) AS student_count
     FROM classes c
     LEFT JOIN users u ON u.class = c.name AND u.group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)
+    ${where}
     GROUP BY c.id, c.name
     ORDER BY c.name
-  `).all() as { id: number; name: string; student_count: number }[]
+  `).all(...params) as { id: number; name: string; student_count: number }[]
   ok(res, rows)
 })
 

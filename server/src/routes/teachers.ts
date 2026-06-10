@@ -21,16 +21,38 @@ const updateSchema = z.object({
   role_id: z.number().int().nullable().optional(),
 })
 
-// GET /api/teachers — list all teachers
-router.get('/', requirePermission('students.write'), (_req: Request, res: Response) => {
+// GET /api/teachers — list all teachers（支持 ?class=xxx 筛选）
+router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
-  const teachers = db.prepare(`
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+  const filterClass = req.query.class as string | undefined
+
+  let sql = `
     SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
     FROM users u
     JOIN permission_groups pg ON pg.group_type = 'teacher'
     WHERE u.group_id = pg.id
-    ORDER BY u.id
-  `).all()
+  `
+  const params: string[] = []
+
+  if (!hasViewAll) {
+    const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      // 检查 teachers 的 class 字段是否包含自己的班级（class 可能为逗号分隔的多班级）
+      const classConds = myClasses.map(() => `(u.class LIKE '%' || ? || '%' OR u.class = ?)`)
+      sql += ` AND (${classConds.join(' OR ')})`
+      for (const c of myClasses) {
+        params.push(c, c) // 每个班级两个占位符（LIKE 和精确匹配）
+      }
+    }
+  } else if (filterClass) {
+    sql += ` AND (u.class LIKE '%' || ? || '%' OR u.class = ?)`
+    params.push(filterClass, filterClass)
+  }
+
+  sql += ' ORDER BY u.id'
+  const teachers = db.prepare(sql).all(...params)
   ok(res, teachers)
 })
 
@@ -65,7 +87,12 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   if (req.body.class !== undefined) { fields.push('class = ?'); values.push(req.body.class) }
   if (req.body.nickname !== undefined) { fields.push('nickname = ?'); values.push(req.body.nickname) }
   if (req.body.avatar !== undefined) { fields.push('avatar = ?'); values.push(req.body.avatar) }
-  if (req.body.group_id !== undefined) { fields.push('group_id = ?'); values.push(req.body.group_id) }
+  if (req.body.group_id !== undefined) {
+    fields.push('group_id = ?'); values.push(req.body.group_id)
+    // 同步存储配额
+    const quota = db.prepare('SELECT storage_limit FROM group_storage_quota WHERE group_id = ?').get(req.body.group_id) as any
+    if (quota) db.prepare('UPDATE user_storage SET storage_limit = ? WHERE user_id = ?').run(quota.storage_limit, id)
+  }
   if (req.body.role_id !== undefined) { fields.push('role_id = ?'); values.push(req.body.role_id) }
 
   if (fields.length === 0) return fail(res, 400, 'NO_CHANGES', '没有要修改的字段')

@@ -47,15 +47,27 @@ const updateSchema = z.object({
 // GET /api/students?class=xxx
 router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
-  const { class: className } = req.query
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+  const filterClass = req.query.class as string | undefined
+
   let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
   const params: string[] = []
+  const conditions: string[] = []
 
-  if (className) {
-    sql += ` AND class = ?`
-    params.push(String(className))
+  if (!hasViewAll) {
+    const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      conditions.push(`class IN (${myClasses.map(() => '?').join(',')})`)
+      params.push(...myClasses)
+    }
+  } else if (filterClass) {
+    conditions.push('class = ?')
+    params.push(filterClass)
   }
-  sql += ` ORDER BY id`
+
+  if (conditions.length > 0) sql += ' AND ' + conditions.join(' AND ')
+  sql += ' ORDER BY id'
 
   ok(res, db.prepare(sql).all(...params))
 })

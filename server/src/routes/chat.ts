@@ -484,7 +484,19 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'get_class_list': {
-      const rows = db.prepare("SELECT name FROM classes ORDER BY name").all() as any[]
+      const cf = getClassFilter(userClass, userPermissions)
+      let sql = 'SELECT name FROM classes ORDER BY name'
+      if (cf.sql) {
+        // classes 表没有 class 字段，改用 users 表获取用户有权限的班级
+        sql = `SELECT DISTINCT u.class as name FROM users u WHERE u.class != '' AND u.class IS NOT NULL`
+        if (userPermissions.includes('classes.view_all')) {
+          sql = 'SELECT name FROM classes ORDER BY name'
+        } else {
+          sql += ` AND u.class IN (${cf.params.map(() => '?').join(',')})`
+          sql += ' ORDER BY u.class'
+        }
+      }
+      const rows = db.prepare(sql).all(...(cf.sql ? cf.params : [])) as any[]
       return JSON.stringify(rows.map(r => r.name))
     }
 
