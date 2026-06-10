@@ -120,8 +120,8 @@ router.post('/create', requirePermission('chat.config'), async (req: Request, re
     ? selectedTables.filter(t => BACKUP_TABLES.includes(t))
     : BACKUP_TABLES
 
-  const { default: Archiver } = await import('archiver')
-  const archive = Archiver('zip', { zlib: { level: 6 } })
+  const { ZipArchive } = await import('archiver')
+  const archive = new ZipArchive({ zlib: { level: 6 } })
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const tag = uuidv4().slice(0, 8)
@@ -276,9 +276,9 @@ router.get('/list', requirePermission('chat.config'), (_req: Request, res: Respo
 router.post('/export', requirePermission('chat.config'), async (req: Request, res: Response) => {
   let cleanupPath: string | null = null
   try {
-    const { default: Archiver } = await import('archiver')
+    const { Archiver } = await import('archiver')
     const db = getDb()
-    const archive = Archiver('zip', { zlib: { level: 6 } })
+    const archive = new Archiver('zip', { zlib: { level: 6 } })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const tag = uuidv4().slice(0, 8)

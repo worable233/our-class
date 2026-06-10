@@ -373,7 +373,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     'get_current_time': 'tool.utility',
     'get_class_list': 'tool.utility',
     'view_file': 'tool.utility',
-    'manage_roles': 'tool.utility',
+    'manage_roles': 'roles.manage',
     'search_articles': 'tool.article',
   }
 
