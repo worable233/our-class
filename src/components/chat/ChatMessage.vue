@@ -16,6 +16,7 @@ function safeHost2(url: string): string {
 import ToolCard from './ToolCard.vue'
 import FilePreview from './FilePreview.vue'
 import { marked } from 'marked'
+import { safeHtml } from '@/utils/sanitize'
 
 marked.use({ breaks: true, gfm: true })
 
@@ -63,6 +64,8 @@ async function doCopy() {
 function render(text: string, postProcess = true): string {
   if (!text) return ''
   let html = marked.parse(text) as string
+  // XSS 防护：用 DOMPurify 过滤渲染后的 HTML
+  html = safeHtml(html)
   if (!postProcess) return html
   html = html.replace(/\[(\d+)\]/g, '<span class="cite">$1</span>')
   html = html.replace(

@@ -11,8 +11,14 @@ import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
-import { NotFoundError } from '../lib/errors.js'
+import { NotFoundError, ValidationError } from '../lib/errors.js'
 import { writeAuditLog } from './audit.js'
+
+/** 允许抓取的文章域名白名单（SSRF 防护） */
+const ALLOWED_ARTICLE_DOMAINS = [
+  'mp.weixin.qq.com',
+  'weixin.qq.com',
+]
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOAD_ROOT = join(__dirname, '..', '..', 'uploads')
@@ -54,6 +60,72 @@ const fetchArticleSchema = z.object({
 
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.50'
 
+/** 验证 URL 是否在允许的域名白名单中（SSRF 防护） */
+function isAllowedArticleUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    // 仅允许 HTTPS
+    if (parsed.protocol !== 'https:') return false
+    // 禁止内网/私有地址
+    const hostname = parsed.hostname.toLowerCase()
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('172.16.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) return false
+    // 白名单匹配
+    return ALLOWED_ARTICLE_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d))
+  } catch {
+    return false
+  }
+}
+
+/** 验证 URL 并且禁止内网/本地地址（SSRF 防护，用于通用 URL 检查） */
+function validateExternalUrl(url: string): void {
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('仅支持 HTTP/HTTPS 协议')
+    }
+    const hostname = parsed.hostname.toLowerCase()
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('172.16.') ||
+      hostname.startsWith('172.17.') ||
+      hostname.startsWith('172.18.') ||
+      hostname.startsWith('172.19.') ||
+      hostname.startsWith('172.20.') ||
+      hostname.startsWith('172.21.') ||
+      hostname.startsWith('172.22.') ||
+      hostname.startsWith('172.23.') ||
+      hostname.startsWith('172.24.') ||
+      hostname.startsWith('172.25.') ||
+      hostname.startsWith('172.26.') ||
+      hostname.startsWith('172.27.') ||
+      hostname.startsWith('172.28.') ||
+      hostname.startsWith('172.29.') ||
+      hostname.startsWith('172.30.') ||
+      hostname.startsWith('172.31.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) {
+      throw new Error('不允许访问内网地址')
+    }
+  } catch (e: any) {
+    if (e.message === '仅支持 HTTP/HTTPS 协议' || e.message === '不允许访问内网地址') throw e
+    throw new Error('无效的 URL')
+  }
+}
+
 /** Download a single image and return the local path */
 async function downloadImage(url: string, articleDir: string): Promise<string | null> {
   try {
@@ -74,12 +146,13 @@ async function downloadImage(url: string, articleDir: string): Promise<string | 
     if (contentType.includes('png')) ext = '.png'
     else if (contentType.includes('gif')) ext = '.gif'
     else if (contentType.includes('webp')) ext = '.webp'
-    else if (contentType.includes('svg')) ext = '.svg'
+    // 禁止 SVG（存储型 XSS 向量）
+    else if (contentType.includes('svg')) return null
 
     // If no content-type, try from URL path
     const urlExt = extname(new URL(url).pathname).toLowerCase()
     if (!contentType || contentType === 'application/octet-stream') {
-      if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].includes(urlExt)) ext = urlExt
+      if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(urlExt)) ext = urlExt
     }
 
     const filename = `${uuidv4()}${ext}`
@@ -153,6 +226,11 @@ router.post(
   async (req: Request, res: Response) => {
     const { url } = req.body
 
+    // SSRF 防护：验证 URL 白名单
+    if (!isAllowedArticleUrl(url)) {
+      return fail(res, 400, 'URL_NOT_ALLOWED', '仅支持微信公众号文章链接')
+    }
+
     // Check duplicate
     const db = getDb()
     const dup = db.prepare('SELECT id, title, cover_url, author, created_at FROM articles WHERE url = ?').get(url) as any
@@ -199,6 +277,11 @@ router.post(
     const db = getDb()
     const { url } = req.body
     const userId = req.user!.id
+
+    // SSRF 防护：验证 URL 白名单
+    if (!isAllowedArticleUrl(url)) {
+      return fail(res, 400, 'URL_NOT_ALLOWED', '仅支持微信公众号文章链接')
+    }
 
     // Check duplicate
     const dup = db.prepare('SELECT id FROM articles WHERE url = ?').get(url)
@@ -315,6 +398,11 @@ router.post(
     if (!existing) throw new NotFoundError('文章不存在')
 
     const url = existing.url
+
+    // SSRF 防护：验证 URL 白名单（文章已存储的 URL 再次刷新时检查）
+    if (!isAllowedArticleUrl(url)) {
+      return fail(res, 400, 'URL_NOT_ALLOWED', '文章来源不在允许的白名单中')
+    }
     const userId = req.user!.id
 
     // 1. Fetch page
@@ -440,7 +528,7 @@ router.get('/:id', requirePermission('articles.read'), (req: Request, res: Respo
 })
 
 // DELETE /api/articles/:id — delete article and its images
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('articles.manage'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')

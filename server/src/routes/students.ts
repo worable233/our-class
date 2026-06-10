@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import bcrypt from 'bcrypt'
 import { getDb } from '../db/init.js'
 import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
+
+const BCRYPT_ROUNDS = 10
 
 const router = Router()
 
@@ -38,7 +41,7 @@ const updateSchema = z.object({
 router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
-  let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
+  let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
   const params: string[] = []
 
   if (className) {
@@ -51,15 +54,16 @@ router.get('/', requirePermission('students.write'), (req: Request, res: Respons
 })
 
 // POST /api/students
-router.post('/', requirePermission('students.write'), validate(createSchema), (req: Request, res: Response) => {
+router.post('/', requirePermission('students.write'), validate(createSchema), async (req: Request, res: Response) => {
   const db = getDb()
   const { display_name, class: stuClass, username, group_id, role_id, nickname } = req.body
   // 学号只能为纯数字，自动生成时用时间戳后 8 位
   const studentNo = req.body.student_no || String(Date.now()).slice(-8)
 
   const uname = username || display_name.toLowerCase().replace(/\s/g, '')
-  // 默认密码为学号
-  const pw = req.body.password || studentNo
+  // 默认密码为学号（bcrypt 哈希后存储）
+  const rawPw = req.body.password || studentNo
+  const pw = await bcrypt.hash(rawPw, BCRYPT_ROUNDS)
   // Default to "学生" permission group if none specified
   const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as any)?.id ?? null
   const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, role_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -78,7 +82,7 @@ router.get('/:id', requirePermission('students.write'), (req: Request, res: Resp
   const db = getDb()
   const student = db
     .prepare(
-      `SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
+      `SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
     )
     .get(req.params.id)
 
@@ -87,7 +91,7 @@ router.get('/:id', requirePermission('students.write'), (req: Request, res: Resp
 })
 
 // PUT /api/students/:id
-router.put('/:id', requirePermission('students.write'), validate(updateSchema), (req: Request, res: Response) => {
+router.put('/:id', requirePermission('students.write'), validate(updateSchema), async (req: Request, res: Response) => {
   const db = getDb()
   const { display_name, class: stuClass } = req.body
 
@@ -108,16 +112,26 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   }
 
   if (req.body.password !== undefined) {
+    // 密码用 bcrypt 哈希后存储
+    const hashedPw = await bcrypt.hash(req.body.password, BCRYPT_ROUNDS)
     fields.push('password = ?')
-    values.push(req.body.password)
+    values.push(hashedPw)
   }
 
   if (req.body.group_id !== undefined) {
+    // 权限提升防护：非教师用户不能修改 group_id
+    if (req.user?.role !== 'teacher') {
+      return fail(res, 403, 'FORBIDDEN', '无权限修改权限组')
+    }
     fields.push('group_id = ?')
     values.push(req.body.group_id)
   }
 
   if (req.body.role_id !== undefined) {
+    // 权限提升防护：非教师用户不能修改 role_id
+    if (req.user?.role !== 'teacher') {
+      return fail(res, 403, 'FORBIDDEN', '无权限修改角色')
+    }
     fields.push('role_id = ?')
     values.push(req.body.role_id)
   }
@@ -138,7 +152,7 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
 
   const updated = db
     .prepare(
-      'SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE id = ?',
+      'SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE id = ?',
     )
     .get(req.params.id)
 

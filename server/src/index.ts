@@ -39,7 +39,21 @@ import courseRoutes from './routes/courses.js'
 const app = express()
 
 // ── Security ──────────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false }))
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      imgSrc: ["'self'", 'data:', 'https:', 'http:'],
+      connectSrc: ["'self'", 'https://api.anthropic.com', 'https://*.openai.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+}))
 
 // ── Rate limiting ─────────────────────────────────────────────────────
 const limiter = rateLimit({
@@ -48,8 +62,19 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+
+const pvLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: '请求过于频繁' } },
+})
+
 app.use((req, res, next) => {
-  if (req.path === '/api/analytics/pv') return next() // 不限制页面浏览跟踪
+  if (req.path === '/api/analytics/pv') {
+    return pvLimiter(req, res, next)
+  }
   limiter(req, res, next)
 })
 
@@ -70,16 +95,16 @@ app.post('/api/analytics/pv', (req, res) => {
 })
 
 // ── Static files (uploads) ────────────────────────────────────────────────
-// Auth middleware that accepts both Authorization header and ?token= query param
+// Auth middleware — JWT valid only via Authorization header (NOT ?token= query param)
 // Skip auth for article images (public content from WeChat)
 app.use('/uploads', (req, res, next) => {
   if (req.path.startsWith('/articles/')) return next()
-  const token = (req.headers.authorization?.startsWith('Bearer ')
-    ? req.headers.authorization.slice(7)
-    : (req.query.token as string)) || ''
-  if (!token) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
+  }
   try {
-    jwt.verify(token, config.jwtSecret)
+    jwt.verify(authHeader.slice(7), config.jwtSecret)
     next()
   } catch {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })

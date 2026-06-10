@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, rmdirSync, createReadStream, readFileSync, writeFileSync, appendFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, rmdirSync, createReadStream, readFileSync, writeFileSync, appendFileSync, rmSync, realpathSync, openSync, fstatSync, closeSync } from 'fs'
 import { join, extname, basename, dirname, relative } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname as pathDirname } from 'path'
@@ -11,6 +11,21 @@ import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { config } from '../config/index.js'
 import { ok, fail } from '../lib/response.js'
 import { ValidationError, NotFoundError } from '../lib/errors.js'
+
+/** 允许上传的文件扩展名白名单 */
+const ALLOWED_EXTENSIONS = new Set([
+  // 文档
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.pdf', '.txt', '.csv', '.md',
+  // 图片
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp',
+  // 音频
+  '.mp3', '.wav', '.flac', '.aac',
+  // 视频
+  '.mp4', '.avi', '.mkv', '.mov', '.wmv',
+  // 压缩包
+  '.zip', '.rar', '.7z', '.tar', '.gz',
+])
 
 const __dirname = pathDirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
@@ -53,7 +68,7 @@ function getUserDir(userId: number): string {
   return dir
 }
 
-/** 安全解析路径：防止 ../ 越权 */
+/** 安全解析路径：防止 ../ 越权，并解析符号链接防 TOCTOU */
 function resolveSafePath(userId: number, relPath: string): string {
   const root = getUserDir(userId).replace(/\\/g, '/')
   // 去掉前导斜杠，防止 absolute path
@@ -62,6 +77,18 @@ function resolveSafePath(userId: number, relPath: string): string {
   const full = join(root, safe).replace(/\\/g, '/')
   const rootWithSep = root + '/'
   if (full !== root && !full.startsWith(rootWithSep)) throw new ValidationError('路径不合法')
+  // 符号链接防护：如果目标存在且是符号链接，解析真实路径后重新验证
+  if (existsSync(full)) {
+    try {
+      const real = realpathSync(full).replace(/\\/g, '/')
+      if (real !== full && !real.startsWith(rootWithSep)) {
+        throw new ValidationError('路径不合法（符号链接越权）')
+      }
+    } catch (e: any) {
+      if (e instanceof ValidationError) throw e
+      // 如果无法解析（如文件已被删除），使用原路径
+    }
+  }
   return full
 }
 
@@ -154,9 +181,9 @@ cleanStaleChunks()
 setInterval(cleanStaleChunks, 3600000) // 每小时检查一次
 
 /** 获取分片上传状态（已接收的分片索引） */
-router.get('/upload/chunk/:identifier', (req: Request, res: Response) => {
+router.get('/upload/chunk/:identifier', requirePermission('chat.access'), (req: Request, res: Response) => {
   const { id: userId } = req.user!
-  const identifier = req.params.identifier
+  const identifier = String(req.params.identifier)
   if (!identifier) throw new ValidationError('缺少 identifier')
   // identifier 格式: userId_timestamp_random，验证归属
   if (!identifier.startsWith(`${userId}_`)) throw new ValidationError('无权访问')
@@ -181,7 +208,7 @@ const chunkUploader = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per chunk
 })
 
-router.post('/upload/chunk', (req: Request, res: Response) => {
+router.post('/upload/chunk', requirePermission('chat.access'), (req: Request, res: Response) => {
   const { id: userId } = req.user!
   chunkUploader.single('file')(req, res, (err: any) => {
     if (err) return fail(res, 400, 'CHUNK_ERROR', err.message || '分片上传失败')
@@ -291,6 +318,47 @@ const uploadMulter = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max per file
 })
 
+// ── 网速限流（令牌桶算法，每用户独立限速）───────────────────────
+const BANDWIDTH_LIMIT = 100 * 1024 // 100 KB/s 每人
+const BANDWIDTH_BURST = 1024 * 1024 // 最多突发 1 MB
+
+const userBuckets = new Map<number, { tokens: number; lastRefill: number }>()
+/** 定时清理过期桶（5 分钟无操作） */
+setInterval(() => {
+  const now = Date.now()
+  for (const [uid, bucket] of userBuckets) {
+    if (now - bucket.lastRefill > 300_000) userBuckets.delete(uid)
+  }
+}, 60_000)
+
+function getBucket(userId: number) {
+  let b = userBuckets.get(userId)
+  const now = Date.now()
+  if (!b) {
+    b = { tokens: BANDWIDTH_BURST, lastRefill: now }
+    userBuckets.set(userId, b)
+  }
+  // 用时间差补充令牌
+  const elapsedSec = (now - b.lastRefill) / 1000
+  b.tokens = Math.min(BANDWIDTH_BURST, b.tokens + elapsedSec * BANDWIDTH_LIMIT)
+  b.lastRefill = now
+  return b
+}
+
+async function throttleBandwidth(userId: number, bytes: number): Promise<void> {
+  const b = getBucket(userId)
+  if (b.tokens >= bytes) {
+    b.tokens -= bytes
+    return
+  }
+  // 令牌不够 → 等待补充
+  const deficit = bytes - b.tokens
+  const waitMs = Math.ceil((deficit / BANDWIDTH_LIMIT) * 1000)
+  b.tokens = 0
+  b.lastRefill += waitMs // 预支时间，防止短时间内多重扣减
+  await new Promise(resolve => setTimeout(resolve, waitMs))
+}
+
 // ── Routes ───────────────────────────────────────────────────────────
 
 // GET /api/storage/info — 存储概览
@@ -361,10 +429,10 @@ router.post('/mkdir', (req: Request, res: Response) => {
   ok(res, { success: true, path })
 })
 
-// POST /api/storage/upload — 上传文件
+// POST /api/storage/upload — 上传文件（带宽限速 100KB/s 每用户）
 router.post('/upload', (req: Request, res: Response) => {
   const { id: userId } = req.user!
-  uploadMulter.single('file')(req, res, (err: any) => {
+  uploadMulter.single('file')(req, res, async (err: any) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') return fail(res, 400, 'FILE_TOO_LARGE', '文件大小超出限制（最大 500MB）')
@@ -381,6 +449,13 @@ router.post('/upload', (req: Request, res: Response) => {
       return fail(res, 400, 'INVALID_NAME', e.message)
     }
 
+    // 白名单校验：只允许上传指定文件类型
+    const fileExt = extname(rawName).toLowerCase()
+    if (!ALLOWED_EXTENSIONS.has(fileExt)) {
+      try { unlinkSync(req.file.path) } catch {}
+      return fail(res, 400, 'FILE_TYPE_BLOCKED', `不支持上传「${fileExt}」文件类型，允许的类型：文档/图片/音视频/压缩包`)
+    }
+
     const targetPath = (req.body.path as string) || ''
     const targetDir = resolveSafePath(userId, targetPath)
     if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
@@ -392,6 +467,9 @@ router.post('/upload', (req: Request, res: Response) => {
       try { unlinkSync(req.file.path) } catch {}
       return fail(res, 400, 'QUOTA_EXCEEDED', e.message)
     }
+
+    // 带宽限速：消耗令牌（根据文件大小决定等待时间）
+    await throttleBandwidth(userId, req.file.size)
 
     // 处理文件名冲突（basename 去除路径穿越）
     let fileName = rawName
@@ -419,16 +497,10 @@ router.post('/upload', (req: Request, res: Response) => {
   })
 })
 
-// GET /api/storage/download?path=xxx&token=xxx — 下载文件
+// GET /api/storage/download?path=xxx — 下载文件
+// 仅通过 Authorization header 验证（不接收 ?token= 查询参数，防止 Token 泄露到日志）
+// 强制 Content-Disposition: attachment，防止浏览器直接渲染 HTML/SVG 等
 router.get('/download', (req: Request, res: Response) => {
-  // 支持 ?token= 参数（用于 <a> 标签直接下载）
-  const tokenFromQuery = req.query.token as string | undefined
-  if (tokenFromQuery) {
-    try {
-      const payload = jwt.verify(tokenFromQuery, config.jwtSecret) as any
-      ;(req as any).user = { id: payload.id }
-    } catch { return fail(res, 401, 'UNAUTHORIZED', '登录已过期') }
-  }
   if (!req.user) return fail(res, 401, 'UNAUTHORIZED', '未登录')
   const { id: userId } = req.user!
   const relPath = req.query.path as string
@@ -437,11 +509,34 @@ router.get('/download', (req: Request, res: Response) => {
   if (!existsSync(filePath)) throw new NotFoundError('文件不存在')
   if (statSync(filePath).isDirectory()) throw new ValidationError('不能下载文件夹（请打包后下载）')
 
+  // TOCTOU 防护：通过 fd 验证打开的文件仍是原文件
+  const fd = openSync(filePath, 'r')
+  try {
+    const st = fstatSync(fd)
+    if (!st.isFile()) throw new ValidationError('不是有效文件')
+    // 再次验证真实路径（防止 stat 后文件被替换为符号链接）
+    try {
+      const real = realpathSync(filePath).replace(/\\/g, '/')
+      const root = getUserDir(userId).replace(/\\/g, '/') + '/'
+      if (!real.startsWith(root)) throw new ValidationError('路径不合法')
+    } catch (e: any) {
+      if (e instanceof ValidationError) throw e
+    }
+  } catch (e: any) {
+    closeSync(fd)
+    if (e instanceof ValidationError) throw e
+    throw new NotFoundError('文件不存在')
+  }
+
   const fileName = basename(filePath)
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+  // 强制 attachment 下载，禁止浏览器渲染（存储型 XSS 防护）
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}; filename="${encodeURIComponent(fileName)}"`)
   res.setHeader('Content-Type', 'application/octet-stream')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
   const stream = createReadStream(filePath)
   stream.pipe(res)
+  // 确保不再有 fd 泄露
+  stream.on('close', () => { try { closeSync(fd) } catch {} })
 })
 
 // DELETE /api/storage/delete — 删除文件或文件夹
@@ -458,7 +553,7 @@ router.delete('/delete', (req: Request, res: Response) => {
   let size = 0
   if (st.isDirectory()) {
     size = dirSize(filePath)
-    rmdirSync(filePath, { recursive: true })
+    rmSync(filePath, { recursive: true, force: true })
   } else {
     size = st.size
     unlinkSync(filePath)
@@ -473,25 +568,36 @@ router.post('/batch-delete', (req: Request, res: Response) => {
   const { paths } = req.body
   if (!Array.isArray(paths) || paths.length === 0) throw new ValidationError('请指定路径列表')
   const root = getUserDir(userId)
-  let deleted = 0
-  let freedBytes = 0
+
+  // 预验证：所有路径先校验合法性
+  const resolved: string[] = []
   const errors: string[] = []
   for (const p of paths) {
     try {
       const fp = resolveSafePath(userId, p)
-      if (fp === root) { errors.push(`${p}: 不能删除根目录`); continue }
-      if (!existsSync(fp)) { errors.push(`${p}: 不存在`); continue }
+      if (fp === root) { errors.push(`「${p}」: 不能删除根目录`); continue }
+      if (!existsSync(fp)) { errors.push(`「${p}」: 不存在`); continue }
+      resolved.push(fp)
+    } catch {
+      errors.push(`「${p}」: 路径不合法`)
+    }
+  }
+
+  let deleted = 0
+  let freedBytes = 0
+  for (const fp of resolved) {
+    try {
       const st = statSync(fp)
       if (st.isDirectory()) {
         freedBytes += dirSize(fp)
-        rmdirSync(fp, { recursive: true })
+        rmSync(fp, { recursive: true, force: true })
       } else {
         freedBytes += st.size
         unlinkSync(fp)
       }
       deleted++
-    } catch (e: any) {
-      errors.push(`${p}: ${e.message || '删除失败'}`)
+    } catch {
+      errors.push('部分文件删除失败')
     }
   }
   if (freedBytes > 0) addStorageUsed(userId, -freedBytes)
@@ -507,17 +613,18 @@ router.post('/move', (req: Request, res: Response) => {
   const targetDir = resolveSafePath(userId, target)
   if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
 
-  let moved = 0
+  const root = getUserDir(userId)
   const errors: string[] = []
+
+  // 预验证所有路径
+  const resolved: Array<{ src: string; dest: string }> = []
   for (const p of paths) {
     try {
       const src = resolveSafePath(userId, p)
-      const root = getUserDir(userId)
-      if (src === root) { errors.push(`${p}: 不能移动根目录`); continue }
-      if (!existsSync(src)) { errors.push(`${p}: 不存在`); continue }
-      // 检测是否将目录移入自身子目录
+      if (src === root) { errors.push(`「${p}」: 不能移动根目录`); continue }
+      if (!existsSync(src)) { errors.push(`「${p}」: 不存在`); continue }
       if (targetDir.startsWith(src + '/') || targetDir === src) {
-        errors.push(`${p}: 不能将目录移入自身`); continue
+        errors.push(`「${p}」: 不能将目录移入自身`); continue
       }
       const name = basename(src)
       let dest = join(targetDir, name)
@@ -526,17 +633,37 @@ router.post('/move', (req: Request, res: Response) => {
         const base = basename(name, ext)
         dest = join(targetDir, `${base}_${Date.now()}${ext}`)
       }
-      renameSync(src, dest)
-      moved++
-    } catch (e: any) {
-      errors.push(`${p}: ${e.message || '移动失败'}`)
+      resolved.push({ src, dest })
+    } catch {
+      errors.push(`「${p}」: 路径不合法`)
     }
   }
-  // move 不改变总用量（同一用户目录内）
+
+  let moved = 0
+  for (const { src, dest } of resolved) {
+    try {
+      renameSync(src, dest)
+      moved++
+    } catch {
+      errors.push('部分文件移动失败')
+    }
+  }
   ok(res, { success: true, moved, errors: errors.length > 0 ? errors : undefined })
 })
 
-// PUT /api/storage/rename — 重命名
+/** 强制保留文件扩展名（禁止改后缀） */
+function enforceSameExt(oldName: string, newName: string): string {
+  const oldExt = extname(oldName)
+  if (!oldExt) return newName // 无扩展名的文件不限制
+  const newExt = extname(newName)
+  if (newExt && newExt !== oldExt) {
+    throw new ValidationError(`不能修改文件扩展名，原始扩展名为「${oldExt}」`)
+  }
+  if (!newExt) return newName + oldExt // 没写扩展名则自动补上
+  return newName
+}
+
+// PUT /api/storage/rename — 重命名（禁止改后缀）
 router.put('/rename', (req: Request, res: Response) => {
   const { id: userId } = req.user!
   const { path, new_name } = req.body
@@ -546,13 +673,15 @@ router.put('/rename', (req: Request, res: Response) => {
   const root = getUserDir(userId)
   if (oldPath === root) throw new ValidationError('不能重命名根目录')
   if (!existsSync(oldPath)) throw new NotFoundError('文件或文件夹不存在')
+  const oldName = basename(oldPath)
+  const finalName = enforceSameExt(oldName, new_name)
   const parent = dirname(oldPath)
-  const newPath = join(parent, new_name)
+  const newPath = join(parent, finalName)
   if (existsSync(newPath)) throw new ValidationError('目标名称已存在')
   try { renameSync(oldPath, newPath) } catch {
     throw new ValidationError('重命名失败，文件可能被占用')
   }
-  ok(res, { success: true, name: new_name })
+  ok(res, { success: true, name: finalName })
 })
 
 // ── 管理端 API（需 roles.manage 权限） ──────────────────────────────
@@ -573,7 +702,7 @@ router.get('/groups', requirePermission('roles.manage'), (req: Request, res: Res
 })
 
 // PUT /api/storage/groups/:id — 设置权限组配额
-router.put('/groups/:id', (req: Request, res: Response) => {
+router.put('/groups/:id', requirePermission('roles.manage'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   const { storage_limit } = req.body
@@ -599,6 +728,90 @@ router.put('/groups/:id', (req: Request, res: Response) => {
   `).run(storage_limit, id, id, storage_limit)
 
   ok(res, { success: true })
+})
+
+// ── Batch rename ──────────────────────────────────────────────────────
+// POST /api/storage/batch-rename — 批量重命名（支持替换/前缀/后缀/序号）
+router.post('/batch-rename', (req: Request, res: Response) => {
+  const { id: userId } = req.user!
+  const { paths, mode, find, replace, text, pattern, start } = req.body
+
+  if (!Array.isArray(paths) || paths.length === 0) throw new ValidationError('请指定文件路径列表')
+  if (!mode || !['replace', 'prefix', 'suffix', 'number'].includes(mode)) throw new ValidationError('重命名模式无效')
+
+  if (mode === 'number' && (!pattern || !pattern.includes('{n}'))) {
+    throw new ValidationError('序号模式需要包含 {n} 占位符')
+  }
+
+  const root = getUserDir(userId)
+  let renamed = 0
+  const errors: string[] = []
+
+  // 预验证所有路径
+  const resolved: Array<{ fp: string; parent: string; oldName: string; ext: string; base: string }> = []
+  for (const p of paths) {
+    try {
+      const fp = resolveSafePath(userId, p)
+      if (fp === root) { errors.push(`「${p}」: 不能重命名根目录`); continue }
+      if (!existsSync(fp)) { errors.push(`「${p}」: 不存在`); continue }
+      const parent = dirname(fp)
+      const oldName = basename(fp)
+      const ext = extname(oldName)
+      const base = basename(oldName, ext)
+      resolved.push({ fp, parent, oldName, ext, base })
+    } catch {
+      errors.push(`「${p}」: 路径不合法`)
+    }
+  }
+
+  for (let i = 0; i < resolved.length; i++) {
+    try {
+      const { fp, parent, oldName, ext, base } = resolved[i]
+
+      let newName: string
+      switch (mode) {
+        case 'replace': {
+          if (find === undefined || find === '') throw new ValidationError('替换模式需要提供查找文本')
+          const rep = replace ?? ''
+          newName = oldName.replaceAll(find, rep)
+          break
+        }
+        case 'prefix':
+          newName = (text || '') + oldName
+          break
+        case 'suffix':
+          newName = base + (text || '') + ext
+          break
+        case 'number': {
+          const num = (start || 1) + i
+          newName = pattern.replace(/\{n\}/g, String(num).padStart(String(paths.length).length, '0'))
+          break
+        }
+        default:
+          throw new ValidationError('未知模式')
+      }
+
+      if (!newName) { errors.push('新名称为空'); continue }
+      if (newName === oldName) { errors.push(`「${oldName}」: 新名称无变化`); continue }
+
+      // 强制保留原扩展名
+      try { newName = enforceSameExt(oldName, newName) } catch (e: any) {
+        errors.push(e.message); continue
+      }
+
+      validateFileName(newName)
+
+      const newPath = join(parent, newName)
+      if (existsSync(newPath)) { errors.push(`新名称「${newName}」已存在`); continue }
+
+      renameSync(fp, newPath)
+      renamed++
+    } catch (e: any) {
+      errors.push('重命名失败: ' + (e.message || '未知错误'))
+    }
+  }
+
+  ok(res, { success: true, renamed, errors: errors.length > 0 ? errors : undefined })
 })
 
 export default router

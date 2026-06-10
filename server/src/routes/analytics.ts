@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { getDb } from '../db/init.js'
-import { authMiddleware } from '../middleware/auth.js'
+import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { ok } from '../lib/response.js'
 
 const router = Router()
@@ -17,7 +17,7 @@ export function trackPageView(path: string) {
 
 // ── GET /api/analytics/dashboard ───────────────────────────────────────────
 
-router.get('/dashboard', (_req: Request, res: Response) => {
+router.get('/dashboard', requirePermission('audit_logs.read'), (_req: Request, res: Response) => {
   const db = getDb()
 
   // 1. User counts

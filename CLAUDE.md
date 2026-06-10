@@ -44,7 +44,7 @@ src/
 ├── api/client.ts         # HTTP client: fetch wrapper with JWT, ApiEnvelope unwrapping
 ├── router/index.ts       # Vue Router with role-based guards (teacher vs student)
 ├── stores/auth.ts        # Pinia auth store: login/logout, localStorage persistence
-├── types/index.ts        # All TypeScript interfaces (User, Score, Assignment, Post, etc.)
+├── types/index.ts        # All TypeScript interfaces (User, Score, Assignment, PointRecord, etc.)
 ├── layouts/DashboardLayout.vue  # Sidebar + Header shell for authenticated pages
 ├── components/
 │   ├── chat/             # AI chat UI (ChatLayout, ChatSidebar, ChatThread, ChatInput, etc.)
@@ -55,25 +55,35 @@ src/
 │   └── Logo.vue
 ├── views/
 │   ├── Login.vue         # Standalone login page
-│   ├── Chat.vue          # AI assistant page (teacher only) — 788 lines, large component
-│   ├── ChatPage.vue      # Chat page wrapper
-│   ├── student/          # Student views: Points, Leaderboard, Assignments, Profile, ScoreDetails, GradeRanking
-│   └── teacher/          # Teacher views: PointsManage, AssignmentCollect, StudentManage, RoleManage, DashboardHome, AuditLogs, TrafficMonitor, SettingsPage, GradeManage
+│   ├── Chat.vue          # AI assistant page (teacher only) — 800+ lines, large monolithic component
+│   ├── ChatPage.vue      # Chat page wrapper (also the public landing at /)
+│   ├── student/          # Student views (see below)
+│   └── teacher/          # Teacher views (see below, 19 views)
 └── composables/
     ├── useCountUp.ts     # Animated number counter
     ├── useScrollReveal.ts # Scroll-triggered reveal animations
     ├── useRefresh.ts     # Injects refreshTick to trigger data reloads across components
     ├── useSearchPanel.ts # Shared search panel state (singleton) — displays web search results with favicons
     └── useTheme.ts       # Theme toggle (light/dark)
+
+**Teacher views** (`src/views/teacher/`): DashboardHome, PointsManage, AssignmentCollect, UserManage, RoleManage, ReviewTypeManage, GradeManage, AuditLogs, TrafficMonitor, DiskManage, CourseManage, Articles, PointDetails, SettingsPage, SiteGeneralSettings, SiteData, SystemUpdate, SkillManage, BackupManage
+
+**Student views** (`src/views/student/`): StudentPoints, Leaderboard, Profile, AssignmentQuery, ScoreDetails, GradeRanking, StudentDisk, DashboardHome
+
+**Shared views** (used by both roles via router meta): `PointsManage.vue` (teachers always; students with `points.write`), `Articles.vue` (teachers; students with `articles.read`)
 ```
 
 - **No registration:** All accounts are created by teachers via the student management page. Students log in with teacher-assigned credentials (default password `123456`). There is no public registration endpoint.
-- **Routing:** `/` is public landing (ChatPage). `/login` is the fallback. `/teacher/*` and `/student/*` require auth + matching role. The router guard checks `localStorage` for persisted user and redirects unauthorized access. `router.afterEach` tracks page views via `/api/analytics/pv`.
+- **Routing:** `/` is public landing (ChatPage). `/login` is the fallback. `/teacher/*` and `/student/*` require auth + matching role. The router guard calls `auth.loadFromStorage()` on each navigation (reads `localStorage` key `ourclass_user`), checks role, then checks granular permission codes via `route.meta.permissions`. Unauthorized → redirect to `/`. `router.afterEach` tracks page views via `POST /api/analytics/pv`.
+
+  Route meta permissions pattern: `meta: { permissions: ['points.read'] }` — the guard requires at least one match via `authStore.hasPermission()`. Student routes may also declare permissions (e.g. `/student/points-manage` requires `points.write`). Routes without meta.permissions only check the role.
 - **State:** Pinia `useAuthStore` holds current user. `loadFromStorage()` hydrates from `localStorage('ourclass_user')` on each navigation. JWT token is stored inside the user object.
 - **API client:** `src/api/client.ts` wraps `fetch` with automatic JWT header injection, JSON parsing, and error handling. All responses follow `{ success: boolean, data: T }` envelope — the client unwraps `data` or throws on `success: false`.
 - **UI:** Naive UI component library with a dark theme and custom theme overrides (`primaryColor: #5E6AD2`). Tailwind CSS 4 for utility styles.
 - **icons:** `@lucide/vue` for icons. `font-awesome-icon` is NOT available (use emoji or lucide instead).
-- **Chat component** (src/views/Chat.vue) is a large monolithic component handling SSE streaming, tool execution display, random pick animation, base64 conversation IDs.
+- **Chat component** (src/views/Chat.vue) is a large monolithic component (~800 lines) handling SSE streaming, tool execution display, random pick animation, base64-encoded conversation IDs.
+- **Shared views pattern:** Some `.vue` components are shared between teacher and student routes via the router. E.g., `PointsManage.vue` mounts at both `/teacher/points` and `/student/points-manage`; `Articles.vue` mounts at `/teacher/articles` and `/student/articles`. The component checks `authStore.permissions` internally to gate actions. When modifying a shared component, test both roles.
+- **Scripts directory** (`scripts/`): Contains browser debugging utilities — `edge-debug.sh` (starts Edge with CDP port 9222), `mcp-browser.mjs` (MCP browser server for screenshots + vision analysis via MiMo), `screenshot.sh` (macOS screencapture wrapper). Other scripts are development utilities.
 
 ### Backend (`server/src/`)
 
@@ -84,7 +94,7 @@ server/src/
 ├── db/
 │   ├── init.ts           # DB singleton (better-sqlite3), runs migrations + seeds demo data
 │   ├── migrate.ts        # File-based SQL migration runner
-│   └── migrations/       # Numbered SQL migration files (001_schema.sql → 011_traffic_logs.sql)
+│   └── migrations/       # Numbered SQL migration files (001_schema.sql → 037_article_read_permission.sql)
 ├── lib/
 │   ├── errors.ts         # AppError hierarchy: NotFoundError, ValidationError, AuthError, ForbiddenError
 │   ├── response.ts       # ok() and fail() helpers — consistent JSON envelope
@@ -107,13 +117,15 @@ server/src/
     └── classes.ts        # Class list
 ```
 
-- **Database:** SQLite via `better-sqlite3` (synchronous API). DB file at `server/data.db`. Migrations run automatically on first `getDb()` call. Latest schema includes: `users`, `scores`, `assignments`, `submissions`, `point_records`, `posts`, `comments`, `api_keys`, `conversations`, `messages`, `permission_groups`, `group_permissions`, `audit_logs`, `page_views`, `traffic_logs`.
+- **Database:** SQLite via `better-sqlite3` (synchronous API). DB file at `server/data.db`. Migrations run automatically on first `getDb()` call. Latest schema includes 37 migrations covering: `users`, `scores`, `assignments`, `submissions`, `point_records`, `review_types`, `posts`, `comments`, `api_keys`, `conversations`, `messages`, `permission_groups`, `group_permissions`, `audit_logs`, `page_views`, `traffic_logs`, `articles`, `storage_files`, `site_settings`, `courses`.
 - **Auth:** JWT-based. `signToken()` creates tokens with `{ id, role }` payload. `authMiddleware` verifies Bearer token, looks up user in DB, attaches `req.user` with `permissions[]`. Password comparison is plaintext (demo project).
-- **Permissions:** Role-based access control via `requirePermission(code)` middleware. Each user belongs to a `permission_group`. Default groups: 教师 (all perms), 学生 (basic perms). Permission codes: `students.read/write/delete`, `points.read/write`, `scores.read/write/delete`, `assignments.read/write/submit/grade`, `chat.access/config`, `roles.manage`, `audit_logs.read`, `classes.read`.
+- **Permissions:** Role-based access control via `requirePermission(code)` middleware. Each user belongs to a `permission_group`. Default groups: 教师 (all perms), 学生 (basic perms). Permission codes: `students.read/write/delete`, `points.read/write`, `scores.read/write/delete`, `assignments.read/write/submit/grade`, `chat.access/config`, `roles.manage`, `audit_logs.read`, `classes.read`, `articles.read/manage`, `tools.manage`, `settings.manage`.
 - **Response format:** All endpoints return `{ success: true, data }` or `{ success: false, error: { code, message } }`. Use `ok(res, data)` and `fail(res, status, code, message)` helpers.
+- **Routes (21 files):** `auth.ts`, `analytics.ts`, `articles.ts`, `assignments.ts`, `audit.ts`, `backup.ts`, `chat.ts`, `chat-settings.ts`, `classes.ts`, `courses.ts`, `points.ts`, `reviewTypes.ts`, `roles.ts`, `scores.ts`, `site-settings.ts`, `skills.ts`, `storage.ts`, `students.ts`, `teachers.ts`, `update.ts`, `upload.ts`
 - **Validation:** Zod schemas passed to `validate(schema, source?)` middleware. Supports `body`, `query`, `params` sources.
 - **Seeding:** `init.ts` → `seedAllData()` seeds 1 teacher + 9 students, scores (4 exams × 4 courses), assignments, submissions, point records. Seeds only run if the `users` and `point_records` tables are empty.
 - **Chat/AI:** `POST /api/chat/conversations/:id/chat` streams AI responses via SSE. Supports both Anthropic Claude (default) and OpenAI-compatible APIs (DeepSeek, Zhipu/GLM). Tool execution for data queries (points, scores, students, weather, web search, random pick). Messages stored in DB with prompt caching. Config via `POST /api/chat/config`.
+- **File upload:** Uses `multer` (multipart form data). Backup at `server/src/routes/upload.ts` supports XLSX/PDF/docx parsing. Student data can be imported/exported via XLSX. File storage managed via `storage.ts` and `storage_files` table.
 
 ### Roles
 

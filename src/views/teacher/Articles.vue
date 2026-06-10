@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumn } from 'naive-ui'
+import { safeHtml } from '@/utils/sanitize'
 import {
   NButton, NInput, NModal, NSpin, NEmpty, NText, NCard, NDivider,
   NScrollbar, NSpace, NTag, NIcon, NDataTable, NAlert,
@@ -182,6 +183,8 @@ function formatDateTime(d: string) {
 function renderMarkdown(md: string) {
   if (!md) return ''
   let html = marked.parse(md) as string
+  // XSS 防护：用 DOMPurify 过滤渲染后的 HTML
+  html = safeHtml(html)
   html = html.replace(
     /<pre><code class="language-(\w*)">([\s\S]*?)<\/code><\/pre>/g,
     (_, lang, code) =>

@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import bcrypt from 'bcrypt'
 import { getDb } from '../db/init.js'
 import { signToken, authMiddleware } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { AuthError } from '../lib/errors.js'
+
+const BCRYPT_ROUNDS = 10
 
 const router = Router()
 
@@ -26,7 +29,7 @@ const loginSchema = z.object({
 })
 
 // POST /api/auth/login
-router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
+router.post('/login', validate(loginSchema), async (req: Request, res: Response) => {
   const { username, password } = req.body
 
   const db = getDb()
@@ -52,8 +55,19 @@ router.post('/login', validate(loginSchema), (req: Request, res: Response) => {
     return fail(res, 404, 'NOT_FOUND', '用户不存在')
   }
 
-  if (user.password !== password) {
+  // 兼容旧版明文密码与 bcrypt 哈希
+  const passwordMatch = user.password.startsWith('$2b$')
+    ? await bcrypt.compare(password, user.password)
+    : user.password === password
+
+  if (!passwordMatch) {
     return fail(res, 401, 'AUTH_ERROR', '密码错误')
+  }
+
+  // 升级旧版明文密码到 bcrypt
+  if (!user.password.startsWith('$2b$')) {
+    const hashed = await bcrypt.hash(user.password, BCRYPT_ROUNDS)
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, user.id)
   }
 
   // 从权限组类型推导角色（高度自治：不再硬编码组名称）
