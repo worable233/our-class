@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { computed, h } from 'vue'
+import { ref, computed, h, onMounted } from 'vue'
+import { api } from '@/api/client'
 import type { MenuOption } from 'naive-ui'
 import { NLayoutSider, NMenu, NIcon, NTooltip, NBadge } from 'naive-ui'
 import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList, RefreshCw, HardDrive } from '@lucide/vue'
@@ -14,6 +15,15 @@ const router = useRouter()
 const auth = useAuthStore()
 const { isDark } = useTheme()
 const { hasUpdate } = useUpdateChecker()
+
+const siteTitle = ref('OurClass')
+
+onMounted(async () => {
+  try {
+    const data = await api.get<{ site_title: string }>('/site-settings')
+    if (data?.site_title) siteTitle.value = data.site_title
+  } catch { /* use default */ }
+})
 
 const props = defineProps<{ collapsed: boolean; isMobile?: boolean; open?: boolean }>()
 const emit = defineEmits<{ 'update:collapsed': [boolean]; close: [] }>()
@@ -151,7 +161,7 @@ function handleUpdateValue(key: string) {
           <div class="sidebar-logo-inner">
             <Logo :size="28" :theme="isDark ? 'dark' : 'light'" />
             <div class="logo-text-area">
-              <span class="text-swap-item active">OurClass</span>
+              <span class="text-swap-item active">{{ siteTitle }}</span>
             </div>
           </div>
         </div>
@@ -184,7 +194,7 @@ function handleUpdateValue(key: string) {
           <div class="sidebar-logo-inner">
             <Logo :size="28" :theme="isDark ? 'dark' : 'light'" class="shrink-0" />
             <div v-show="!collapsed" class="logo-text-area grid">
-              <span class="text-swap-item active">OurClass</span>
+              <span class="text-swap-item active">{{ siteTitle }}</span>
               <span class="text-swap-item">返回首页</span>
             </div>
           </div>
@@ -204,7 +214,7 @@ function handleUpdateValue(key: string) {
             <template #trigger>
               <a href="https://github.com/worable233/our-class" target="_blank" class="sidebar-footer-link">
                 <span class="sidebar-footer-copy">©</span>
-                <span>OurClass</span>
+                <span>{{ siteTitle }}</span>
                 <span class="sidebar-footer-mit">MIT</span>
               </a>
             </template>
