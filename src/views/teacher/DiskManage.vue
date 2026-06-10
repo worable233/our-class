@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api/client'
 import { useMessage, useDialog } from 'naive-ui'
 import {
@@ -266,6 +266,46 @@ function fileIcon(icon: string) { const map: Record<string, any> = { folder: Fol
 function iconColor(icon: string): string { const map: Record<string, string> = { folder: '#f0a020', image: '#18a058', video: '#a050dc', audio: '#5E6AD2', pdf: '#d03050', doc: '#5E6AD2', excel: '#18a058', ppt: '#d03050', archive: '#f0a020', text: '#888', code: '#5E6AD2' }; return map[icon] || '#888' }
 function fmtDate(iso: string) { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { if (pct > 90) return 'error'; if (pct > 70) return 'warning'; if (pct > 30) return 'default'; return 'success' }
+
+// ── Column resizing ──
+const COL_KEYS = ['select', 'icon', 'name', 'size', 'date', 'actions'] as const
+type ColKey = typeof COL_KEYS[number]
+
+const colWidths = reactive<Record<ColKey, number>>({
+  select: 36, icon: 32, name: 280, size: 88, date: 116, actions: 82,
+})
+
+const activeResize = ref<{ key: ColKey; startX: number; startW: number } | null>(null)
+
+function onColResizeStart(key: ColKey, e: MouseEvent) {
+  activeResize.value = { key, startX: e.clientX, startW: colWidths[key] }
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
+function onColResizeMove(e: MouseEvent) {
+  if (!activeResize.value) return
+  const diff = e.clientX - activeResize.value.startX
+  colWidths[activeResize.value.key] = Math.max(32, activeResize.value.startW + diff)
+}
+
+function onColResizeEnd() {
+  if (activeResize.value) {
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    activeResize.value = null
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('mousemove', onColResizeMove)
+  document.addEventListener('mouseup', onColResizeEnd)
+})
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onColResizeMove)
+  document.removeEventListener('mouseup', onColResizeEnd)
+})
 </script>
 
 <template>
@@ -329,18 +369,38 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
         <div class="dm-drag-layer" :class="{ show: dragging }">+ 拖拽文件到此处上传</div>
 
         <!-- 可横向滚动的列表容器 -->
-        <div class="dm-table-wrap">
+        <div class="dm-table-wrap"
+          :style="{
+            '--col-select': colWidths.select + 'px',
+            '--col-icon': colWidths.icon + 'px',
+            '--col-name': colWidths.name + 'px',
+            '--col-size': colWidths.size + 'px',
+            '--col-date': colWidths.date + 'px',
+            '--col-actions': colWidths.actions + 'px',
+          }"
+        >
         <template v-if="sortedEntries.length > 0">
-          <!-- 表头 -->
+          <!-- 表头（可拖拽调整列宽） -->
           <div class="dm-list-header">
-            <div class="dm-col-select" @click="toggleSelectAll">
+            <div class="dm-col dm-col-select" @click="toggleSelectAll">
               <NCheckbox size="small" :checked="sortedEntries.length > 0 && sortedEntries.every(e => selectedPaths.has(e.path))" />
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('select', $event)" />
             </div>
-            <div class="dm-col-icon" />
-            <div class="dm-col-name">名称</div>
-            <div class="dm-col-size">大小</div>
-            <div class="dm-col-date">修改日期</div>
-            <div class="dm-col-actions">操作</div>
+            <div class="dm-col dm-col-icon">
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('icon', $event)" />
+            </div>
+            <div class="dm-col dm-col-name">名称
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('name', $event)" />
+            </div>
+            <div class="dm-col dm-col-size">大小
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('size', $event)" />
+            </div>
+            <div class="dm-col dm-col-date">修改日期
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('date', $event)" />
+            </div>
+            <div class="dm-col dm-col-actions">操作
+              <div class="dm-col-grip" @mousedown.stop="onColResizeStart('actions', $event)" />
+            </div>
           </div>
           <!-- 行 -->
           <div class="dm-list-body" @scroll="closeCtxMenu" @contextmenu="(e) => onContextMenu(e, null)">
@@ -351,21 +411,21 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
               @dblclick="enterDir(entry)"
               @contextmenu="(e) => onContextMenu(e, entry)"
             >
-              <div class="dm-col-select" @click.stop="toggleSelect(entry.path)">
+              <div class="dm-col dm-col-select" @click.stop="toggleSelect(entry.path)">
                 <NCheckbox size="small" :checked="selectedPaths.has(entry.path)" />
               </div>
-              <div class="dm-col-icon" @click.stop="enterDir(entry)">
+              <div class="dm-col dm-col-icon" @click.stop="enterDir(entry)">
                 <component :is="fileIcon(entry.icon)" :size="17" :stroke-width="1.5" :style="{color:iconColor(entry.icon)}" />
               </div>
-              <div class="dm-col-name" @click.stop="entry.is_dir ? enterDir(entry) : null">
+              <div class="dm-col dm-col-name" @click.stop="entry.is_dir ? enterDir(entry) : null">
                 <span class="dm-entry-name">{{ entry.name }}</span>
               </div>
-              <div class="dm-col-size">
+              <div class="dm-col dm-col-size">
                 <span v-if="!entry.is_dir">{{ entry.size_display }}</span>
                 <span v-else class="dm-dir-label">文件夹</span>
               </div>
-              <div class="dm-col-date">{{ fmtDate(entry.modified) }}</div>
-              <div class="dm-col-actions" @click.stop>
+              <div class="dm-col dm-col-date">{{ fmtDate(entry.modified) }}</div>
+              <div class="dm-col dm-col-actions" @click.stop>
                 <NButton size="tiny" quaternary @click="openRename(entry)" round><template #icon><Edit3 :size="12" /></template></NButton>
                 <NButton v-if="!entry.is_dir" size="tiny" quaternary @click="downloadFile(entry)" round><template #icon><Download :size="12" /></template></NButton>
                 <NButton size="tiny" quaternary type="error" @click="confirmDelete(entry)" round><template #icon><Trash2 :size="12" /></template></NButton>
@@ -516,13 +576,35 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
 .dm-list-row:hover { background: var(--surface-2); }
 .dm-list-row.selected { background: rgba(94,106,210,0.08); }
 
-.dm-col-select { width: 32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.dm-col-icon { width: 30px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.dm-col-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dm-col-size { width: 80px; text-align: right; color: var(--text-muted); font-size: 12px; flex-shrink:0; }
-.dm-col-date { width: 110px; color: var(--text-muted); font-size: 12px; flex-shrink:0; }
-.dm-col-actions { width: 80px; text-align: right; flex-shrink: 0; display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .15s; }
+/* ── Column sizing via CSS variables ── */
+.dm-list-header .dm-col,
+.dm-list-row .dm-col {
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dm-col-select { width: var(--col-select, 36px); min-width: var(--col-select, 36px); display:flex; align-items:center; justify-content:center; }
+.dm-col-icon { width: var(--col-icon, 32px); min-width: var(--col-icon, 32px); display:flex; align-items:center; justify-content:center; }
+.dm-col-name { width: var(--col-name, 280px); min-width: var(--col-name, 280px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-col-size { width: var(--col-size, 88px); min-width: var(--col-size, 88px); text-align: right; color: var(--text-muted); font-size: 12px; }
+.dm-col-date { width: var(--col-date, 116px); min-width: var(--col-date, 116px); color: var(--text-muted); font-size: 12px; }
+.dm-col-actions { width: var(--col-actions, 82px); min-width: var(--col-actions, 82px); text-align: right; display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .15s; }
+
+/* ── Column resize grip ── */
+.dm-col { position: relative; }
+.dm-col-grip {
+  position: absolute; top: 0; right: -3px;
+  width: 6px; height: 100%;
+  cursor: col-resize; z-index: 5;
+  background: transparent;
+  transition: background .12s;
+}
+.dm-col-grip:hover,
+.dm-col-grip:active { background: var(--accent); }
+.dm-col:last-child .dm-col-grip { display: none; }
 .dm-list-row:hover .dm-col-actions { opacity: 1; }
+.dm-list-row .dm-col-actions { display: flex; gap: 2px; justify-content: flex-end; }
 
 .dm-entry-name { cursor: pointer; }
 .dm-dir-label { font-size: 11px; color: var(--text-muted); }
@@ -555,10 +637,8 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
 
   /* 可横向滚动 */
   .dm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .dm-list-header, .dm-list-body { min-width: 560px; }
-  .dm-col-date { width: 100px; }
-  .dm-col-size { width: 70px; }
+  .dm-list-header, .dm-list-body { min-width: max-content; }
   .dm-list-row { padding: 5px 10px; font-size: 12px; }
-  .dm-col-actions { width: 72px; opacity: 1; }
+  .dm-col-actions { opacity: 1; }
 }
 </style>
