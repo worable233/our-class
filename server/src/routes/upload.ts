@@ -8,7 +8,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../db/init.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
-import { NotFoundError } from '../lib/errors.js'
+import { NotFoundError, ValidationError } from '../lib/errors.js'
+import { config } from '../config/index.js'
 import { writeAuditLog } from './audit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -123,6 +124,16 @@ router.post(
       if (validationError) {
         try { unlinkSync(req.file.path) } catch {}
         return fail(res, 400, 'INVALID_FILE_TYPE', validationError)
+      }
+
+      // Check storage quota
+      const storageRow = db.prepare('SELECT storage_limit, storage_used FROM user_storage WHERE user_id = ?').get(userId) as any
+      const storageLimit = storageRow?.storage_limit ?? 104857600
+      const storageUsed = storageRow?.storage_used ?? 0
+      if (storageUsed + req.file.size > storageLimit) {
+        try { unlinkSync(req.file.path) } catch {}
+        const free = storageLimit - storageUsed
+        return fail(res, 400, 'STORAGE_FULL', `存储空间不足，剩余 ${Math.max(0, Math.round(free / 1024))}KB，需要 ${Math.round(req.file.size / 1024)}KB`)
       }
 
       // Move file from temp dir to user's storage/upload/ directory

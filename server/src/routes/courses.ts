@@ -48,21 +48,29 @@ const coverUploader = multer({
   },
 })
 
-// GET /api/courses — 课程列表
+// GET /api/courses — 课程列表（支持 ?class=xxx 筛选）
 router.get('/', (req: Request, res: Response) => {
   const db = getDb()
   const { id: userId, permissions, class: userClass } = req.user!
   const hasViewAll = permissions.includes('classes.view_all')
-  const allowedClasses = hasViewAll ? null : userClass.split(',').filter(Boolean).map(c => c.trim())
+  const filterClass = req.query.class as string | undefined
 
   let sql = 'SELECT c.*, u.display_name as creator_name FROM courses c JOIN users u ON c.created_by = u.id'
   const params: string[] = []
+  const conditions: string[] = []
 
-  if (!hasViewAll && allowedClasses && allowedClasses.length > 0) {
-    sql += ` WHERE c.class IN (${allowedClasses.map(() => '?').join(',')})`
-    params.push(...allowedClasses)
+  if (!hasViewAll) {
+    const allowedClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (allowedClasses.length > 0) {
+      conditions.push(`c.class IN (${allowedClasses.map(() => '?').join(',')})`)
+      params.push(...allowedClasses)
+    }
+  } else if (filterClass) {
+    conditions.push('c.class = ?')
+    params.push(filterClass)
   }
 
+  if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ')
   sql += ' ORDER BY c.updated_at DESC'
 
   ok(res, db.prepare(sql).all(...params))
@@ -110,6 +118,13 @@ router.put('/:id', requirePermission('points.read'), validate(updateSchema), (re
 
   const existing = db.prepare('SELECT * FROM courses WHERE id = ?').get(id) as any
   if (!existing) throw new NotFoundError('课程不存在')
+
+  // 权限校验：检查班级归属
+  const { permissions, class: userClass } = req.user!
+  if (!permissions.includes('classes.view_all')) {
+    const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (!allowed.includes(existing.class)) return fail(res, 403, 'FORBIDDEN', '无权修改该班级的课程')
+  }
 
   const fields: string[] = []
   const values: any[] = []
@@ -201,6 +216,13 @@ router.delete('/:id', requirePermission('points.read'), (req: Request, res: Resp
 
   const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(id) as any
   if (!course) throw new NotFoundError('课程不存在')
+
+  // 权限校验：检查班级归属
+  const { permissions, class: userClass } = req.user!
+  if (!permissions.includes('classes.view_all')) {
+    const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (!allowed.includes(course.class)) return fail(res, 403, 'FORBIDDEN', '无权删除该班级的课程')
+  }
 
   if (course.cover_url) {
     const filePath = join(__dirname, '..', '..', course.cover_url)

@@ -30,12 +30,16 @@ const saving = ref(false)
 const coverUploading = ref(false)
 const showCoverPicker = ref(false)
 const pickingCourseId = ref<number | null>(null)
+const filterClass = ref('')
+
+const hasViewAll = computed(() => auth.permissions.includes('classes.view_all'))
 
 async function load() {
   loading.value = true
   try {
+    const params = filterClass.value ? `?class=${encodeURIComponent(filterClass.value)}` : ''
     const [c, cls] = await Promise.all([
-      api.get<Course[]>('/courses'),
+      api.get<Course[]>(`/courses${params}`),
       api.get<string[]>('/courses/classes'),
     ])
     courses.value = c
@@ -48,9 +52,13 @@ async function loadClasses() {
   try { classList.value = await api.get<string[]>('/courses/classes') } catch {}
 }
 
+function reset() { load() }
+
 function openNew() {
   editing.value = null
-  form.value = { name: '', description: '', class: classList.value[0] || '' }
+  // 没有 viewAll 权限时，默认选自己班级
+  const defaultClass = hasViewAll.value ? (classList.value[0] || '') : (auth.user?.class?.split(',')[0]?.trim() || classList.value[0] || '')
+  form.value = { name: '', description: '', class: defaultClass }
   showModal.value = true
 }
 
@@ -123,15 +131,27 @@ onMounted(load)
 
 <template>
   <div style="display:flex;flex-direction:column;gap:20px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
       <div>
         <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">课程管理</NText>
         <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">创建和管理课程，用于布置和收集作业</NText>
       </div>
-      <NButton type="primary" @click="openNew" round size="small">
-        <template #icon><Plus :size="16" /></template>
-        创建课程
-      </NButton>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <NSelect
+          v-if="hasViewAll"
+          v-model:value="filterClass"
+          :options="[{label:'全部班级',value:''},...classList.map(c=>({label:c,value:c}))]"
+          style="width:160px"
+          size="small"
+          placeholder="全部班级"
+          clearable
+          @update:value="reset"
+        />
+        <NButton type="primary" @click="openNew" round size="small">
+          <template #icon><Plus :size="16" /></template>
+          创建课程
+        </NButton>
+      </div>
     </div>
 
     <n-spin :show="loading" style="min-height:200px;">
@@ -161,8 +181,8 @@ onMounted(load)
           </div>
           <!-- Actions -->
           <div class="course-actions">
-            <NButton size="tiny" quaternary @click="openEdit(c)" round><template #icon><Edit3 :size="13" /></template>编辑</NButton>
-            <NButton size="tiny" quaternary type="error" @click="remove(c.id)" round><template #icon><Trash2 :size="13" /></template>删除</NButton>
+            <NButton v-if="hasViewAll || auth.user?.class?.split(',').map(c=>c.trim()).includes(c.class)" size="tiny" quaternary @click="openEdit(c)" round><template #icon><Edit3 :size="13" /></template>编辑</NButton>
+            <NButton v-if="hasViewAll || auth.user?.class?.split(',').map(c=>c.trim()).includes(c.class)" size="tiny" quaternary type="error" @click="remove(c.id)" round><template #icon><Trash2 :size="13" /></template>删除</NButton>
           </div>
         </n-card>
       </div>
@@ -174,7 +194,7 @@ onMounted(load)
       <n-form label-placement="top">
         <n-form-item label="课程名称"><n-input v-model:value="form.name" placeholder="例如：高等数学" /></n-form-item>
         <n-form-item label="所属班级">
-          <n-select v-model:value="form.class" :options="classList.map(c=>({label:c,value:c}))" placeholder="选择班级" />
+          <n-select v-model:value="form.class" :options="classList.map(c=>({label:c,value:c}))" placeholder="选择班级" :disabled="!hasViewAll && !!editing" />
         </n-form-item>
         <n-form-item label="课程描述"><n-input v-model:value="form.description" type="textarea" :rows="3" placeholder="可选课程说明" /></n-form-item>
       </n-form>
