@@ -17,6 +17,7 @@ export function getDb(): Database.Database {
     db.pragma('foreign_keys = ON')
     runMigrations(db)
     seedPermissionGroups(db)
+    seedClasses(db)
     seedUsers(db)
     seedAllData(db)
   }
@@ -71,6 +72,13 @@ function seedPermissionGroups(db: Database.Database) {
   // Backfill existing users with appropriate group
   db.prepare("UPDATE users SET group_id = ? WHERE role = 'teacher' AND group_id IS NULL").run(teacherGroup.lastInsertRowid)
   db.prepare("UPDATE users SET group_id = ? WHERE role = 'student' AND group_id IS NULL").run(studentGroup.lastInsertRowid)
+}
+
+function seedClasses(db: Database.Database) {
+  const count = db.prepare('SELECT COUNT(*) as c FROM classes').get() as { c: number }
+  if (count.c > 0) return
+  const insert = db.prepare('INSERT INTO classes (name) VALUES (?)')
+  for (const name of ['高三(1)班', '高三(2)班', '高三(3)班', '高三(4)班', '高三(5)班']) insert.run(name)
 }
 
 function seedUsers(db: Database.Database) {
