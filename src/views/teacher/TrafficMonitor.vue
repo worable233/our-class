@@ -2,7 +2,7 @@
 // @ts-nocheck - globe.gl and three.js types
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { BASE } from '@/api/client'
-import { NSpin, NEmpty, NButton, NText, NCard, NTag, NGi, NGrid } from 'naive-ui'
+import { NSpin, NEmpty, NButton, NText, NCard, NTag } from 'naive-ui'
 import { RotateCw, Activity, Eye, Users, Globe, Shield, ShieldAlert, AlertTriangle, XCircle } from '@lucide/vue'
 
 function getToken(): string {
@@ -15,13 +15,6 @@ const loading = ref(true)
 const data = ref<any>(null)
 const globeEl = ref<HTMLDivElement | null>(null)
 let globeInstance: any = null
-let resizeObserver: ResizeObserver | null = null
-
-// 响应式断点
-const isNarrow = ref(window.innerWidth < 640)
-function onResize() {
-  isNarrow.value = window.innerWidth < 640
-}
 
 // 筛选状态
 const activeView = ref('3d')
@@ -157,22 +150,16 @@ function fmtBytes(b: number): string {
   return b + ' B'
 }
 
-onMounted(() => {
-  load()
-  resizeObserver = new ResizeObserver(onResize)
-  resizeObserver.observe(document.body)
-  onResize()
-})
+onMounted(load)
 onUnmounted(() => {
   try { if (globeInstance && typeof globeInstance._destructor === 'function') globeInstance._destructor() } catch {}
   globeInstance = null
-  if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
 
 <template>
   <div style="height:100%;display:flex;flex-direction:column;">
-    <div :style="{display:'flex',alignItems:isNarrow?'flex-start':'center',justifyContent:'space-between',marginBottom:'20px',flexShrink:0,flexDirection:isNarrow?'column':'row',gap:'8px'}">
+    <div class="page-header">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">流量监控</NText>
         <NText depth="3" style="display:block;margin:0;font-size:14px;">实时监控网站访问流量与 API 调用情况</NText>
@@ -184,36 +171,34 @@ onUnmounted(() => {
 
     <NSpin :show="loading" style="flex:1;min-height:500px">
       <div v-if="data" style="display:flex;flex-direction:column;gap:16px;">
-        <!-- Stats Cards -->
-        <n-grid :cols="isNarrow ? 2 : 8" :x-gap="8" :y-gap="8">
-          <n-gi v-for="s in [
-            { v: fmtCompact(data.requests), l: '总请求数', c: '#0FC6C2', icon: Activity, bytes: false },
-            { v: fmtCompact(data.pv), l: 'GET 请求（PV）', c: '#5E6AD2', icon: Eye, bytes: false },
-            { v: fmtCompact(data.uv), l: '覆盖城市数', c: '#18a058', icon: Users, bytes: false },
-            { v: fmtBytes(data.uniqueIps), l: '总流量', c: '#a050dc', icon: Globe, bytes: true },
-            { v: fmtCompact(data.intercepts), l: '拦截次数', c: '#e86969', icon: Shield, bytes: false },
-            { v: fmtCompact(data.attackIps), l: '攻击来源城市', c: '#FF8859', icon: ShieldAlert, bytes: false },
-            { v: fmtCompact(data.err4xxCount), l: `4xx ${data.err4xxRate}`, c: '#f0a020', icon: AlertTriangle, bytes: false },
-            { v: fmtCompact(data.err5xxCount), l: `5xx ${data.err5xxRate}`, c: '#e869a0', icon: XCircle, bytes: false },
-          ]" :key="s.l">
-            <n-card size="small" :bordered="true" :style="'padding:8px 0'">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div :style="{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.c+'20',color:s.c}">
-                  <component :is="s.icon" :size="16" />
-                </div>
-                <div>
-                  <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2;">{{ s.v }}</div>
-                  <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">{{ s.l }}</div>
-                </div>
+        <!-- Stats Cards (CSS responsive grid) -->
+        <div class="stats-grid">
+          <n-card v-for="s in [
+            { v: fmtCompact(data.requests), l: '总请求数', c: '#0FC6C2', icon: Activity },
+            { v: fmtCompact(data.pv), l: 'GET 请求（PV）', c: '#5E6AD2', icon: Eye },
+            { v: fmtCompact(data.uv), l: '覆盖城市数', c: '#18a058', icon: Users },
+            { v: fmtBytes(data.uniqueIps), l: '总流量', c: '#a050dc', icon: Globe },
+            { v: fmtCompact(data.intercepts), l: '拦截次数', c: '#e86969', icon: Shield },
+            { v: fmtCompact(data.attackIps), l: '攻击来源城市', c: '#FF8859', icon: ShieldAlert },
+            { v: fmtCompact(data.err4xxCount), l: `4xx ${data.err4xxRate}`, c: '#f0a020', icon: AlertTriangle },
+            { v: fmtCompact(data.err5xxCount), l: `5xx ${data.err5xxRate}`, c: '#e869a0', icon: XCircle },
+          ]" :key="s.l" size="small" :bordered="true" style="padding:8px 0">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div :style="{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.c+'20',color:s.c}">
+                <component :is="s.icon" :size="16" />
               </div>
-            </n-card>
-          </n-gi>
-        </n-grid>
+              <div>
+                <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2;">{{ s.v }}</div>
+                <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">{{ s.l }}</div>
+              </div>
+            </div>
+          </n-card>
+        </div>
 
-        <!-- Globe Area -->
-        <div :style="{display:'flex',gap:'12px',minHeight:'460px',flexDirection:isNarrow?'column':'row'}">
+        <!-- Globe Area (CSS responsive flex) -->
+        <div class="globe-layout">
           <div ref="globeEl" class="globe-wrap"></div>
-          <n-card size="small" :bordered="true" :style="{flexShrink:0,display:'flex',flexDirection:'column',width:isNarrow?'100%':'300px',maxHeight:isNarrow?'240px':'none'}">
+          <n-card size="small" :bordered="true" class="geo-panel">
             <template #header>
               <span style="font-size:13px;font-weight:600;">地理位置</span>
             </template>
@@ -240,6 +225,53 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* ── Page header ─────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* ── Stats grid ──────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+}
+@media (max-width: 1024px) {
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Globe layout ────────────────────────── */
+.globe-layout {
+  display: flex;
+  gap: 12px;
+  min-height: 460px;
+}
+.geo-panel {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 900px) {
+  .globe-layout { flex-direction: column; }
+  .geo-panel { width: 100%; max-height: 240px; }
+}
+
+/* ── Globe wrap ──────────────────────────── */
 .globe-wrap {
   flex: 1;
   min-height: 420px;
