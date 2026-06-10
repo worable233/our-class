@@ -19,8 +19,8 @@ if (!existsSync(STORAGE_ROOT)) mkdirSync(STORAGE_ROOT, { recursive: true })
 const router = Router()
 router.use(authMiddleware)
 
-/** Windows 非法文件名字符（含设备名） */
-const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/g
+/** Windows 非法文件名字符（含设备名，无 g 标志防 stateful regex bug） */
+const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/
 const WINDOWS_DEVICES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
 function validateFileName(name: string): void {
