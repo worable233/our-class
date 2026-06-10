@@ -56,6 +56,39 @@ const showMoveModal = ref(false)
 const moveTargets = ref<string[]>([])
 const moveDir = ref('')
 const moveDirs = ref<string[]>([])
+// ── File preview ──
+const showPreview = ref(false)
+const previewFile = ref<FileEntry | null>(null)
+const previewContent = ref('')
+const previewLoading = ref(false)
+
+async function openPreview(entry: FileEntry) {
+  if (entry.is_dir) { enterDir(entry); return }
+  previewFile.value = entry
+  showPreview.value = true
+  const ext = entry.name.includes('.') ? '.' + entry.name.split('.').pop()!.toLowerCase() : ''
+  const imgExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico']
+  const textExts = ['.txt', '.md', '.csv', '.json', '.xml', '.yaml', '.yml', '.log', '.js', '.ts', '.py', '.html', '.css', '.sql', '.sh', '.env', '.ini', '.cfg', '.conf', '.bat', '.ps1']
+  if (imgExts.includes(ext)) {
+    previewContent.value = 'image'
+  } else if (textExts.includes(ext)) {
+    previewLoading.value = true
+    try {
+      const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+      const resp = await fetch(`/api/storage/download?path=${encodeURIComponent(entry.path)}&token=${token}`)
+      if (resp.ok) previewContent.value = await resp.text()
+      else previewContent.value = '无法加载文件内容'
+    } catch { previewContent.value = '加载失败' }
+    finally { previewLoading.value = false }
+  } else if (ext === '.pdf') {
+    previewContent.value = 'pdf'
+  } else {
+    previewContent.value = 'unknown'
+  }
+}
+
+function closePreview() { showPreview.value = false; previewFile.value = null; previewContent.value = '' }
+
 // 批量重命名
 const showBatchRenameModal = ref(false)
 const batchRenameMode = ref<'replace' | 'prefix' | 'suffix' | 'number'>('replace')
@@ -408,7 +441,7 @@ onUnmounted(() => {
               class="dm-list-row"
               :class="{ selected: selectedPaths.has(entry.path) }"
               @click="toggleSelect(entry.path)"
-              @dblclick="enterDir(entry)"
+              @dblclick="openPreview(entry)"
               @contextmenu="(e) => onContextMenu(e, entry)"
             >
               <div class="dm-col dm-col-select" @click.stop="toggleSelect(entry.path)">
@@ -496,6 +529,36 @@ onUnmounted(() => {
     </n-modal>
 
     <UploadPanel />
+
+    <!-- ═══ 文件预览弹窗 ═══ -->
+    <n-modal v-model:show="showPreview" preset="card" :title="previewFile?.name || '预览'" style="width:720px;max-width:92vw;max-height:90vh;" :mask-closable="true" footer-style="padding:10px 16px;" @close="closePreview">
+      <NSpin :show="previewLoading" style="min-height:200px;">
+        <!-- 图片 -->
+        <div v-if="previewContent === 'image' && previewFile" style="display:flex;align-items:center;justify-content:center;padding:16px;">
+          <img :src="`/api/storage/download?path=${encodeURIComponent(previewFile.path)}&token=${JSON.parse(localStorage.getItem('ourclass_user')||'{}').token||''}`" style="max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain;" alt="preview" />
+        </div>
+        <!-- 文本 -->
+        <pre v-else-if="previewContent && previewContent !== 'image' && previewContent !== 'pdf' && previewContent !== 'unknown'" style="margin:0;padding:16px;background:var(--surface-2);border-radius:8px;overflow:auto;max-height:60vh;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">{{ previewContent }}</pre>
+        <!-- PDF -->
+        <div v-else-if="previewContent === 'pdf' && previewFile" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px;">
+          <FileText :size="48" style="color:var(--text-muted);" />
+          <NText depth="3">PDF 文件预览</NText>
+          <NButton type="primary" round @click="downloadFile(previewFile!)">下载查看</NButton>
+        </div>
+        <!-- 其他 -->
+        <div v-else-if="previewContent === 'unknown' && previewFile" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px;">
+          <File :size="48" style="color:var(--text-muted);" />
+          <NText depth="3">此文件类型暂不支持在线预览</NText>
+          <NButton type="primary" round @click="downloadFile(previewFile!)">下载查看</NButton>
+        </div>
+      </NSpin>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton v-if="previewFile && !previewFile.is_dir" size="tiny" type="primary" @click="downloadFile(previewFile)" round><template #icon><Download :size="13" /></template>下载</NButton>
+          <NButton size="tiny" quaternary @click="closePreview" round>关闭</NButton>
+        </NSpace>
+      </template>
+    </n-modal>
   </div>
 </template>
 

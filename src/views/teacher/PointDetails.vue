@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { BASE } from '@/api/client'
 import { RefreshCw } from '@lucide/vue'
 import { useMessage } from 'naive-ui'
 import {
-  NButton, NTag, NSpin, NEmpty, NPagination, NText,
+  NButton, NTag, NSpin, NEmpty, NPagination, NText, NSelect,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
+import { useAuthStore } from '@/stores/auth'
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
@@ -37,12 +38,17 @@ interface DescriptionSegment {
   type: 'muted' | 'accent' | 'primary'
 }
 
+const auth = useAuthStore()
 const message = useMessage()
 const logs = ref<AuditLog[]>([])
 const loading = ref(true)
 const page = ref(1)
 const pageSize = ref(50)
 const meta = ref<PageMeta | null>(null)
+const classList = ref<string[]>([])
+const filterClass = ref('')
+
+const hasViewAll = computed(() => auth.permissions.includes('classes.view_all'))
 
 const actionLabels: Record<string, string> = {
   add_points: '加分',
@@ -85,10 +91,16 @@ async function load() {
     params.set('page', String(page.value))
     params.set('pageSize', String(pageSize.value))
     params.set('entity_type', 'point')
-    const res = await fetch(`${BASE}/audit?${params}`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-    const body = await res.json()
+    if (filterClass.value) params.set('class', filterClass.value)
+    const [body, cls] = await Promise.all([
+      fetch(`${BASE}/audit?${params}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then(r => r.json()),
+      fetch(`${BASE}/classes`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then(r => r.json()).catch(() => ({ success: false, data: [] })),
+    ])
+    if (cls.success) classList.value = cls.data.map((c: any) => c.name) || []
     if (body.success) {
       logs.value = body.data || []
       meta.value = body.meta || null
@@ -118,15 +130,27 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">积分明细</NText>
         <NText depth="3" style="display:block;margin:0;font-size:14px;">查看所有学生的加分与扣分记录</NText>
       </div>
-      <NButton quaternary @click="reset" :disabled="loading" round>
-        <template #icon><RefreshCw :size="15" /></template>
-        刷新
-      </NButton>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <NSelect
+          v-if="hasViewAll"
+          v-model:value="filterClass"
+          :options="[{label:'全部班级',value:''},...classList.map(c=>({label:c,value:c}))]"
+          style="width:160px"
+          size="small"
+          placeholder="全部班级"
+          clearable
+          @update:value="reset"
+        />
+        <NButton quaternary @click="reset" :disabled="loading" round>
+          <template #icon><RefreshCw :size="15" /></template>
+          刷新
+        </NButton>
+      </div>
     </div>
 
     <!-- Log list -->
