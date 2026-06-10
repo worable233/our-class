@@ -68,7 +68,9 @@ app.post('/api/analytics/pv', (req, res) => {
 
 // ── Static files (uploads) ────────────────────────────────────────────────
 // Auth middleware that accepts both Authorization header and ?token= query param
+// Skip auth for article images (public content from WeChat)
 app.use('/uploads', (req, res, next) => {
+  if (req.path.startsWith('/articles/')) return next()
   const token = (req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7)
     : (req.query.token as string)) || ''

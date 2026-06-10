@@ -16,21 +16,12 @@ const message = useMessage()
 const dialog = useDialog()
 
 interface FileEntry {
-  name: string
-  path: string
-  is_dir: boolean
-  size: number
-  size_display: string
-  modified: string
-  icon: string
+  name: string; path: string; is_dir: boolean; size: number
+  size_display: string; modified: string; icon: string
 }
-
 interface StorageInfo {
-  storage_limit: number
-  storage_used: number
-  used_percent: number
-  used_display: string
-  limit_display: string
+  storage_limit: number; storage_used: number; used_percent: number
+  used_display: string; limit_display: string
 }
 
 const storageInfo = ref<StorageInfo | null>(null)
@@ -38,125 +29,92 @@ const currentPath = ref('')
 const entries = ref<FileEntry[]>([])
 const loading = ref(false)
 const selectedFile = ref<FileEntry | null>(null)
-
 const showMkdirModal = ref(false)
 const mkdirName = ref('')
-
 const showRenameModal = ref(false)
 const renameTarget = ref<FileEntry | null>(null)
 const renameValue = ref('')
+const uploading = ref(0)
+const uploadedCount = ref(0)
 
 const breadcrumbs = computed(() => {
   if (!currentPath.value) return [{ label: '根目录', path: '' }]
   const parts = currentPath.value.split('/')
   const items = [{ label: '根目录', path: '' }]
   let acc = ''
-  for (const p of parts) {
-    acc = acc ? `${acc}/${p}` : p
-    items.push({ label: p, path: acc })
-  }
+  for (const p of parts) { acc = acc ? `${acc}/${p}` : p; items.push({ label: p, path: acc }) }
   return items
 })
 
 async function loadInfo() {
   try { storageInfo.value = await api.get<StorageInfo>('/storage/info') } catch {}
 }
-
 async function loadList(path: string = '') {
-  loading.value = true
-  currentPath.value = path
-  selectedFile.value = null
+  loading.value = true; currentPath.value = path; selectedFile.value = null
   try {
-    const res = await api.get<{ path: string; parent: string | null; entries: FileEntry[] }>(`/storage/list?path=${encodeURIComponent(path)}`)
+    const res = await api.get<{ entries: FileEntry[] }>(`/storage/list?path=${encodeURIComponent(path)}`)
     entries.value = res.entries
-  } catch (e: any) {
-    message.error(e.message || '加载失败')
-    entries.value = []
-  } finally { loading.value = false }
+  } catch { entries.value = [] } finally { loading.value = false }
 }
-
-async function refresh() {
-  await Promise.all([loadInfo(), loadList(currentPath.value)])
-}
-
+async function refresh() { await Promise.all([loadInfo(), loadList(currentPath.value)]) }
 onMounted(refresh)
 
-function enterDir(entry: FileEntry) {
-  if (!entry.is_dir) return
-  loadList(entry.path)
-}
-
-function navigateTo(path: string) { loadList(path) }
+function enterDir(entry: FileEntry) { if (entry.is_dir) loadList(entry.path) }
+function navigateTo(path: string) { if (path !== currentPath.value) loadList(path) }
 
 async function createFolder() {
-  if (!mkdirName.value.trim()) return
+  if (!mkdirName.value.trim()) { message.warning('请输入文件夹名称'); return }
   try {
     await api.post('/storage/mkdir', { path: currentPath.value ? `${currentPath.value}/${mkdirName.value}` : mkdirName.value })
-    message.success('文件夹已创建')
-    showMkdirModal.value = false
-    mkdirName.value = ''
-    await loadList(currentPath.value)
-    await loadInfo()
+    message.success('文件夹已创建'); showMkdirModal.value = false; mkdirName.value = ''
+    await loadList(currentPath.value); await loadInfo()
   } catch (e: any) { message.error(e.message || '创建失败') }
 }
 
 function triggerUpload() {
   const input = document.createElement('input')
-  input.type = 'file'
-  input.multiple = true
-  input.onchange = async () => {
-    if (!input.files?.length) return
-    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-    let uploaded = 0
-    for (const file of Array.from(input.files)) {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('path', currentPath.value)
-      try {
-        const res = await fetch('/api/storage/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
-        const body = await res.json()
-        if (body.success) uploaded++
-      } catch {}
-    }
-    if (uploaded > 0) {
-      message.success(`成功上传 ${uploaded} 个文件`)
-      await loadList(currentPath.value)
-      await loadInfo()
-    }
-  }
+  input.type = 'file'; input.multiple = true
+  input.onchange = () => uploadFiles(Array.from(input.files || []))
   input.click()
 }
 
-function openRename(entry: FileEntry) {
-  renameTarget.value = entry
-  renameValue.value = entry.name
-  showRenameModal.value = true
+async function uploadFiles(files: File[]) {
+  if (!files.length) return
+  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  uploading.value = files.length; uploadedCount.value = 0
+  await Promise.all(files.map(async (file) => {
+    const fd = new FormData(); fd.append('file', file); fd.append('path', currentPath.value)
+    try {
+      const res = await fetch('/api/storage/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+      const body = await res.json()
+      if (body.success) uploadedCount.value++
+    } catch {}
+  }))
+  const count = uploadedCount.value; uploading.value = 0; uploadedCount.value = 0
+  if (count > 0) { message.success(`成功上传 ${count} 个文件`); await loadList(currentPath.value); await loadInfo() }
 }
 
+function onDragOver(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.add('drag-over') }
+function onDragLeave(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.remove('drag-over') }
+function onDrop(e: DragEvent) { e.preventDefault(); (e.currentTarget as HTMLElement)?.classList.remove('drag-over'); if (e.dataTransfer?.files.length) uploadFiles(Array.from(e.dataTransfer.files)) }
+
+function openRename(entry: FileEntry) { renameTarget.value = entry; renameValue.value = entry.name; showRenameModal.value = true }
 async function confirmRename() {
   if (!renameTarget.value || !renameValue.value.trim()) return
   try {
     await api.put('/storage/rename', { path: renameTarget.value.path, new_name: renameValue.value.trim() })
-    message.success('已重命名')
-    showRenameModal.value = false
-    renameTarget.value = null
+    message.success('已重命名'); showRenameModal.value = false; renameTarget.value = null
     await loadList(currentPath.value)
   } catch (e: any) { message.error(e.message || '重命名失败') }
 }
 
 function confirmDelete(entry: FileEntry) {
   dialog.warning({
-    title: '确认删除',
-    content: `确定删除「${entry.name}」${entry.is_dir ? '及其所有内容' : ''}？此操作不可撤销。`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: '确认删除', content: `确定删除「${entry.name}」${entry.is_dir ? '及其所有内容' : ''}？此操作不可撤销。`,
+    positiveText: '删除', negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        await api.delete(`/storage/delete?path=${encodeURIComponent(entry.path)}`)
-        message.success('已删除')
-        await loadList(currentPath.value)
-        await loadInfo()
-      } catch (e: any) { message.error(e.message || '删除失败') }
+      try { await api.delete(`/storage/delete?path=${encodeURIComponent(entry.path)}`); message.success('已删除'); await loadList(currentPath.value); await loadInfo() }
+      catch (e: any) { message.error(e.message || '删除失败') }
     },
   })
 }
@@ -165,30 +123,17 @@ function downloadFile(entry: FileEntry) {
   if (entry.is_dir) { message.warning('暂不支持直接下载文件夹'); return }
   const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
   const a = document.createElement('a')
-  a.href = `/api/storage/download?path=${encodeURIComponent(entry.path)}&token=${token}`
-  a.download = entry.name
-  a.click()
+  a.href = `/api/storage/download?path=${encodeURIComponent(entry.path)}&token=${token}`; a.download = entry.name; a.click()
 }
 
 function fileIconComponent(icon: string) {
-  const map: Record<string, any> = {
-    folder: Folder, image: Image, video: Video, audio: Music,
-    pdf: FileType, doc: FileText, excel: FileSpreadsheet, ppt: File,
-    archive: Archive, text: FileText, code: File,
-  }
+  const map: Record<string, any> = { folder: Folder, image: Image, video: Video, audio: Music, pdf: FileType, doc: FileText, excel: FileSpreadsheet, ppt: File, archive: Archive, text: FileText, code: File }
   return map[icon] || File
 }
 
-function fmtDate(iso: string) {
-  const d = new Date(iso)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-}
-
+function fmtDate(iso: string) { const d = new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}` }
 function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
-  if (pct > 90) return 'error'
-  if (pct > 70) return 'warning'
-  if (pct > 30) return 'default'
-  return 'success'
+  if (pct > 90) return 'error'; if (pct > 70) return 'warning'; if (pct > 30) return 'default'; return 'success'
 }
 </script>
 
@@ -201,14 +146,9 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
 
     <n-card :bordered="true" size="small" style="padding:4px 0;">
       <div style="display:flex;align-items:center;gap:16px;">
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <HardDrive :size="18" style="color:var(--accent);" />
-          <span style="font-size:13px;font-weight:500;color:var(--text-primary);">存储空间</span>
-        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><HardDrive :size="18" style="color:var(--accent);" /><span style="font-size:13px;font-weight:500;color:var(--text-primary);">存储空间</span></div>
         <NProgress v-if="storageInfo" :value="storageInfo.used_percent" :indicator-placement="'inside'" :height="20" :border-radius="6" :type="fmtPercent(storageInfo.used_percent)" style="flex:1;min-width:100px;" />
-        <span v-if="storageInfo" style="font-size:12px;color:var(--text-muted);white-space:nowrap;flex-shrink:0;">
-          {{ storageInfo.used_display }} / {{ storageInfo.limit_display }}
-        </span>
+        <span v-if="storageInfo" style="font-size:12px;color:var(--text-muted);white-space:nowrap;flex-shrink:0;">{{ storageInfo.used_display }} / {{ storageInfo.limit_display }}</span>
       </div>
     </n-card>
 
@@ -226,7 +166,13 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
       </div>
     </div>
 
-    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;">
+    <transition name="fade">
+      <n-card v-if="uploading > 0" :bordered="true" size="tiny" style="padding:0;margin-bottom:4px;">
+        <NProgress :value="(uploadedCount / uploading) * 100" :height="16" :border-radius="6" :indicator-placement="'inside'" style="flex:1;" />
+      </n-card>
+    </transition>
+
+    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
       <n-spin :show="loading" style="min-height:200px;">
         <template v-if="entries.length > 0">
           <div class="file-grid">
@@ -275,4 +221,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
 .file-size, .file-modified { font-size:10px;color:var(--text-muted);}
 .file-actions { position:absolute;top:4px;right:4px;display:flex;gap:2px;background:var(--surface-2);border-radius:6px;padding:2px;border:1px solid var(--hairline);}
 .crumb-link:hover { background:var(--surface-2);}
+.n-card.drag-over { background:rgba(94,106,210,0.05);}
+.fade-enter-active, .fade-leave-active { transition:opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity:0; }
 </style>

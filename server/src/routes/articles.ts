@@ -92,7 +92,7 @@ async function downloadImage(url: string, articleDir: string): Promise<string | 
 }
 
 /** Find content container in a WeChat article page */
-function findContentContainer($: cheerio.CheerioAPI): cheerio.Cheerio | null {
+function findContentContainer($: cheerio.CheerioAPI): cheerio.Cheerio<any> | null {
   // WeChat official article
   const jsContent = $('#js_content')
   if (jsContent.length > 0) return jsContent
@@ -106,9 +106,9 @@ function findContentContainer($: cheerio.CheerioAPI): cheerio.Cheerio | null {
   if (article.length > 0) return article
 
   // Largest div by HTML length (fallback)
-  let largest: cheerio.Cheerio | null = null
+  let largest: cheerio.Cheerio<any> | null = null
   let maxLen = 0
-  $('div').each((_i, el) => {
+  $('div').each((_i: number, el: any) => {
     const html = $(el).html() || ''
     if (html.length > maxLen) {
       maxLen = html.length
@@ -195,7 +195,7 @@ router.post(
     }
 
     // 3. Clean up the content HTML
-    const contentEl = contentContainer as cheerio.Cheerio
+    const contentEl = contentContainer as cheerio.Cheerio<any>
 
     // Remove unwanted elements
     contentEl.find('script, style, iframe, svg, .js_pay_article, .reward_area, .rich_media_tool').remove()
@@ -212,7 +212,7 @@ router.post(
     if (!existsSync(articleDir)) mkdirSync(articleDir, { recursive: true })
 
     const imgPromises: Promise<void>[] = []
-    contentEl.find('img').each((_i, el) => {
+    contentEl.find('img').each((_i: number, el: any) => {
       const $el = $(el)
       // WeChat uses data-src for lazy loading
       const imgUrl = $el.attr('data-src') || $el.attr('data-croporisrc') || $el.attr('src') || ''

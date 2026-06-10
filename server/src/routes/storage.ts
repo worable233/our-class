@@ -33,9 +33,10 @@ function resolveSafePath(userId: number, relPath: string): string {
   const root = getUserDir(userId)
   // 去掉前导斜杠，防止 absolute path
   const safe = relPath.replace(/^\/+/, '').replace(/\\/g, '/')
-  // 解析并验证仍在 root 内
+  // 解析并验证仍在 root 内（用分隔符防止 user_1 访问 user_1_secret）
   const full = join(root, safe)
-  if (!full.startsWith(root)) throw new ValidationError('路径不合法')
+  const rootWithSep = root + '/'
+  if (full !== root && !full.startsWith(rootWithSep)) throw new ValidationError('路径不合法')
   return full
 }
 
@@ -65,17 +66,21 @@ function fmtSize(bytes: number): string {
   return bytes + ' B'
 }
 
-/** 计算目录大小（递归） */
+/** 计算目录大小（迭代，防栈溢出） */
 function dirSize(dirPath: string): number {
   let total = 0
-  try {
-    for (const name of readdirSync(dirPath)) {
-      const fp = join(dirPath, name)
-      const st = statSync(fp)
-      if (st.isDirectory()) total += dirSize(fp)
-      else total += st.size
-    }
-  } catch {}
+  const stack = [dirPath]
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    try {
+      for (const name of readdirSync(current)) {
+        const fp = join(current, name)
+        const st = statSync(fp)
+        if (st.isDirectory()) stack.push(fp)
+        else total += st.size
+      }
+    } catch {}
+  }
   return total
 }
 
@@ -199,8 +204,8 @@ router.post('/upload', (req: Request, res: Response) => {
       return fail(res, 400, 'QUOTA_EXCEEDED', e.message)
     }
 
-    // 处理文件名冲突
-    let fileName = req.file.originalname
+    // 处理文件名冲突（basename 去除路径穿越）
+    let fileName = basename(req.file.originalname)
     const destPath = join(targetDir, fileName)
     if (existsSync(destPath)) {
       const ext = extname(fileName)
@@ -257,6 +262,8 @@ router.delete('/delete', (req: Request, res: Response) => {
   const relPath = req.query.path as string
   if (!relPath) throw new ValidationError('请指定路径')
   const filePath = resolveSafePath(userId, relPath)
+  const root = getUserDir(userId)
+  if (filePath === root) throw new ValidationError('不能删除根目录')
   if (!existsSync(filePath)) throw new NotFoundError('文件或文件夹不存在')
 
   const st = statSync(filePath)
@@ -275,11 +282,15 @@ router.put('/rename', (req: Request, res: Response) => {
   const { path, new_name } = req.body
   if (!path || !new_name) throw new ValidationError('请指定路径和新名称')
   const oldPath = resolveSafePath(userId, path)
+  const root = getUserDir(userId)
+  if (oldPath === root) throw new ValidationError('不能重命名根目录')
   if (!existsSync(oldPath)) throw new NotFoundError('文件或文件夹不存在')
   const parent = dirname(oldPath)
   const newPath = join(parent, new_name)
   if (existsSync(newPath)) throw new ValidationError('目标名称已存在')
-  renameSync(oldPath, newPath)
+  try { renameSync(oldPath, newPath) } catch {
+    throw new ValidationError('重命名失败，文件可能被占用')
+  }
   ok(res, { success: true, name: new_name })
 })
 

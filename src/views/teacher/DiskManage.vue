@@ -5,7 +5,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import {
   NCard, NButton, NProgress, NTag, NModal, NForm, NFormItem, NInput, NInputNumber,
   NSelect, NSpace, NSpin, NEmpty, NText, NIcon, NDivider, NButtonGroup,
-  NEllipsis, NPopconfirm,
+  NEllipsis, NPopconfirm, NUpload, NUploadDragger,
 } from 'naive-ui'
 import {
   Folder, File, FileText, FileImage, FileSpreadsheet, FileType, Archive,
@@ -102,6 +102,7 @@ function enterDir(entry: FileEntry) {
 }
 
 function navigateTo(path: string) {
+  if (path === currentPath.value) return
   loadList(path)
 }
 
@@ -119,35 +120,58 @@ async function createFolder() {
 }
 
 // ── Upload ────────────────────────────────────────────────────────────
+const uploading = ref(0)
+const uploadedCount = ref(0)
+
 function triggerUpload() {
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
-  input.onchange = async () => {
-    if (!input.files?.length) return
-    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-    let uploaded = 0
-    for (const file of Array.from(input.files)) {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('path', currentPath.value)
-      try {
-        const res = await fetch('/api/storage/upload', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        })
-        const body = await res.json()
-        if (body.success) uploaded++
-      } catch {}
-    }
-    if (uploaded > 0) {
-      message.success(`成功上传 ${uploaded} 个文件`)
-      await loadList(currentPath.value)
-      await loadInfo()
-    }
-  }
+  input.onchange = () => uploadFiles(Array.from(input.files || []))
   input.click()
+}
+
+async function uploadFiles(files: File[]) {
+  if (!files.length) return
+  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  uploading.value = files.length
+  uploadedCount.value = 0
+  await Promise.all(files.map(async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('path', currentPath.value)
+    try {
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const body = await res.json()
+      if (body.success) uploadedCount.value++
+    } catch {}
+  }))
+  const count = uploadedCount.value
+  uploading.value = 0
+  uploadedCount.value = 0
+  if (count > 0) {
+    message.success(`成功上传 ${count} 个文件`)
+    await loadList(currentPath.value)
+    await loadInfo()
+  }
+}
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  ;(e.currentTarget as HTMLElement)?.classList.add('drag-over')
+}
+function onDragLeave(e: DragEvent) {
+  e.preventDefault()
+  ;(e.currentTarget as HTMLElement)?.classList.remove('drag-over')
+}
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  ;(e.currentTarget as HTMLElement)?.classList.remove('drag-over')
+  if (e.dataTransfer?.files.length) uploadFiles(Array.from(e.dataTransfer.files))
 }
 
 // ── Rename ────────────────────────────────────────────────────────────
@@ -320,11 +344,22 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
       </div>
     </div>
 
+    <!-- ═══ 上传进度 ═══ -->
+    <transition name="fade">
+      <n-card v-if="uploading > 0" :bordered="true" size="tiny" style="padding:0;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <NProgress :value="(uploadedCount / uploading) * 100" :height="16" :border-radius="6" :indicator-placement="'inside'" style="flex:1;" />
+          <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">{{ uploadedCount }} / {{ uploading }}</span>
+        </div>
+      </n-card>
+    </transition>
+
     <!-- ═══ 文件列表 ═══ -->
-    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;">
+    <n-card :bordered="true" size="small" style="flex:1;min-height:300px;"
+      @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop"
+    >
       <n-spin :show="loading" style="min-height:200px;">
         <template v-if="entries.length > 0">
-          <div class="file-grid">
             <div v-for="entry in entries" :key="entry.path"
               class="file-item"
               :class="{ selected: selectedFile?.path === entry.path }"
@@ -492,4 +527,10 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
 .crumb-link:hover {
   background: var(--surface-2);
 }
+.file-grid.drag-over {
+  background: rgba(94,106,210,0.05);
+  border-color: var(--accent);
+}
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
