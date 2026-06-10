@@ -33,6 +33,7 @@ import updateRoutes from './routes/update.js'
 import storageRoutes from './routes/storage.js'
 import articleRoutes from './routes/articles.js'
 import siteSettingsRoutes from './routes/site-settings.js'
+import courseRoutes from './routes/courses.js'
 
 const app = express()
 
@@ -112,6 +113,7 @@ app.use('/api/system/update', authMiddleware, updateRoutes)
 app.use('/api/storage', storageRoutes)
 app.use('/api/articles', articleRoutes)
 app.use('/api/site-settings', siteSettingsRoutes)
+app.use('/api/courses', courseRoutes)
 
 // ── Error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler)

@@ -10,6 +10,8 @@ const router = Router()
 
 const STUDENT_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
 
+const studentNoSchema = z.string().regex(/^\d*$/, '学号只能为数字').optional()
+
 const createSchema = z.object({
   display_name: z.string().min(1, '请输入学生姓名'),
   class: z.string().optional().default(''),
@@ -17,7 +19,7 @@ const createSchema = z.object({
   password: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
   role_id: z.number().int().nullable().optional(),
-  student_no: z.string().optional(),
+  student_no: studentNoSchema,
   nickname: z.string().optional(),
 })
 
@@ -28,7 +30,7 @@ const updateSchema = z.object({
   password: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
   role_id: z.number().int().nullable().optional(),
-  student_no: z.string().optional(),
+  student_no: studentNoSchema,
   nickname: z.string().optional(),
 })
 

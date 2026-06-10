@@ -36,6 +36,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/skills': ['chat.config'],
   '/teacher/logs': ['audit_logs.read'],
   '/teacher/update': ['chat.config'],
+  '/teacher/courses': ['points.read'],
 }
 
 function hasRouteAccess(path: string): boolean {
@@ -73,6 +74,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { key: '/teacher/review-types', label: '点评类型', icon: renderIcon(Star) },
           { key: '/teacher/articles', label: '公众号文章', icon: renderIcon(Globe) },
           { key: '/teacher/disk', label: '网盘空间', icon: renderIcon(HardDrive) },
+          { key: '/teacher/courses', label: '课程管理', icon: renderIcon(BookOpen) },
         ],
       },
       {

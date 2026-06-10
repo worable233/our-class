@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Pencil, Trash2, Filter, School, Users, GraduationCap } from '@lucide/vue'
+import { Plus, Pencil, Trash2, Filter, School, Users, GraduationCap, Tag } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -347,7 +347,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 <span style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ s.display_name }}</span>
                 <span v-if="s.student_no" style="font-size: 12px; color: var(--text-muted); font-family: monospace;">#{{ s.student_no }}</span>
                 <span v-if="s.class" style="font-size: 12px; color: var(--text-muted);">{{ s.class }}</span>
-                <span v-if="s.nickname" style="font-size: 12px; color: var(--text-muted);">📛 {{ s.nickname }}</span>
+                <span v-if="s.nickname" style="font-size: 12px; color: var(--text-muted); display:inline-flex;align-items:center;gap:3px;"><Tag :size="11" /> {{ s.nickname }}</span>
                 <!-- 身份标签 -->
                 <n-tag v-if="groupName(s.group_id)" size="tiny" :bordered="false" round style="font-size: 11px">{{ groupName(s.group_id) }}</n-tag>
                 <!-- 职位标签 -->
@@ -507,7 +507,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
     >
       <n-form :model="form" label-placement="top">
         <n-form-item label="学号" path="student_no">
-          <n-input v-model:value="form.student_no" placeholder="留空自动生成，只能为数字" />
+          <n-input v-model:value="form.student_no" placeholder="留空自动生成，只能为数字" :input-props="{ inputMode: 'numeric', pattern: '[0-9]*' }" />
         </n-form-item>
         <n-form-item label="真实姓名" path="display_name">
           <n-input v-model:value="form.display_name" placeholder="学生真实姓名" />

@@ -113,6 +113,12 @@ const router = createRouter({
           name: 'teacher-disk',
           component: () => import('@/views/teacher/DiskManage.vue'),
         },
+        {
+          path: 'courses',
+          name: 'teacher-courses',
+          component: () => import('@/views/teacher/CourseManage.vue'),
+          meta: { permissions: ['points.read'] },
+        },
       ],
     },
     {

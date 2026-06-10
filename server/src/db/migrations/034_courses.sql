@@ -1,0 +1,14 @@
+-- 033_courses.sql
+-- 课程管理表
+
+CREATE TABLE IF NOT EXISTS courses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  class TEXT NOT NULL DEFAULT '',
+  cover_url TEXT DEFAULT '',
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);
