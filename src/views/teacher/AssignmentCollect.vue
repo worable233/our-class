@@ -9,6 +9,8 @@ import {
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Plus, Download, File as FileIcon, BookOpen, GraduationCap } from '@lucide/vue'
+import { useMessage } from 'naive-ui'
+const message = useMessage()
 
 const auth = useAuthStore()
 
@@ -104,17 +106,24 @@ async function loadClasses() {
   try { rawClasses.value = await api.get<ClassInfo[]>('/classes') } catch {}
 }
 
+function openNewForm() {
+  newForm.value = { title: '', description: '', due_date: '', course_id: selectedCourse.value }
+  showNew.value = true
+}
+
 async function createAssignment() {
-  if (!newForm.value.course_id) return
-  await api.post('/assignments', {
-    title: newForm.value.title,
-    description: newForm.value.description,
-    due_date: newForm.value.due_date,
-    course_id: newForm.value.course_id,
-  })
-  showNew.value = false
-  newForm.value = { title: '', description: '', due_date: '', course_id: null }
-  load()
+  if (!newForm.value.title || !newForm.value.due_date) { message.warning('请填写标题和截止日期'); return }
+  if (!newForm.value.course_id) { message.warning('请选择关联课程'); return }
+  try {
+    await api.post('/assignments', {
+      title: newForm.value.title,
+      description: newForm.value.description,
+      due_date: newForm.value.due_date,
+      course_id: newForm.value.course_id,
+    })
+    showNew.value = false
+    load()
+  } catch (e: any) { message.error(e.message || '发布失败') }
 }
 
 async function selectAssignment(id: number) {
@@ -214,7 +223,7 @@ onMounted(() => { loadClasses(); load() })
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
         <span style="font-size:14px;font-weight:600;color:var(--text-primary)">{{ selectedCourseInfo.name }}</span>
         <span style="flex:1" />
-        <n-button type="primary" @click="showNew = true" size="small" round>
+        <n-button type="primary" @click="openNewForm" size="small" round>
           <template #icon><Plus :size="14" /></template>
           发布作业
         </n-button>
