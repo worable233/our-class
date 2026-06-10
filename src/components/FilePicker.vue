@@ -302,7 +302,7 @@ function fmtDate(iso: string) {
     style="width:780px;max-width:96vw;"
     :mask-closable="false"
     :segmented="{ content: true, footer: true }"
-    header-style="padding:16px 20px 0;font-size:16px;font-weight:600;"
+    header-style="padding:14px 20px;font-size:16px;font-weight:600;"
     content-style="padding:0;"
     footer-style="padding:10px 16px;"
     @update:show="(val: boolean) => emit('update:show', val)"
