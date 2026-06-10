@@ -182,14 +182,14 @@ onUnmounted(() => {
             { v: fmtCompact(data.attackIps), l: '攻击来源城市', c: '#FF8859', icon: ShieldAlert },
             { v: fmtCompact(data.err4xxCount), l: `4xx ${data.err4xxRate}`, c: '#f0a020', icon: AlertTriangle },
             { v: fmtCompact(data.err5xxCount), l: `5xx ${data.err5xxRate}`, c: '#e869a0', icon: XCircle },
-          ]" :key="s.l" size="small" :bordered="true" style="padding:8px 0">
+          ]" :key="s.l" size="small" :bordered="true" class="stat-card">
             <div style="display:flex;align-items:center;gap:8px;">
               <div :style="{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,background:s.c+'20',color:s.c}">
                 <component :is="s.icon" :size="16" />
               </div>
-              <div>
+              <div class="stat-card-text">
                 <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;line-height:1.2;">{{ s.v }}</div>
-                <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">{{ s.l }}</div>
+                <div class="stat-card-label">{{ s.l }}</div>
               </div>
             </div>
           </n-card>
@@ -249,6 +249,21 @@ onUnmounted(() => {
 }
 @media (max-width: 1024px) {
   .stats-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.stats-grid > .stat-card {
+  min-width: 0;
+  overflow: hidden;
+}
+.stat-card-text {
+  min-width: 0;
+  overflow: hidden;
+}
+.stat-card-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
