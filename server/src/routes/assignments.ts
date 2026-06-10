@@ -176,6 +176,14 @@ router.get('/:id/submissions', requirePermission('assignments.write'), (req: Req
 router.post('/:id/submit', requirePermission('assignments.submit'), validate(submitSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, content } = req.body
+
+  // 检查作业是否已截止
+  const assignment = db.prepare('SELECT due_date FROM assignments WHERE id = ?').get(req.params.id) as any
+  if (!assignment) throw new NotFoundError('作业不存在')
+  if (assignment.due_date && assignment.due_date < new Date().toISOString().split('T')[0]) {
+    return fail(res, 400, 'OVERDUE', '该作业已截止，无法提交')
+  }
+
   const existing = db
     .prepare('SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ?')
     .get(req.params.id, student_id) as { id: number } | undefined

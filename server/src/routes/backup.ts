@@ -253,6 +253,19 @@ router.post('/import', requirePermission('chat.config'), upload.single('backup')
   }
 })
 
+// GET /api/backup/download/:name — download a server-side backup
+router.get('/download/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
+  const name = basename(req.params.name)
+  if (!name.endsWith('.zip')) return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
+  const fp = join(BACKUP_DIR, name)
+  if (!existsSync(fp)) return fail(res, 404, 'NOT_FOUND', '备份文件不存在')
+  const st = statSync(fp)
+  res.setHeader('Content-Type', 'application/zip')
+  res.setHeader('Content-Disposition', `attachment; filename="${name}"`)
+  res.setHeader('Content-Length', st.size)
+  createReadStream(fp).pipe(res)
+})
+
 // DELETE /api/backup/:name — delete a server-side backup
 router.delete('/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
   const name = basename(req.params.name)

@@ -98,6 +98,12 @@ const router = createRouter({
           meta: { permissions: ['chat.config'] },
         },
         {
+          path: 'backup',
+          name: 'teacher-backup',
+          component: () => import('@/views/teacher/BackupManage.vue'),
+          meta: { permissions: ['chat.config'] },
+        },
+        {
           path: 'logs',
           name: 'teacher-logs',
           component: () => import('@/views/teacher/AuditLogs.vue'),
