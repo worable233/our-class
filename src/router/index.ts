@@ -74,6 +74,12 @@ const router = createRouter({
           meta: { permissions: ['chat.config'] },
         },
         {
+          path: 'site-general',
+          name: 'teacher-site-general',
+          component: () => import('@/views/teacher/SiteGeneralSettings.vue'),
+          meta: { permissions: ['chat.config'] },
+        },
+        {
           path: 'site-data',
           name: 'teacher-site-data',
           component: () => import('@/views/teacher/SiteData.vue'),

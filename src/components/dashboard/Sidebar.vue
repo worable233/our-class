@@ -31,6 +31,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/roles': [],
   '/teacher/settings': ['chat.config'],
   '/teacher/site-data': ['students.write'],
+  '/teacher/site-general': ['chat.config'],
   '/teacher/articles': ['articles.manage'],
   '/teacher/skills': ['chat.config'],
   '/teacher/logs': ['audit_logs.read'],
@@ -91,6 +92,7 @@ const menuOptions = computed<MenuOption[]>(() => {
             icon: renderIcon(Settings),
             children: [
               { key: '/teacher/settings', label: 'AI 配置', icon: renderIcon(Bot) },
+              { key: '/teacher/site-general', label: '普通设置', icon: renderIcon(Settings) },
               { key: '/teacher/skills', label: 'Skill 管理', icon: renderIcon(BookOpen) },
               { key: '/teacher/logs', label: '操作日志', icon: renderIcon(History) },
               { key: '/teacher/traffic', label: '流量监控', icon: renderIcon(Globe) },
