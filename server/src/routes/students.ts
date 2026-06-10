@@ -1,11 +1,18 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcrypt'
+import { existsSync, rmSync } from 'fs'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 import { getDb } from '../db/init.js'
 import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
 
 const BCRYPT_ROUNDS = 10
 
@@ -125,6 +132,14 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
     }
     fields.push('group_id = ?')
     values.push(req.body.group_id)
+    // 同步存储配额：根据新权限组的配额更新 user_storage.storage_limit
+    const quota = db.prepare(
+      'SELECT storage_limit FROM group_storage_quota WHERE group_id = ?'
+    ).get(req.body.group_id) as { storage_limit: number } | undefined
+    if (quota) {
+      db.prepare('UPDATE user_storage SET storage_limit = ? WHERE user_id = ?')
+        .run(quota.storage_limit, req.params.id)
+    }
   }
 
   if (req.body.role_id !== undefined) {
@@ -178,6 +193,11 @@ router.delete('/:id', requirePermission('students.write'), (req: Request, res: R
   db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(id)
   db.prepare('DELETE FROM scores WHERE student_id = ?').run(id)
   db.prepare('DELETE FROM point_records WHERE student_id = ?').run(id)
+  db.prepare('DELETE FROM uploaded_files WHERE user_id = ?').run(id)
+  // user_storage has ON DELETE CASCADE, will auto-clean on user delete
+  // Delete physical storage directory
+  const userDir = join(STORAGE_ROOT, `user_${id}`)
+  if (existsSync(userDir)) { try { rmSync(userDir, { recursive: true, force: true }) } catch {} }
   db.prepare(`DELETE FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).run(id)
 
   ok(res, { success: true })

@@ -38,15 +38,34 @@ router.get('/permissions', (_req: Request, res: Response) => {
   ok(res, perms)
 })
 
-// GET /api/roles/groups — list all permission groups
-router.get('/groups', (_req: Request, res: Response) => {
+// GET /api/roles/groups — list all permission groups (支持 ?class=xxx 筛选)
+router.get('/groups', (req: Request, res: Response) => {
   const db = getDb()
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+  const filterClass = req.query.class as string | undefined
+
+  // 非 viewAll 用户：职位（有 parent_id）只显示自己班级的
+  let classFilter = ''
+  const params: unknown[] = []
+  if (!hasViewAll) {
+    const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      classFilter = ` AND (pg.parent_id IS NULL OR pg.class IN (${myClasses.map(() => '?').join(',')}))`
+      params.push(...myClasses)
+    }
+  } else if (filterClass) {
+    classFilter = ' AND pg.class = ?'
+    params.push(filterClass)
+  }
+
   const groups = db.prepare(`
     SELECT pg.*, parent.name as parent_name
     FROM permission_groups pg
     LEFT JOIN permission_groups parent ON pg.parent_id = parent.id
+    WHERE 1=1${classFilter}
     ORDER BY pg.id
-  `).all() as any[]
+  `).all(...params) as any[]
 
   // Load permissions for each group
   const result = groups.map(g => {

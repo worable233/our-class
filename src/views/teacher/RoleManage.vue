@@ -28,6 +28,8 @@ const form = ref({ name: '', description: '', class: '', parent_id: null as numb
 const saving = ref(false)
 const activeTab = ref('identities')
 const currentUserPerms = computed(() => auth.permissions || [])
+const filterClass = ref('')
+const allClassList = ref<string[]>([])
 
 // ── Computed ─────────────────────────────────────────────────────
 
@@ -72,18 +74,29 @@ function tagType(count: number) {
   return 'success' as const
 }
 
+function canManageRoleGroup(g: PermissionGroup): boolean {
+  if (currentUserPerms.value.includes('roles.manage')) return true
+  if (currentUserPerms.value.includes('classes.view_all')) return true
+  const myClasses = (auth.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+  return myClasses.includes(g.class)
+}
+
 // ── Load ─────────────────────────────────────────────────────────
 
 async function load() {
   loading.value = true
   try {
-    const [g, p, sq] = await Promise.all([
-      api.get<PermissionGroup[]>('/roles/groups'),
+    const params = filterClass.value ? `?class=${encodeURIComponent(filterClass.value)}` : ''
+    const [g, p, sq, cls] = await Promise.all([
+      api.get<PermissionGroup[]>(`/roles/groups${params}`),
       api.get<PermissionDef[]>('/roles/permissions'),
       api.get<any[]>('/storage/groups').catch(() => []),
+      api.get<any[]>('/classes').catch(() => ({ data: [], success: false })),
     ])
-    groups.value = g
-    allPermissions.value = p
+    groups.value = g || []
+    allPermissions.value = p || []
+    if (Array.isArray(cls)) allClassList.value = cls.map((c: any) => c.name)
+    else if (cls && cls.data) allClassList.value = cls.data.map((c: any) => c.name)
     const map: Record<number, number> = {}
     for (const item of sq) map[item.id] = Math.round((item.storage_limit || 104857600) / 1048576)
     storageQuota.value = map
@@ -222,7 +235,19 @@ async function deleteRole(id: number) {
 
       <n-tab-pane name="roles" tab="职位管理">
         <n-space vertical :size="12">
-          <n-button @click="openRoleNew" secondary>新建职位</n-button>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <n-button @click="openRoleNew" secondary>新建职位</n-button>
+            <n-select
+              v-if="currentUserPerms.includes('classes.view_all')"
+              v-model:value="filterClass"
+              :options="[{label:'全部班级',value:''},...allClassList.map(c=>({label:c,value:c}))]"
+              style="width:160px"
+              size="small"
+              placeholder="全部班级"
+              clearable
+              @update:value="load"
+            />
+          </div>
 
           <n-card v-for="g in roleGroups" :key="g.id" size="small" :bordered="true">
             <div style="display: flex; align-items: flex-start; gap: 12px">
@@ -236,7 +261,7 @@ async function deleteRole(id: number) {
                   </n-tag>
                 </div>
               </div>
-              <div style="display: flex; gap: 4px; flex-shrink: 0">
+              <div v-if="canManageRoleGroup(g)" style="display: flex; gap: 4px; flex-shrink: 0">
                 <n-button size="tiny" quaternary @click="openRoleEdit(g)">编辑</n-button>
                 <n-button size="tiny" quaternary type="error" @click="deleteRole(g.id)">删除</n-button>
               </div>
