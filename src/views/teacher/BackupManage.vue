@@ -55,6 +55,40 @@ const restoreTarget = ref<BackupFile | null>(null)
 const restoreResult = ref<{ tables_restored: number; records_total: number; files_restored: number; errors?: string[] } | null>(null)
 const restoreLoading = ref(false)
 
+const TABLE_LABELS: Record<string, string> = {
+  permission_groups: '权限组',
+  permissions: '权限定义',
+  group_permissions: '权限映射',
+  rate_limits: '频率限制',
+  chat_settings: 'AI 设置',
+  api_keys: 'API 密钥',
+  tool_configs: '工具配置',
+  users: '用户',
+  scores: '成绩',
+  assignments: '作业',
+  submissions: '作业提交',
+  point_records: '积分记录',
+  posts: '帖子',
+  comments: '评论',
+  conversations: 'AI 对话',
+  messages: '对话消息',
+  uploaded_files: '上传文件记录',
+  audit_logs: '操作日志',
+  page_views: '页面浏览',
+  traffic_logs: '流量日志',
+  review_types: '点评类型',
+  articles: '公众号文章',
+  site_settings: '站点设置',
+  classes: '班级',
+  storage_meta: '存储元数据',
+  storage_quotas: '存储配额',
+  courses: '课程',
+}
+
+function tableLabel(name: string): string {
+  return TABLE_LABELS[name] || name
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
@@ -260,14 +294,15 @@ onMounted(load)
 
           <!-- 表选择 -->
           <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">选择要备份的数据</div>
-          <div style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
+          <div style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;border:1px solid var(--hairline);border-radius:6px;padding:4px;">
             <label v-for="t in stats.tables" :key="t.name"
-              style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;"
-              @mouseenter="(e:any)=>e.currentTarget.style.background='var(--surface-2)'"
-              @mouseleave="(e:any)=>e.currentTarget.style.background='transparent'"
+              style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:4px;cursor:pointer;font-size:13px;transition:background .1s;"
+              :style="{ background: selectedTables.includes(t.name) ? 'var(--surface-2)' : 'transparent' }"
+              @mouseenter="(e:any)=>e.currentTarget.style.background='var(--surface-3)'"
+              @mouseleave="(e:any)=>e.currentTarget.style.background=selectedTables.includes(t.name)?'var(--surface-2)':'transparent'"
             >
               <NCheckbox :checked="selectedTables.includes(t.name)" @update:checked="(v:boolean)=>v?selectedTables.push(t.name):selectedTables=selectedTables.filter(x=>x!==t.name)" />
-              <span style="flex:1;color:var(--text-primary);">{{ t.name }}</span>
+              <span style="flex:1;color:var(--text-primary);font-weight:500;">{{ tableLabel(t.name) }}</span>
               <NTag size="tiny" :bordered="false" round>{{ t.count }} 条</NTag>
             </label>
           </div>
