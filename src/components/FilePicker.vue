@@ -8,7 +8,7 @@ import {
 import {
   Folder, File, FileText, FileImage, FileSpreadsheet, FileType, Archive,
   Image, Music, Video, ChevronRight, Search, Upload, Plus, Trash2,
-  RefreshCw, ArrowLeft, ArrowUp, Home, Download,
+  RefreshCw, ArrowLeft, ArrowUp, Home, Download, CheckSquare,
 } from '@lucide/vue'
 import { useUploadManager } from '@/composables/useUploadManager'
 import UploadPanel from '@/components/chat/UploadPanel.vue'
@@ -51,6 +51,33 @@ const searchQuery = ref('')
 // 新建文件夹
 const showMkdirModal = ref(false)
 const mkdirName = ref('')
+
+// ── Right-click context menu ──
+const ctxMenu = ref<{ show: boolean; x: number; y: number; entry: DiskEntry | null }>({
+  show: false, x: 0, y: 0, entry: null,
+})
+
+function onContextMenu(e: MouseEvent, entry: DiskEntry | null = null) {
+  e.preventDefault()
+  ctxMenu.value = { show: true, x: e.clientX, y: e.clientY, entry }
+}
+
+function closeCtxMenu() {
+  ctxMenu.value.show = false
+}
+
+// Close context menu on click outside
+document.addEventListener('click', (e) => {
+  const el = e.target as HTMLElement
+  if (!el.closest('.fp-ctx-menu')) closeCtxMenu()
+})
+
+function ctxRefresh() { closeCtxMenu(); loadDir(currentPath.value, false) }
+function ctxNewFolder() { closeCtxMenu(); showMkdirModal.value = true }
+function ctxUpload() { closeCtxMenu(); triggerUpload() }
+function ctxOpenDir(entry: DiskEntry) { closeCtxMenu(); enterDir(entry) }
+function ctxSelectFile(entry: DiskEntry) { closeCtxMenu(); toggleSelect(entry) }
+function ctxSelectAll() { closeCtxMenu(); toggleSelectAll() }
 
 // ── Computed ──
 
@@ -384,7 +411,7 @@ function fmtDate(iso: string) {
             <div class="fp-col-date">修改日期</div>
           </div>
           <!-- 行 -->
-          <div v-if="sortedEntries.length > 0" class="fp-list-body">
+          <div v-if="sortedEntries.length > 0" class="fp-list-body" @scroll="closeCtxMenu">
             <div
               v-for="entry in sortedEntries" :key="entry.path"
               class="fp-list-row"
@@ -394,6 +421,7 @@ function fmtDate(iso: string) {
               }"
               @click="entry.is_dir ? enterDir(entry) : toggleSelect(entry)"
               @dblclick="entry.is_dir ? null : toggleSelect(entry)"
+              @contextmenu="(e) => onContextMenu(e, entry)"
             >
               <div class="fp-col-select" @click.stop="toggleSelect(entry)">
                 <NCheckbox
@@ -416,7 +444,7 @@ function fmtDate(iso: string) {
               <div class="fp-col-date">{{ fmtDate(entry.modified) }}</div>
             </div>
           </div>
-          <div v-if="!loading && sortedEntries.length === 0" class="fp-empty">
+          <div v-if="!loading && sortedEntries.length === 0" class="fp-empty" @contextmenu="(e) => onContextMenu(e, null)">
             <Upload :size="32" style="color:var(--text-muted);opacity:0.35;" />
             <NText depth="3" style="font-size:13px;">
               {{ searchQuery ? '未找到匹配的文件' : '此文件夹为空' }}
@@ -424,6 +452,36 @@ function fmtDate(iso: string) {
             <NText depth="3" style="font-size:11px;">拖拽文件到此处上传</NText>
           </div>
         </NSpin>
+      </div>
+    </div>
+
+    <!-- ═══ 右键菜单 ═══ -->
+    <div
+      v-if="ctxMenu.show"
+      class="fp-ctx-menu"
+      :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="fp-ctx-item" @click="ctxRefresh">
+        <RefreshCw :size="14" /> 刷新
+      </div>
+      <div class="fp-ctx-divider" />
+      <div class="fp-ctx-item" @click="ctxNewFolder">
+        <Plus :size="14" /> 新建文件夹
+      </div>
+      <div class="fp-ctx-item" @click="ctxUpload">
+        <Upload :size="14" /> 上传文件
+      </div>
+      <div class="fp-ctx-divider" />
+      <div v-if="ctxMenu.entry?.is_dir" class="fp-ctx-item" @click="ctxMenu.entry && ctxOpenDir(ctxMenu.entry)">
+        <ArrowUp :size="14" /> 打开
+      </div>
+      <div v-if="ctxMenu.entry && !ctxMenu.entry.is_dir" class="fp-ctx-item" @click="ctxMenu.entry && ctxSelectFile(ctxMenu.entry)">
+        <CheckSquare :size="14" /> 选择
+      </div>
+      <div class="fp-ctx-divider" />
+      <div class="fp-ctx-item" @click="ctxSelectAll">
+        <CheckSquare :size="14" /> 全选
       </div>
     </div>
 
@@ -627,6 +685,31 @@ function fmtDate(iso: string) {
 }
 .fp-footer-left { display: flex; align-items: center; gap: 8px; }
 .fp-footer-right { display: flex; align-items: center; gap: 6px; }
+
+/* ═══ Right-click context menu ═══ */
+.fp-ctx-menu {
+  position: fixed; z-index: 1000;
+  min-width: 180px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
+  animation: ctxFadeIn 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes ctxFadeIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.fp-ctx-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 4px;
+  font-size: 13px; color: var(--text-primary);
+  cursor: pointer; transition: background .1s;
+}
+.fp-ctx-item:hover { background: var(--surface-2); }
+.fp-ctx-item:active { background: var(--surface-3); }
+.fp-ctx-divider { height: 1px; background: var(--hairline); margin: 3px 8px; }
 
 /* ═══ Mobile responsive ═══ */
 @media (max-width: 768px) {
