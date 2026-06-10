@@ -2,241 +2,359 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OurClass 安装向导</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>OurClass 安装</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-       background:#fbf9f5; color:rgba(0,0,0,.9); min-height:100vh; display:flex; flex-direction:column; }
-header { background:#fff; border-bottom:1px solid rgba(0,0,0,.08); padding:16px 32px; display:flex; align-items:center; gap:10px; }
-header h1 { font-size:18px; font-weight:600; }
-header span { color:rgba(0,0,0,.4); font-size:13px; }
-.container { max-width:640px; margin:0 auto; padding:48px 24px; flex:1; width:100%; }
-.steps { display:flex; gap:0; margin-bottom:40px; justify-content:center; }
-.step { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; font-size:13px; color:rgba(0,0,0,.4); }
-.step.active { color:rgba(0,0,0,.9); background:rgba(94,106,210,.08); font-weight:600; }
-.step.done { color:#16a34a; }
-.step-num { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-             font-size:12px; font-weight:600; background:rgba(0,0,0,.08); color:rgba(0,0,0,.6); }
-.step.active .step-num { background:#5E6AD2; color:#fff; }
-.step.done .step-num { background:#16a34a; color:#fff; }
-.step-divider { width:40px; height:1px; background:rgba(0,0,0,.12); margin:0 4px; }
-.card { background:#fff; border-radius:12px; border:1px solid rgba(0,0,0,.08); padding:32px; margin-bottom:24px; }
-.card h2 { font-size:20px; font-weight:600; margin-bottom:4px; }
-.card p { font-size:14px; color:rgba(0,0,0,.5); margin-bottom:24px; line-height:1.5; }
-.form-group { margin-bottom:16px; }
-.form-group label { display:block; font-size:13px; font-weight:500; margin-bottom:4px; color:rgba(0,0,0,.7); }
-.form-group input, .form-group select { width:100%; padding:10px 12px; border:1px solid rgba(0,0,0,.12);
-  border-radius:8px; font-size:14px; outline:none; transition:border-color .15s; background:#fff; color:rgba(0,0,0,.9); }
-.form-group input:focus, .form-group select:focus { border-color:#5E6AD2; box-shadow:0 0 0 2px rgba(94,106,210,.1); }
-.form-row { display:flex; gap:12px; }
-.form-row .form-group { flex:1; }
-.btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:24px; }
-.btn { padding:10px 24px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer;
-       border:1px solid rgba(0,0,0,.1); background:#fff; color:rgba(0,0,0,.8); transition:all .12s; }
-.btn:hover { background:rgba(0,0,0,.05); }
-.btn-primary { background:#5E6AD2; color:#fff; border-color:#5E6AD2; }
-.btn-primary:hover { background:#7C7FDC; }
-.btn-primary:disabled { opacity:.4; cursor:not-allowed; }
-.alert { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:16px; }
-.alert-info { background:rgba(94,106,210,.08); color:#5E6AD2; }
-.alert-success { background:rgba(22,163,74,.08); color:#16a34a; }
-.alert-error { background:rgba(220,38,38,.08); color:#dc2626; }
-.log { background:rgba(0,0,0,.04); border-radius:8px; padding:12px; font-size:12px; line-height:1.6;
-       font-family:monospace; max-height:200px; overflow-y:auto; white-space:pre-wrap; margin-top:12px; }
-.log .ok { color:#16a34a; }
-.log .err { color:#dc2626; }
-.log .info { color:rgba(0,0,0,.5); }
-.hidden { display:none; }
-.loading::after { content:'...'; animation:dots 1.2s infinite; }
-@keyframes dots { 0%,20% { content:'.'; } 40% { content:'..'; } 60%,100% { content:'...'; } }
-.summary-item { display:flex; justify-content:space-between; padding:8px 0; font-size:14px; border-bottom:1px solid rgba(0,0,0,.06); }
-.summary-item:last-child { border-bottom:none; }
-.summary-item .label { color:rgba(0,0,0,.5); }
-.summary-item .value { font-weight:500; }
+/* ── Reset & Base ─────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+     background:#f5f5f7;color:#1d1d1f;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+a{color:#5E6AD2;text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── Layout ──────────────────────────────────────── */
+.app{display:flex;height:100vh;width:100vw}
+.sidebar{width:380px;background:#fff;display:flex;flex-direction:column;padding:48px 32px 32px;flex-shrink:0;position:relative}
+.main{flex:1;display:flex;align-items:center;justify-content:center;padding:48px;position:relative;overflow:hidden}
+
+/* ── Sidebar: Brand + Features ──────────────────── */
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:40px}
+.brand-icon{width:36px;height:36px;background:linear-gradient(135deg,#5E6AD2,#7C7FDC);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700}
+.brand-text{font-size:18px;font-weight:700;color:#1d1d1f;letter-spacing:-.3px}
+.brand-ver{font-size:12px;color:#86868b;margin-left:4px}
+
+.feature-list{flex:1;display:flex;flex-direction:column;gap:0}
+.feature-item{padding:16px 12px;border-radius:12px;transition:background .2s;cursor:default}
+.feature-item:hover{background:#f5f5f7}
+.feature-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:8px}
+.feature-title{font-size:13px;font-weight:600;color:#1d1d1f;margin-bottom:2px}
+.feature-desc{font-size:12px;color:#86868b;line-height:1.4}
+
+.sidebar-footer{font-size:11px;color:#86868b;padding-top:24px;border-top:1px solid rgba(0,0,0,.06)}
+.sidebar-footer p{margin-bottom:4px}
+
+/* ── Steps indicator (dots) ─────────────────────── */
+.steps{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:10}
+.step-dot{width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.15);transition:all .4s cubic-bezier(.22,1,.36,1);cursor:pointer}
+.step-dot.active{width:24px;border-radius:4px;background:#5E6AD2}
+.step-dot.done{background:#5E6AD2;opacity:.4}
+
+/* ── Step cards ─────────────────────────────────── */
+.step-container{position:relative;width:100%;max-width:460px;min-height:400px}
+.step-card{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+           opacity:0;transform:translateY(24px) scale(.97);pointer-events:none;
+           transition:all .5s cubic-bezier(.22,1,.36,1)}
+.step-card.active{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.step-card.exit{opacity:0;transform:translateY(-20px) scale(.97)}
+
+.step-number{font-size:12px;font-weight:600;color:#5E6AD2;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
+.step-title{font-size:32px;font-weight:700;color:#1d1d1f;letter-spacing:-.5px;line-height:1.2;margin-bottom:8px}
+.step-desc{font-size:15px;color:#86868b;line-height:1.5;margin-bottom:28px}
+
+/* ── Form elements ──────────────────────────────── */
+.field{margin-bottom:16px}
+.field-label{display:block;font-size:13px;font-weight:500;color:#6e6e73;margin-bottom:5px}
+.field-input{width:100%;padding:12px 14px;border:1.5px solid rgba(0,0,0,.1);border-radius:10px;
+             font-size:15px;font-family:inherit;color:#1d1d1f;outline:none;
+             transition:border-color .2s,box-shadow .2s;background:#fff}
+.field-input:focus{border-color:#5E6AD2;box-shadow:0 0 0 3px rgba(94,106,210,.12)}
+.field-input::placeholder{color:#aeaeb2}
+.field-row{display:flex;gap:12px}
+.field-row .field{flex:1}
+
+/* ── Buttons ────────────────────────────────────── */
+.btn-group{display:flex;gap:10px;margin-top:8px}
+.btn{padding:12px 28px;border-radius:10px;font-size:15px;font-weight:500;font-family:inherit;
+     cursor:pointer;border:none;transition:all .2s cubic-bezier(.22,1,.36,1);
+     display:inline-flex;align-items:center;gap:6px;justify-content:center}
+.btn-primary{background:#5E6AD2;color:#fff}
+.btn-primary:hover{background:#6b75d9;transform:translateY(-1px);box-shadow:0 4px 12px rgba(94,106,210,.25)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-ghost{background:transparent;color:#5E6AD2;padding:12px 4px}
+.btn-ghost:hover{background:rgba(94,106,210,.06);padding:12px 16px}
+.btn-success{background:#16a34a;color:#fff}
+.btn-success:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(22,163,74,.25)}
+.btn-success:disabled{opacity:.4;cursor:not-allowed}
+.center{justify-content:center}
+
+/* ── Alert ──────────────────────────────────────── */
+.alert{padding:12px 16px;border-radius:10px;font-size:13px;line-height:1.5;margin-bottom:16px;animation:fadeIn .3s ease}
+.alert-success{background:#f0fdf4;color:#166534}
+.alert-error{background:#fef2f2;color:#991b1b}
+.alert-info{background:#f0f5ff;color:#1e40af}
+.alert .highlight{font-weight:600}
+
+/* ── Log / Terminal ─────────────────────────────── */
+.term{background:#1d1d1f;border-radius:12px;padding:16px;font-size:12px;line-height:1.7;
+      font-family:'SF Mono',Menlo,monospace;max-height:200px;overflow-y:auto;color:#e5e5e7;margin-bottom:12px}
+.term .ok{color:#34d399}
+.term .err{color:#f87171}
+.term .info{color:#9ca3af}
+
+/* ── Summary ────────────────────────────────────── */
+.summary{background:#f5f5f7;border-radius:12px;padding:20px;margin-bottom:16px}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.05);font-size:14px}
+.summary-row:last-child{border-bottom:none}
+.summary-label{color:#86868b}
+.summary-value{font-weight:500;color:#1d1d1f}
+
+/* ── Animations ─────────────────────────────────── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.loading-dots::after{content:'';animation:dots 1.4s infinite}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+
+/* ── Check row (env check) ─────────────────────── */
+.check-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px;color:#6e6e73;opacity:0;transform:translateX(-8px);transition:all .4s ease}
+.check-row.show{opacity:1;transform:translateX(0)}
+.check-row .check-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.check-row .check-icon.pending{background:rgba(0,0,0,.06);color:rgba(0,0,0,.2)}
+.check-row .check-icon.ok{background:#dcfce7;color:#16a34a}
+.check-row .check-icon.err{background:#fee2e2;color:#dc2626}
+
+/* ── Responsive ─────────────────────────────────── */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .main{padding:24px}
+  .step-title{font-size:26px}
+  .steps{bottom:24px}
+  .btn-group{flex-direction:column}
+  .btn-group .btn{width:100%;justify-content:center}
+}
 </style>
 </head>
 <body>
+<div class="app">
 
-<header>
-  <h1>OurClass</h1>
-  <span>班级管理系统 — 安装向导</span>
-</header>
-
-<div class="container">
-  <!-- Steps indicator -->
-  <div class="steps" id="steps">
-    <div class="step active" data-step="0"><div class="step-num">1</div>环境检测</div>
-    <div class="step-divider"></div>
-    <div class="step" data-step="1"><div class="step-num">2</div>管理员</div>
-    <div class="step-divider"></div>
-    <div class="step" data-step="2"><div class="step-num">3</div>API 配置</div>
-    <div class="step-divider"></div>
-    <div class="step" data-step="3"><div class="step-num">4</div>部署</div>
-  </div>
-
-  <!-- Step 0: Check env -->
-  <div class="card step-panel" id="step0">
-    <h2>环境检测</h2>
-    <p>检测运行环境，确保一切就绪</p>
-    <div class="log" id="envLog"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="checkEnv()" id="checkEnvBtn">开始检测</button>
-    </div>
-  </div>
-
-  <!-- Step 1: Create admin -->
-  <div class="card step-panel hidden" id="step1">
-    <h2>创建管理员账号</h2>
-    <p>设置系统的超级管理员，拥有全部权限</p>
-    <div class="form-row">
-      <div class="form-group">
-        <label>用户名</label>
-        <input id="adminUser" value="admin" placeholder="登录用户名">
-      </div>
-      <div class="form-group">
-        <label>显示名称</label>
-        <input id="adminName" value="管理员" placeholder="显示名称">
+  <!-- ═══ Sidebar ── Brand + Features ─── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">O</div>
+      <div>
+        <span class="brand-text">OurClass</span>
+        <span class="brand-ver">v1.0</span>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>密码</label>
-        <input id="adminPass" type="password" value="123456" placeholder="密码">
-      </div>
-      <div class="form-group">
-        <label>班级（可选）</label>
-        <input id="adminClass" placeholder="如: 高三(1)班">
-      </div>
-    </div>
-    <div id="adminAlert" class="hidden"></div>
-    <div class="btn-row">
-      <button class="btn" onclick="prevStep()">上一步</button>
-      <button class="btn btn-primary" onclick="createAdmin()">创建管理员</button>
-    </div>
-  </div>
 
-  <!-- Step 2: API config -->
-  <div class="card step-panel hidden" id="step2">
-    <h2>AI 接口配置</h2>
-    <p>配置 AI 对话服务的 API Key，可在设置页中修改</p>
-    <div class="form-group">
-      <label>接口提供商</label>
-      <select id="apiProvider">
-        <option value="anthropic">Anthropic（Claude）</option>
-        <option value="openai">OpenAI 兼容（DeepSeek / GPT / GLM）</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>API Key</label>
-      <input id="apiKey" placeholder="sk-...">
-    </div>
-    <div class="form-group">
-      <label>模型</label>
-      <input id="apiModel" value="claude-sonnet-4-20250514" placeholder="模型名称">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>API 地址（可选）</label>
-        <input id="apiUrl" placeholder="默认留空">
+    <div class="feature-list" id="featureList">
+      <div class="feature-item">
+        <div class="feature-icon" style="background:#ede9fe;color:#7c3aed">🎯</div>
+        <div class="feature-title">AI 智能助手</div>
+        <div class="feature-desc">集成 Claude / DeepSeek 大模型，自然语言管理班级</div>
       </div>
-      <div class="form-group">
-        <label>服务端口</label>
-        <input id="appPort" type="number" value="3000" placeholder="3000">
+      <div class="feature-item">
+        <div class="feature-icon" style="background:#dbeafe;color:#2563eb">📊</div>
+        <div class="feature-title">积分 & 成绩管理</div>
+        <div class="feature-desc">灵活的加减分体系，多科目成绩排名一目了然</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon" style="background:#fce7f3;color:#db2777">📝</div>
+        <div class="feature-title">作业与提交批改</div>
+        <div class="feature-desc">按班级课程管理作业，在线查看提交并批改打分</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon" style="background:#fef3c7;color:#d97706">🛡️</div>
+        <div class="feature-title">权限 & 职位体系</div>
+        <div class="feature-desc">身份+职位双层权限，班级级粒度的精细管理</div>
       </div>
     </div>
-    <div id="configAlert" class="hidden"></div>
-    <div class="btn-row">
-      <button class="btn" onclick="prevStep()">上一步</button>
-      <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
-    </div>
-  </div>
 
-  <!-- Step 3: Apply -->
-  <div class="card step-panel hidden" id="step3">
-    <h2>部署服务</h2>
-    <p>确认配置并启动服务</p>
-    <div id="summary"></div>
-    <div class="form-group" style="margin-top:16px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="usePm2" checked>
-        使用 PM2 进程管理（推荐，支持开机自启）
-      </label>
+    <div class="sidebar-footer">
+      <p>GitHub · MIT License</p>
+      <p>github.com/worable233/our-class</p>
     </div>
-    <div class="log hidden" id="applyLog"></div>
-    <div id="applyAlert" class="hidden"></div>
-    <div class="btn-row">
-      <button class="btn" onclick="prevStep()">上一步</button>
-      <button class="btn btn-primary" onclick="applySetup()" id="applyBtn">完成安装</button>
+  </aside>
+
+  <!-- ═══ Main: Step content ─── -->
+  <main class="main">
+    <div class="step-container" id="stepContainer">
+
+      <!-- Step 0 ── Welcome + Environment Check -->
+      <div class="step-card active" data-step="0">
+        <div class="step-number" style="color:#5E6AD2">开始安装</div>
+        <div class="step-title">欢迎使用 OurClass</div>
+        <div class="step-desc">我们将引导你完成初始配置，只需几分钟即可开始使用。</div>
+        <div id="envChecks" style="margin-bottom:20px"></div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="checkEnv()" id="checkEnvBtn">开始检测环境</button>
+        </div>
+      </div>
+
+      <!-- Step 1 ── Admin Account -->
+      <div class="step-card" data-step="1">
+        <div class="step-number" style="color:#5E6AD2">第 1 步</div>
+        <div class="step-title">创建管理员</div>
+        <div class="step-desc">设置系统超级管理员，拥有全部管理权限。</div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label">用户名</label>
+            <input class="field-input" id="adminUser" value="admin" placeholder="登录用户名">
+          </div>
+          <div class="field">
+            <label class="field-label">显示名称</label>
+            <input class="field-input" id="adminName" value="管理员" placeholder="显示名称">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label">密码</label>
+            <input class="field-input" id="adminPass" type="password" value="123456" placeholder="密码">
+          </div>
+          <div class="field">
+            <label class="field-label">班级（可选）</label>
+            <input class="field-input" id="adminClass" placeholder="如 高三(1)班">
+          </div>
+        </div>
+        <div id="adminAlert"></div>
+        <div class="btn-group">
+          <button class="btn btn-ghost" onclick="prevStep()">← 返回</button>
+          <button class="btn btn-primary" onclick="createAdmin()">创建管理员</button>
+        </div>
+      </div>
+
+      <!-- Step 2 ── API Config -->
+      <div class="step-card" data-step="2">
+        <div class="step-number" style="color:#5E6AD2">第 2 步</div>
+        <div class="step-title">AI 接口配置</div>
+        <div class="step-desc">配置 AI 对话服务的 API Key，可在设置页中随时修改。</div>
+        <div class="field">
+          <label class="field-label">接口提供商</label>
+          <select class="field-input" id="apiProvider" style="appearance:auto">
+            <option value="anthropic">Anthropic（Claude）</option>
+            <option value="openai">OpenAI 兼容（DeepSeek / GPT / GLM）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">API Key</label>
+          <input class="field-input" id="apiKey" placeholder="sk-..." type="password">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label">模型</label>
+            <input class="field-input" id="apiModel" value="claude-sonnet-4-20250514">
+          </div>
+          <div class="field">
+            <label class="field-label">服务端口</label>
+            <input class="field-input" id="appPort" type="number" value="3000">
+          </div>
+        </div>
+        <div id="configAlert"></div>
+        <div class="btn-group">
+          <button class="btn btn-ghost" onclick="prevStep()">← 返回</button>
+          <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+        </div>
+      </div>
+
+      <!-- Step 3 ── Deploy -->
+      <div class="step-card" data-step="3">
+        <div class="step-number" style="color:#5E6AD2">最后一步</div>
+        <div class="step-title">准备就绪</div>
+        <div class="step-desc">确认以下配置，点击完成即可启动服务。</div>
+        <div class="summary" id="summary"></div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:16px;font-size:14px;color:#1d1d1f;padding:10px 0">
+          <input type="checkbox" id="usePm2" checked style="width:18px;height:18px;accent-color:#5E6AD2">
+          <span>使用 PM2 进程管理（推荐，支持开机自启）</span>
+        </label>
+        <div class="term" id="applyLog" style="display:none"></div>
+        <div id="applyAlert"></div>
+        <div class="btn-group">
+          <button class="btn btn-ghost" onclick="prevStep()">← 返回</button>
+          <button class="btn btn-success" onclick="applySetup()" id="applyBtn">✨ 完成安装</button>
+        </div>
+      </div>
+
     </div>
-  </div>
+
+    <!-- Progress dots -->
+    <div class="steps" id="stepDots">
+      <div class="step-dot active" data-dot="0" onclick="goToStep(0)"></div>
+      <div class="step-dot" data-dot="1" onclick="goToStep(1)"></div>
+      <div class="step-dot" data-dot="2" onclick="goToStep(2)"></div>
+      <div class="step-dot" data-dot="3" onclick="goToStep(3)"></div>
+    </div>
+  </main>
 </div>
 
 <script>
 const API = '/api/setup'
-let state = { step: 'idle' }
 
-function log(el, msg, type='info') {
-  const d = document.createElement('div')
-  d.className = type
-  d.textContent = msg
-  document.getElementById(el).appendChild(d)
-}
+// ── Step navigation ───────────────────────────────────
+let currentStep = 0
 
-function showStep(n) {
-  document.querySelectorAll('.step-panel').forEach(el => el.classList.add('hidden'))
-  document.getElementById('step' + n).classList.remove('hidden')
-  document.querySelectorAll('.step').forEach((el, i) => {
+function goToStep(n) {
+  const cards = document.querySelectorAll('.step-card')
+  const dots = document.querySelectorAll('.step-dot')
+
+  cards.forEach((el, i) => {
+    el.classList.remove('active', 'exit')
+    if (i < n) el.classList.add('exit')
+    if (i === n) el.classList.add('active')
+  })
+
+  dots.forEach((el, i) => {
     el.classList.remove('active', 'done')
     if (i < n) el.classList.add('done')
     if (i === n) el.classList.add('active')
   })
+  currentStep = n
 }
 
-function nextStep() {
-  const cur = document.querySelector('.step.active')
-  const n = parseInt(cur.dataset.step) + 1
-  if (n <= 3) showStep(n)
-}
+function nextStep() { if (currentStep < 3) goToStep(currentStep + 1) }
+function prevStep() { if (currentStep > 0) goToStep(currentStep - 1) }
 
-function prevStep() {
-  const cur = document.querySelector('.step.active')
-  const n = parseInt(cur.dataset.step) - 1
-  if (n >= 0) showStep(n)
-}
-
-// Step 0: Check environment
+// ── Step 0: Environment Check ─────────────────────────
 async function checkEnv() {
   const btn = document.getElementById('checkEnvBtn')
   btn.disabled = true
-  btn.textContent = '检测中...'
-  document.getElementById('envLog').innerHTML = ''
+  btn.innerHTML = '<span class="loading-dots">检测中</span>'
 
-  log('envLog', '正在检测运行环境...', 'info')
+  const checks = document.getElementById('envChecks')
+  checks.innerHTML = ''
+
+  const items = [
+    { id:'node', label:'Node.js 运行环境' },
+    { id:'npm', label:'npm 包管理器' },
+    { id:'git', label:'Git 版本控制' },
+  ]
+
+  items.forEach(item => {
+    const row = document.createElement('div')
+    row.className = 'check-row'
+    row.id = 'check-' + item.id
+    row.innerHTML = `<div class="check-icon pending">✓</div><span>${item.label}</span>`
+    checks.appendChild(row)
+    requestAnimationFrame(() => row.classList.add('show'))
+  })
+
   try {
     const res = await fetch(API + '/check-env', { method: 'POST' })
     const data = await res.json()
-    log('envLog', `${data.node ? '✅' : '❌'} Node.js: ${data.node ? '已安装' : '未安装'}`, data.node ? 'ok' : 'err')
-    log('envLog', `${data.npm ? '✅' : '❌'} npm: ${data.npm ? '已安装' : '未安装'}`, data.npm ? 'ok' : 'err')
-    log('envLog', `${data.git ? '✅' : '❌'} Git: ${data.git ? '已安装' : '未安装'}`, data.git ? 'ok' : 'err')
 
-    if (data.step === 'done') {
-      log('envLog', '检测到已完成安装，跳过配置向导。', 'info')
-      btn.textContent = '进入系统'
-      btn.onclick = () => { window.location.href = '/' }
-      btn.disabled = false
-      return
-    }
+    const allOk = items.every(item => {
+      const ok = !!data[item.id]
+      const row = document.getElementById('check-' + item.id)
+      row.querySelector('.check-icon').className = 'check-icon ' + (ok ? 'ok' : 'err')
+      row.querySelector('.check-icon').textContent = ok ? '✓' : '✗'
+      return ok
+    })
 
-    setTimeout(nextStep, 800)
-  } catch (e) {
-    log('envLog', '❌ 检测失败: ' + e.message, 'err')
+    btn.innerHTML = allOk ? '环境就绪，继续 →' : '跳过检测，继续'
+    btn.onclick = allOk ? nextStep : nextStep
     btn.disabled = false
-    btn.textContent = '重试'
+  } catch {
+    items.forEach(item => {
+      document.getElementById('check-' + item.id).querySelector('.check-icon').className = 'check-icon err'
+      document.getElementById('check-' + item.id).querySelector('.check-icon').textContent = '✗'
+    })
+    btn.innerHTML = '跳过检测，继续'
+    btn.onclick = nextStep
+    btn.disabled = false
   }
 }
 
-// Step 1: Create admin
+// ── Step 1: Create Admin ──────────────────────────────
 async function createAdmin() {
   const username = document.getElementById('adminUser').value.trim()
   const password = document.getElementById('adminPass').value
@@ -244,109 +362,90 @@ async function createAdmin() {
   const stuClass = document.getElementById('adminClass').value.trim()
   const alert = document.getElementById('adminAlert')
 
-  if (!username || !password) { alert.className = 'alert alert-error'; alert.textContent = '用户名和密码不能为空'; alert.classList.remove('hidden'); return }
-  alert.classList.add('hidden')
+  if (!username || !password) {
+    alert.innerHTML = '<div class="alert alert-error">用户名和密码不能为空</div>'; return
+  }
+  alert.innerHTML = ''
 
   try {
     const res = await fetch(API + '/admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ username, password, display_name, class: stuClass }),
     })
     const data = await res.json()
-    if (!res.ok) { alert.className = 'alert alert-error'; alert.textContent = data.error; alert.classList.remove('hidden'); return }
-    alert.className = 'alert alert-success'; alert.textContent = '✅ 管理员账号已创建'; alert.classList.remove('hidden')
-    setTimeout(nextStep, 800)
-  } catch (e) { alert.className = 'alert alert-error'; alert.textContent = '❌ ' + e.message; alert.classList.remove('hidden') }
-}
-
-// Step 2: Save config
-async function saveConfig() {
-  const api_key = document.getElementById('apiKey').value.trim()
-  const provider = document.getElementById('apiProvider').value
-  const model = document.getElementById('apiModel').value.trim()
-  const api_url = document.getElementById('apiUrl').value.trim()
-  const port = parseInt(document.getElementById('appPort').value) || 3000
-  const alert = document.getElementById('configAlert')
-
-  alert.classList.add('hidden')
-  try {
-    const res = await fetch(API + '/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key, provider, model, api_url, port }),
-    })
-    const data = await res.json()
-    if (!res.ok) { alert.className = 'alert alert-error'; alert.textContent = data.error; alert.classList.remove('hidden'); return }
-    alert.className = 'alert alert-success'; alert.textContent = '✅ 配置已保存'; alert.classList.remove('hidden')
-    renderSummary({ username: document.getElementById('adminUser').value, port, provider, model, api_key: !!api_key })
+    if (!res.ok) { alert.innerHTML = '<div class="alert alert-error">' + data.error + '</div>'; return }
+    alert.innerHTML = '<div class="alert alert-success">✅ 管理员账号已创建</div>'
     setTimeout(nextStep, 600)
-  } catch (e) { alert.className = 'alert alert-error'; alert.textContent = '❌ ' + e.message; alert.classList.remove('hidden') }
+  } catch(e) { alert.innerHTML = '<div class="alert alert-error">❌ ' + e.message + '</div>' }
 }
 
-function renderSummary(d) {
-  document.getElementById('summary').innerHTML = `
-    <div class="summary-item"><span class="label">管理员</span><span class="value">${d.username}</span></div>
-    <div class="summary-item"><span class="label">服务端口</span><span class="value">${d.port}</span></div>
-    <div class="summary-item"><span class="label">AI 提供商</span><span class="value">${d.provider}</span></div>
-    <div class="summary-item"><span class="label">AI 模型</span><span class="value">${d.model}</span></div>
-    <div class="summary-item"><span class="label">API Key</span><span class="value">${d.api_key ? '✅ 已配置' : '⚠️ 未配置（可在设置页补充）'}</span></div>
-  `
+// ── Step 2: Save Config ───────────────────────────────
+async function saveConfig() {
+  const data = {
+    api_key: document.getElementById('apiKey').value.trim(),
+    provider: document.getElementById('apiProvider').value,
+    model: document.getElementById('apiModel').value.trim(),
+    api_url: '',
+    port: parseInt(document.getElementById('appPort').value) || 3000,
+  }
+  const alert = document.getElementById('configAlert')
+  alert.innerHTML = ''
+
+  try {
+    const res = await fetch(API + '/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+    const j = await res.json()
+    if (!res.ok) { alert.innerHTML = '<div class="alert alert-error">' + j.error + '</div>'; return }
+    alert.innerHTML = '<div class="alert alert-success">✅ 配置已保存</div>'
+
+    document.getElementById('summary').innerHTML = `
+      <div class="summary-row"><span class="summary-label">管理员</span><span class="summary-value">${document.getElementById('adminUser').value}</span></div>
+      <div class="summary-row"><span class="summary-label">服务端口</span><span class="summary-value">${data.port}</span></div>
+      <div class="summary-row"><span class="summary-label">AI 提供商</span><span class="summary-value">${data.provider}</span></div>
+      <div class="summary-row"><span class="summary-label">AI 模型</span><span class="summary-value">${data.model}</span></div>
+      <div class="summary-row"><span class="summary-label">API Key</span><span class="summary-value" style="color:${data.api_key ? '#16a34a' : '#d97706'}">${data.api_key ? '✅ 已配置' : '⚠️ 留空可在设置页补配'}</span></div>
+    `
+    setTimeout(nextStep, 500)
+  } catch(e) { alert.innerHTML = '<div class="alert alert-error">❌ ' + e.message + '</div>' }
 }
 
-// Step 3: Apply
+// ── Step 3: Deploy ────────────────────────────────────
 async function applySetup() {
   const use_pm2 = document.getElementById('usePm2').checked
-  const btn = document.getElementById('applyBtn')
   const logEl = document.getElementById('applyLog')
-  logEl.classList.remove('hidden')
-  logEl.innerHTML = ''
+  const btn = document.getElementById('applyBtn')
+
+  logEl.style.display = 'block'
+  logEl.innerHTML = '<div class="info">正在部署...</div>'
   btn.disabled = true
   btn.textContent = '部署中...'
 
-  log('applyLog', '正在应用配置...', 'info')
-
   try {
-    const res = await fetch(API + '/apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ use_pm2 }),
-    })
+    const res = await fetch(API + '/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ use_pm2 }) })
     const data = await res.json()
-
     if (!res.ok) {
-      log('applyLog', '❌ ' + (data.error || '部署失败'), 'err')
-      btn.disabled = false
-      btn.textContent = '重试'
-      return
+      logEl.innerHTML += '<div class="err">❌ ' + (data.error || '部署失败') + '</div>'
+      btn.disabled = false; btn.textContent = '重试'; return
     }
+    logEl.innerHTML = ''
+    logEl.innerHTML += '<div class="ok">✅ 部署成功！</div>'
+    logEl.innerHTML += '<div class="ok">服务端口: ' + data.port + '</div>'
+    logEl.innerHTML += '<div class="ok">PM2: ' + (data.pm2 ? '已启动' : '未使用') + '</div>'
+    logEl.innerHTML += '<div class="info" style="margin-top:8px">🔗 <a href="http://localhost:'+data.port+'" target="_blank" style="color:#5E6AD2">http://localhost:'+data.port+'</a></div>'
 
-    log('applyLog', `✅ 部署成功！`, 'ok')
-    log('applyLog', `服务端口: ${data.port}`, 'ok')
-    log('applyLog', `PM2: ${data.pm2 ? '已安装并启动' : '未使用'}`, 'ok')
-    log('applyLog', `\n访问 http://localhost:${data.port} 进入系统`, 'info')
-
-    const alert = document.getElementById('applyAlert')
-    alert.className = 'alert alert-success'
-    alert.innerHTML = `✅ 安装完成！<br>访问 <a href="http://localhost:${data.port}" target="_blank">http://localhost:${data.port}</a> 进入系统`
-    alert.classList.remove('hidden')
-    btn.textContent = '完成'
+    document.getElementById('applyAlert').innerHTML = '<div class="alert alert-success" style="font-size:15px;text-align:center">🎉 安装完成！<br><span style="font-size:13px">正在启动服务...</span></div>'
+    btn.textContent = '✅ 完成'
     btn.disabled = true
-  } catch (e) {
-    log('applyLog', '❌ ' + e.message, 'err')
-    btn.disabled = false
-    btn.textContent = '重试'
+    stepDone()
+  } catch(e) {
+    logEl.innerHTML += '<div class="err">❌ ' + e.message + '</div>'
+    btn.disabled = false; btn.textContent = '重试'
   }
 }
 
-// Check if already done
-fetch(API + '/status').then(r => r.json()).then(s => {
-  if (s.step === 'done') {
-    document.getElementById('step0').querySelector('p').textContent = '系统已完成安装，可以直接使用。'
-    document.getElementById('checkEnvBtn').textContent = '进入系统'
-    document.getElementById('checkEnvBtn').onclick = () => { window.location.href = '/' }
-  }
-})
+function stepDone() {
+  const dots = document.querySelectorAll('.step-dot')
+  dots.forEach(el => { el.classList.remove('active'); el.classList.add('done') })
+}
 </script>
 </body>
 </html>
