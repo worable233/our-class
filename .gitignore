@@ -60,3 +60,9 @@ server/src/db/migrations/009_audit_logs.sql
 server/src/db/migrations/010_add_audit_log_permission.sql
 server/src/db/migrations/011_page_views.sql
 server/src/db/migrations/012_traffic_logs.sql
+
+# Runtime data
+server/storage/
+server/uploads/_pending/
+server/uploads/conv_*/
+server/uploads/_chunks/
