@@ -613,8 +613,36 @@ function fmtDate(iso: string) {
 .fp-entry-name { cursor: pointer; }
 .fp-dir-label { font-size: 11px; color: var(--text-muted); }
 
-/* Drag overlay */
-.fp-content.fp-drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; background: rgba(94,106,210,0.03); }
+/* Drag overlay with smooth animation */
+.fp-content {
+  position: relative;
+  transition: background 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.fp-content.fp-drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: rgba(94,106,210,0.06);
+}
+.fp-content::after {
+  content: '拖拽文件到此处上传';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 600;
+  color: var(--accent);
+  background: rgba(94,106,210,0.04);
+  backdrop-filter: blur(3px);
+  border-radius: 6px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: scale(0.96);
+  pointer-events: none;
+}
+.fp-content.fp-drag-over::after {
+  opacity: 1;
+  transform: scale(1);
+}
 
 /* Empty state */
 .fp-empty {
