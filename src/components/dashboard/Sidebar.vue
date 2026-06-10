@@ -154,14 +154,13 @@ function handleUpdateValue(key: string) {
   <!-- Desktop: Naive UI sidebar -->
   <template v-else>
     <NLayoutSider
-      v-model:collapsed="collapsed"
+      :collapsed="collapsed"
       :collapsed-width="52"
       :width="220"
       bordered
       collapse-mode="width"
       show-trigger
-      @collapse="emit('update:collapsed', true)"
-      @expand="emit('update:collapsed', false)"
+      @update:collapsed="(v: boolean) => emit('update:collapsed', v)"
       style="background:var(--surface-1)"
       class="sidebar-sider"
     >
