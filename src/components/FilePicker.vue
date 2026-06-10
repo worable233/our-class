@@ -188,6 +188,54 @@ function toggleSelect(entry: DiskEntry) {
   selectedFiles.value = m
 }
 
+// ── Drag & drop upload ──
+let dragCounter = 0
+
+function onDragOver(e: DragEvent) { e.preventDefault() }
+function onDragEnter(e: DragEvent) {
+  e.preventDefault(); dragCounter++
+  if (dragCounter === 1) (e.currentTarget as HTMLElement)?.classList.add('fp-drag-over')
+}
+function onDragLeave(e: DragEvent) {
+  e.preventDefault(); dragCounter--
+  if (dragCounter <= 0) { dragCounter = 0; (e.currentTarget as HTMLElement)?.classList.remove('fp-drag-over') }
+}
+async function onDrop(e: DragEvent) {
+  e.preventDefault(); dragCounter = 0
+  const el = e.currentTarget as HTMLElement; el.classList.remove('fp-drag-over')
+  const items = e.dataTransfer?.items; if (!items?.length) return
+  const fileList: { file: File; path: string }[] = []
+  for (const item of Array.from(items)) {
+    const entry = item.webkitGetAsEntry?.()
+    if (entry) {
+      if (entry.isFile) { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
+      else { await traverseFiles(entry, currentPath.value ? `${currentPath.value}/${entry.name}` : entry.name, fileList) }
+    } else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
+  }
+  if (fileList.length === 0 && e.dataTransfer?.files.length) {
+    for (const f of Array.from(e.dataTransfer.files)) fileList.push({ file: f, path: currentPath.value })
+  }
+  for (const { file, path } of fileList) startUpload(file, path)
+  if (fileList.length > 0) message.success(`已添加 ${fileList.length} 个文件到上传队列`)
+}
+
+function traverseFiles(entry: any, path: string, files: { file: File; path: string }[]): Promise<void> {
+  return new Promise((resolve) => {
+    if (entry.isFile) { entry.file((f: File) => { files.push({ file: f, path }); resolve() }) }
+    else if (entry.isDirectory) {
+      const dirReader = entry.createReader()
+      const readAll = () => {
+        dirReader.readEntries(async (entries: any[]) => {
+          if (entries.length === 0) { resolve(); return }
+          for (const e of entries) await traverseFiles(e, path ? `${path}/${e.name}` : e.name, files)
+          readAll()
+        })
+      }
+      readAll()
+    } else resolve()
+  })
+}
+
 function toggleSelectAll() {
   const files = sortedEntries.value.filter(e => !e.is_dir && isAcceptable(e))
   const s = new Set(selectedPaths.value)
@@ -211,6 +259,10 @@ function confirm() {
 function cancel() { emit('update:show', false) }
 
 // ── Upload ──
+
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function triggerUpload() { fileInputRef.value?.click() }
 
 function handleFileSelected(e: Event) {
   const input = e.target as HTMLInputElement
@@ -260,11 +312,11 @@ function fmtDate(iso: string) {
   <n-modal
     :show="show"
     preset="card"
-    title=" "
+    title="网盘文件选择"
     style="width:780px;max-width:96vw;"
     :mask-closable="false"
     :segmented="{ content: true, footer: true }"
-    header-style="padding:0;"
+    header-style="padding:16px 20px 0;font-size:16px;font-weight:600;"
     content-style="padding:0;"
     footer-style="padding:10px 16px;"
     @update:show="(val: boolean) => emit('update:show', val)"
@@ -308,6 +360,11 @@ function fmtDate(iso: string) {
         <NButton size="tiny" quaternary @click="showMkdirModal = true" round title="新建文件夹">
           <template #icon><Plus :size="14" /></template>
         </NButton>
+        <NButton size="tiny" secondary @click="triggerUpload" round title="上传文件">
+          <template #icon><Upload :size="14" /></template>
+          上传
+        </NButton>
+        <input ref="fileInputRef" type="file" multiple style="display:none" @change="handleFileSelected" />
       </div>
     </div>
 
@@ -330,8 +387,8 @@ function fmtDate(iso: string) {
         </div>
       </div>
 
-      <!-- 文件列表 -->
-      <div class="fp-content">
+      <!-- 文件列表（支持拖拽） -->
+      <div class="fp-content" @dragover.prevent="onDragOver" @dragenter="onDragEnter" @dragleave="onDragLeave" @drop.prevent="onDrop">
         <NSpin :show="loading" style="min-height:240px;">
           <!-- 列头 -->
           <div v-if="sortedEntries.length > 0" class="fp-list-header">
@@ -398,6 +455,10 @@ function fmtDate(iso: string) {
           <NText depth="3" style="font-size:12px;">
             {{ selectedFiles.size > 0 ? `已选 ${selectedFiles.size} 项` : `${sortedEntries.length} 个项目` }}
           </NText>
+          <span style="color:var(--hairline);font-size:12px;margin:0 4px;">|</span>
+          <NText depth="3" style="font-size:11px;font-family:monospace;">
+            {{ acceptAll.value ? '*' : accept.join(', ') }}
+          </NText>
         </div>
         <div class="fp-footer-right">
           <NButton size="tiny" quaternary @click="cancel" round>取消</NButton>
@@ -411,9 +472,6 @@ function fmtDate(iso: string) {
         </div>
       </div>
     </template>
-
-    <!-- 隐藏文件上传 input -->
-    <input type="file" multiple style="display:none" @change="handleFileSelected" />
 
     <!-- 新建文件夹 Modal -->
     <n-modal v-model:show="showMkdirModal" preset="card" title="新建文件夹" style="width:360px;" :mask-closable="false">
@@ -554,6 +612,9 @@ function fmtDate(iso: string) {
 
 .fp-entry-name { cursor: pointer; }
 .fp-dir-label { font-size: 11px; color: var(--text-muted); }
+
+/* Drag overlay */
+.fp-content.fp-drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; background: rgba(94,106,210,0.03); }
 
 /* Empty state */
 .fp-empty {
