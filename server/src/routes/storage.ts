@@ -19,6 +19,18 @@ if (!existsSync(STORAGE_ROOT)) mkdirSync(STORAGE_ROOT, { recursive: true })
 const router = Router()
 router.use(authMiddleware)
 
+/** Windows 非法文件名字符（含设备名） */
+const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]/g
+const WINDOWS_DEVICES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
+function validateFileName(name: string): void {
+  if (!name || name.trim() === '') throw new ValidationError('文件名不能为空')
+  if (name.length > 255) throw new ValidationError('文件名过长（最多 255 字符）')
+  if (INVALID_FILENAME_CHARS.test(name)) throw new ValidationError('文件名包含非法字符：\\ / : * ? " < > |')
+  if (WINDOWS_DEVICES.test(name)) throw new ValidationError('文件名不能使用系统保留名称')
+  if (name === '.' || name === '..') throw new ValidationError('文件名不能为 . 或 ..')
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** 获取用户存储根目录，不存在则创建 */
@@ -30,11 +42,11 @@ function getUserDir(userId: number): string {
 
 /** 安全解析路径：防止 ../ 越权 */
 function resolveSafePath(userId: number, relPath: string): string {
-  const root = getUserDir(userId)
+  const root = getUserDir(userId).replace(/\\/g, '/')
   // 去掉前导斜杠，防止 absolute path
   const safe = relPath.replace(/^\/+/, '').replace(/\\/g, '/')
   // 解析并验证仍在 root 内（用分隔符防止 user_1 访问 user_1_secret）
-  const full = join(root, safe)
+  const full = join(root, safe).replace(/\\/g, '/')
   const rootWithSep = root + '/'
   if (full !== root && !full.startsWith(rootWithSep)) throw new ValidationError('路径不合法')
   return full
@@ -106,6 +118,22 @@ function checkQuota(userId: number, neededBytes: number): void {
 const CHUNK_DIR = join(STORAGE_ROOT, '_chunks')
 if (!existsSync(CHUNK_DIR)) mkdirSync(CHUNK_DIR, { recursive: true })
 
+/** 清理超过 24 小时未完成的废分片 */
+function cleanStaleChunks(): void {
+  try {
+    const now = Date.now()
+    for (const name of readdirSync(CHUNK_DIR)) {
+      const dir = join(CHUNK_DIR, name)
+      try {
+        const st = statSync(dir)
+        if (st.isDirectory() && now - st.mtimeMs > 86400000) rmSync(dir, { recursive: true, force: true })
+      } catch {}
+    }
+  } catch {}
+}
+cleanStaleChunks()
+setInterval(cleanStaleChunks, 3600000) // 每小时检查一次
+
 /** 获取分片上传状态（已接收的分片索引） */
 router.get('/upload/chunk/:identifier', (req: Request, res: Response) => {
   const { id: userId } = req.user!
@@ -165,12 +193,13 @@ router.post('/upload/chunk', (req: Request, res: Response) => {
     renameSync(req.file.path, chunkFile)
 
     // 写入元数据（仅第一片时写入）
+    const safeOriginalName = basename(original_name || 'untitled')
     const metaPath = join(chunkDir, '_meta.json')
     if (!existsSync(metaPath)) {
       writeFileSync(metaPath, JSON.stringify({
         identifier,
         total_chunks: tc,
-        original_name: original_name || 'untitled',
+        original_name: safeOriginalName,
         target_path: targetPath || '',
         user_id: userId,
         created_at: new Date().toISOString(),
@@ -304,6 +333,8 @@ router.post('/mkdir', (req: Request, res: Response) => {
   const { id: userId } = req.user!
   const { path } = req.body
   if (!path || typeof path !== 'string') throw new ValidationError('请输入路径')
+  // 验证路径中每段文件名
+  for (const seg of path.split('/')) validateFileName(seg)
   const dirPath = resolveSafePath(userId, path)
   if (existsSync(dirPath)) throw new ValidationError('文件或文件夹已存在')
   mkdirSync(dirPath, { recursive: true })
@@ -324,6 +355,13 @@ router.post('/upload', (req: Request, res: Response) => {
     }
     if (!req.file) return fail(res, 400, 'NO_FILE', '请选择文件')
 
+    // 验证文件名
+    const rawName = basename(req.file.originalname)
+    try { validateFileName(rawName) } catch (e: any) {
+      try { unlinkSync(req.file.path) } catch {}
+      return fail(res, 400, 'INVALID_NAME', e.message)
+    }
+
     const targetPath = (req.body.path as string) || ''
     const targetDir = resolveSafePath(userId, targetPath)
     if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
@@ -337,7 +375,7 @@ router.post('/upload', (req: Request, res: Response) => {
     }
 
     // 处理文件名冲突（basename 去除路径穿越）
-    let fileName = basename(req.file.originalname)
+    let fileName = rawName
     const destPath = join(targetDir, fileName)
     if (existsSync(destPath)) {
       const ext = extname(fileName)
@@ -466,6 +504,7 @@ router.put('/rename', (req: Request, res: Response) => {
   const { id: userId } = req.user!
   const { path, new_name } = req.body
   if (!path || !new_name) throw new ValidationError('请指定路径和新名称')
+  validateFileName(new_name)
   const oldPath = resolveSafePath(userId, path)
   const root = getUserDir(userId)
   if (oldPath === root) throw new ValidationError('不能重命名根目录')

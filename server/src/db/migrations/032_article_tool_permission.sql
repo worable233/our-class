@@ -20,6 +20,4 @@ FROM group_permissions gp WHERE gp.permission_code = 'roles.manage'
     WHERE gp2.group_id = gp.group_id AND gp2.permission_code = 'tool.article'
   );
 
--- 插入默认 tool_config
-INSERT OR IGNORE INTO tool_configs (user_id, tool_name, config_json, max_result_length, enabled)
-VALUES (0, 'search_articles', '{"max_results":5}', 2000, 1);
+-- tool_configs 默认值由 chat-settings.ts 的 DEFAULT_TOOLS 提供，无需在此插入

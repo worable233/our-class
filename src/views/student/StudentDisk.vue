@@ -79,7 +79,9 @@ async function onDrop(e: DragEvent) {
   const items = e.dataTransfer?.items; if (!items?.length) return
   const fileList: { file: File; path: string }[] = []
   for (const item of Array.from(items)) { const en = item.webkitGetAsEntry?.(); if (en) await traverseFiles(en, currentPath.value ? `${currentPath.value}/${en.name}` : en.name, fileList); else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) } }
-  for (const { file, path } of fileList) startUpload(file, path); message.success(`已添加 ${fileList.length} 个文件到上传队列`)
+  if (fileList.length === 0 && e.dataTransfer?.files.length) { for (const f of Array.from(e.dataTransfer.files)) fileList.push({ file: f, path: currentPath.value }) }
+  for (const { file, path } of fileList) startUpload(file, path)
+  if (fileList.length > 0) message.success(`已添加 ${fileList.length} 个文件到上传队列`)
 }
 
 function openRename(entry: FileEntry) { renameTarget.value = entry; renameValue.value = entry.name; showRenameModal.value = true }

@@ -143,8 +143,12 @@ async function onDrop(e: DragEvent) {
     if (entry) await traverseFiles(entry, currentPath.value ? `${currentPath.value}/${entry.name}` : entry.name, fileList)
     else if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push({ file: f, path: currentPath.value }) }
   }
+  // 回退：若 webkitGetAsEntry 不可用（Firefox/Safari），直接用 files
+  if (fileList.length === 0 && e.dataTransfer?.files.length) {
+    for (const f of Array.from(e.dataTransfer.files)) fileList.push({ file: f, path: currentPath.value })
+  }
   for (const { file, path } of fileList) startUpload(file, path)
-  message.success(`已添加 ${fileList.length} 个文件到上传队列`)
+  if (fileList.length > 0) message.success(`已添加 ${fileList.length} 个文件到上传队列`)
 }
 
 // ── Rename ───────────────────────────────────────────────────────────
