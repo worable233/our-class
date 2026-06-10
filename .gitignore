@@ -67,3 +67,4 @@ server/storage/
 server/uploads/_pending/
 server/uploads/conv_*/
 server/uploads/_chunks/
+server/backups/
