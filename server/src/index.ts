@@ -8,6 +8,7 @@ import { dirname } from 'path'
 import jwt from 'jsonwebtoken'
 import { config } from './config/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { existsSync } from 'fs'
 import { requestLogger } from './middleware/requestLogger.js'
 import { authMiddleware } from './middleware/auth.js'
 import { getDb } from './db/init.js'
@@ -141,6 +142,16 @@ app.use('/api/articles', articleRoutes)
 app.use('/api/site-settings', siteSettingsRoutes)
 app.use('/api/courses', courseRoutes)
 app.use('/api/backup', backupRoutes)
+
+// ── Frontend static files (production) ────────────────────────────────
+const distPath = join(__dirname, '..', '..', 'dist')
+if (existsSync(distPath)) {
+  app.use(express.static(distPath))
+  // SPA fallback: 所有非 API 请求返回 index.html
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(join(distPath, 'index.html'))
+  })
+}
 
 // ── Error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler)
