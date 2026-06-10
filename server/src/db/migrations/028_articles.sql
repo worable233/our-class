@@ -1,0 +1,15 @@
+-- 028_articles.sql
+-- 公众号文章保存表
+
+CREATE TABLE IF NOT EXISTS articles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  url TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL DEFAULT '',
+  content_md TEXT NOT NULL DEFAULT '',
+  cover_url TEXT DEFAULT '',
+  author TEXT DEFAULT '',
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);

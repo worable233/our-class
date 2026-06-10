@@ -56,6 +56,12 @@ const router = createRouter({
           meta: { permissions: ['points.write'] },
         },
         {
+          path: 'articles',
+          name: 'teacher-articles',
+          component: () => import('@/views/teacher/Articles.vue'),
+          meta: { permissions: ['points.read'] },
+        },
+        {
           path: 'point-details',
           name: 'teacher-point-details',
           component: () => import('@/views/teacher/PointDetails.vue'),
@@ -96,6 +102,11 @@ const router = createRouter({
           name: 'teacher-traffic',
           component: () => import('@/views/teacher/TrafficMonitor.vue'),
         },
+        {
+          path: 'disk',
+          name: 'teacher-disk',
+          component: () => import('@/views/teacher/DiskManage.vue'),
+        },
       ],
     },
     {
@@ -123,6 +134,11 @@ const router = createRouter({
           path: 'profile',
           name: 'student-profile',
           component: () => import('@/views/student/Profile.vue'),
+        },
+        {
+          path: 'disk',
+          name: 'student-disk',
+          component: () => import('@/views/student/StudentDisk.vue'),
         },
       ],
     },

@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { computed, h, ref } from 'vue'
 import type { MenuOption } from 'naive-ui'
 import { NLayoutSider, NMenu, NIcon, NTooltip } from 'naive-ui'
-import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList, RefreshCw } from '@lucide/vue'
+import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList, RefreshCw, HardDrive } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -74,6 +74,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { key: '/teacher/assignments', label: '作业管理', icon: renderIcon(List) },
           { key: '/teacher/users', label: '用户管理', icon: renderIcon(Users) },
           { key: '/teacher/review-types', label: '点评类型', icon: renderIcon(Star) },
+          { key: '/teacher/disk', label: '网盘空间', icon: renderIcon(HardDrive) },
         ],
       },
       {
@@ -116,6 +117,7 @@ const menuOptions = computed<MenuOption[]>(() => {
       key: 'personal',
       children: [
         { key: '/student/profile', label: '个人主页', icon: renderIcon(User) },
+        { key: '/student/disk', label: '网盘空间', icon: renderIcon(HardDrive) },
       ],
     },
   ]
