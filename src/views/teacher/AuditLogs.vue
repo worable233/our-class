@@ -68,6 +68,8 @@ const actionLabels: Record<string, string> = {
   reorder_skills: 'Skill 排序',
   add_points: '加分',
   deduct_points: '扣分',
+  update_settings: '修改系统设置',
+  update_apply: '系统升级',
 }
 
 const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
@@ -85,6 +87,8 @@ const actionTypes: Record<string, 'info' | 'warning' | 'success' | 'error'> = {
   reorder_skills: 'info',
   add_points: 'success',
   deduct_points: 'error',
+  update_settings: 'info',
+  update_apply: 'warning',
 }
 
 const entityLabels: Record<string, string> = {
@@ -93,6 +97,7 @@ const entityLabels: Record<string, string> = {
   skill: 'Skill 管理',
   file: '文件管理',
   point: '积分管理',
+  system: '系统升级',
 }
 
 function formatTime(t: string) {
@@ -245,6 +250,28 @@ function describeLog(log: AuditLog): DescriptionSegment[] {
     case 'reorder_skills': {
       return [
         { text: `重新排列了 ${d.count || ''} 个 Skill 的顺序`, type: 'muted' as const },
+      ]
+    }
+    case 'update_settings': {
+      const changes: string[] = []
+      if (d.auto_check_interval !== undefined) changes.push(`检测间隔: ${d.auto_check_interval}s`)
+      if (d.ping_timeout !== undefined) changes.push(`超时: ${d.ping_timeout}s`)
+      return [
+        { text: '修改了系统更新设置', type: 'muted' as const },
+        ...(changes.length ? [
+          { text: '（', type: 'muted' as const },
+          { text: changes.join('，'), type: 'accent' as const },
+          { text: '）', type: 'muted' as const },
+        ] : []),
+      ]
+    }
+    case 'update_apply': {
+      return [
+        { text: '执行了系统升级', type: 'muted' as const },
+        ...(d.message ? [
+          { text: '：', type: 'muted' as const },
+          { text: String(d.message), type: 'accent' as const },
+        ] : []),
       ]
     }
     default:

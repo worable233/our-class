@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { ok, fail } from '../lib/response.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { getDb } from '../db/init.js'
+import { writeAuditLog } from './audit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROJECT_ROOT = join(__dirname, '../..')
@@ -73,6 +74,7 @@ router.put('/settings', (req: Request, res: Response) => {
   const { auto_check_interval, ping_timeout } = req.body
   db.prepare('INSERT INTO update_settings (id, auto_check_interval, ping_timeout) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET auto_check_interval = COALESCE(?, auto_check_interval), ping_timeout = COALESCE(?, ping_timeout), updated_at = CURRENT_TIMESTAMP')
     .run(auto_check_interval ?? 3600, ping_timeout ?? 3, auto_check_interval ?? null, ping_timeout ?? null)
+  writeAuditLog(req.user!.id, req.user!.display_name, 'update_settings', 'system', undefined, { auto_check_interval, ping_timeout })
   ok(res, { saved: true })
 })
 
@@ -227,6 +229,8 @@ router.post('/apply', async (req: Request, res: Response) => {
     }
 
     if (aborted) return
+    // 写入操作日志
+    writeAuditLog(req.user!.id, req.user!.display_name, 'update_apply', 'system', undefined, { message: '系统更新已应用' })
     emit('done', { message: '更新成功，即将重启...' })
     res.end()
     res.on('finish', () => {
