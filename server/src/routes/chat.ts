@@ -836,10 +836,11 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
           return a.name.localeCompare(b.name, 'zh-CN')
         })
       const parent = safe ? pathDirname(safe).replace(/\\/g, '/') : null
+      const parentDir = parent === '.' ? null : parent
       const usage = db.prepare('SELECT storage_used, storage_limit FROM user_storage WHERE user_id = ?').get(userId) as any
       return JSON.stringify({
         path: browsePath || '/',
-        parent: parent || null,
+        parent: parentDir,
         total: items.length,
         items,
         storage: usage ? { used: usage.storage_used, limit: usage.storage_limit } : undefined,
@@ -1202,7 +1203,7 @@ async function agentLoopAnthropic(
         }
 
         // ── 图片工具结果：base64 编码后以 image block 发送 ──
-        let toolContent: any = result
+        let resultContent: any = result
         try {
           const parsedResult = JSON.parse(result)
           if (parsedResult._image) {
@@ -1210,7 +1211,7 @@ async function agentLoopAnthropic(
             if (existsSync(imagePath)) {
               const imgBuf = await import('fs/promises').then(m => m.readFile(imagePath))
               const b64 = imgBuf.toString('base64')
-              toolContent = [
+              resultContent = [
                 { type: 'text', text: parsedResult.text },
                 { type: 'image', source: { type: 'base64', media_type: parsedResult.mime_type, data: b64 } },
               ]
@@ -1220,7 +1221,7 @@ async function agentLoopAnthropic(
 
         loopMessages.push({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: tc.id, content: toolContent }],
+          content: [{ type: 'tool_result', tool_use_id: tc.id, content: resultContent }],
         })
       }
     } else {

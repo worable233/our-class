@@ -7,7 +7,7 @@ import multer from 'multer'
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../db/init.js'
-import { authMiddleware } from '../middleware/auth.js'
+import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { config } from '../config/index.js'
 import { ok, fail } from '../lib/response.js'
 import { ValidationError, NotFoundError } from '../lib/errors.js'
@@ -15,6 +15,19 @@ import { ValidationError, NotFoundError } from '../lib/errors.js'
 const __dirname = pathDirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
 if (!existsSync(STORAGE_ROOT)) mkdirSync(STORAGE_ROOT, { recursive: true })
+
+/** 清理 STORAGE_ROOT 下残留的 _tmp_ 和 _assemble_ 临时文件 */
+function cleanTempFiles(): void {
+  try {
+    for (const name of readdirSync(STORAGE_ROOT)) {
+      if (name.startsWith('_tmp_') || name.startsWith('_assemble_')) {
+        try { unlinkSync(join(STORAGE_ROOT, name)) } catch {}
+      }
+    }
+  } catch {}
+}
+cleanTempFiles()
+setInterval(cleanTempFiles, 3600000)
 
 const router = Router()
 router.use(authMiddleware)
@@ -518,10 +531,10 @@ router.put('/rename', (req: Request, res: Response) => {
   ok(res, { success: true, name: new_name })
 })
 
-// ── 管理端 API ──────────────────────────────────────────────────────
+// ── 管理端 API（需 roles.manage 权限） ──────────────────────────────
 
 // GET /api/storage/groups — 获取所有父权限组的配额设置
-router.get('/groups', (req: Request, res: Response) => {
+router.get('/groups', requirePermission('roles.manage'), (req: Request, res: Response) => {
   const db = getDb()
   const groups = db.prepare(`
     SELECT pg.id, pg.name, pg.group_type,

@@ -84,7 +84,8 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(join(__dirname, '..', 'uploads')))
 
 // 聊天上传的文件存储在 storage/user_{id}/upload/，也通过 /uploads 提供访问
-app.use('/uploads', authMiddleware, express.static(join(__dirname, '..', 'storage')))
+// 注意：authMiddleware 已在第一个中间件中处理, storage 的静态文件直接 serve
+app.use('/uploads', express.static(join(__dirname, '..', 'storage')))
 
 // ── Routes ────────────────────────────────────────────────────────────
 
