@@ -5,14 +5,13 @@ import { useMessage } from 'naive-ui'
 import {
   NButton, NInput, NCard, NText, NSpace, NDivider, NSpin, NAlert,
 } from 'naive-ui'
-import { Save, Globe, Image as ImageIcon, FileText, MessageSquare } from '@lucide/vue'
+import { Save, Globe, Image as ImageIcon, FileText } from '@lucide/vue'
 import FilePicker from '@/components/FilePicker.vue'
 
 interface SiteSettings {
   site_title: string
   site_icon: string
   site_description: string
-  footer_text: string
 }
 
 const message = useMessage()
@@ -20,7 +19,6 @@ const settings = ref<SiteSettings>({
   site_title: 'OurClass',
   site_icon: '',
   site_description: '',
-  footer_text: '',
 })
 const loading = ref(false)
 const saving = ref(false)
@@ -168,22 +166,6 @@ onMounted(load)
                 :maxlength="200"
                 show-count
                 :rows="3"
-              />
-            </div>
-
-            <NDivider style="margin:0;" />
-
-            <!-- 页脚文字 -->
-            <div>
-              <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-                <MessageSquare :size="14" />
-                <span>页脚文字</span>
-              </div>
-              <NInput
-                v-model:value="settings.footer_text"
-                placeholder="页脚显示的文字（可选）"
-                :maxlength="100"
-                show-count
               />
             </div>
           </div>
