@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, h } from 'vue'
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumn } from 'naive-ui'
 import {
@@ -38,6 +39,8 @@ interface ArticlePreview {
 
 const dialog = useDialog()
 const message = useMessage()
+const auth = useAuthStore()
+const isStudent = computed(() => auth.isStudent)
 
 const articles = ref<Article[]>([])
 const loading = ref(false)
@@ -247,28 +250,32 @@ const columns = computed<DataTableColumn[]>(() => [
   {
     key: 'actions',
     title: '操作',
-    width: 130,
+    width: isStudent.value ? 54 : 130,
     align: 'right',
     render(row: Article) {
-      return h('div', { style: 'display:flex;gap:4px;justify-content:flex-end;' }, [
-        h(NButton, {
+      const btns: any[] = []
+      if (!isStudent.value) {
+        btns.push(h(NButton, {
           size: 'tiny', quaternary: true,
           loading: refreshingId.value === row.id,
           disabled: refreshingId.value !== null,
           onClick: (e: Event) => { e.stopPropagation(); refreshArticle(row) },
           round: true,
-        }, { default: () => h(RefreshCw, { size: 13 }) }),
-        h(NButton, {
-          size: 'tiny', quaternary: true, type: 'primary' as any,
-          onClick: (e: Event) => { e.stopPropagation(); openDetail(row) },
-          round: true,
-        }, { default: () => h(Eye, { size: 13 }) }),
-        h(NButton, {
+        }, { default: () => h(RefreshCw, { size: 13 }) }))
+      }
+      btns.push(h(NButton, {
+        size: 'tiny', quaternary: true, type: 'primary' as any,
+        onClick: (e: Event) => { e.stopPropagation(); openDetail(row) },
+        round: true,
+      }, { default: () => h(Eye, { size: 13 }) }))
+      if (!isStudent.value) {
+        btns.push(h(NButton, {
           size: 'tiny', quaternary: true, type: 'error' as any,
           onClick: (e: Event) => { e.stopPropagation(); confirmDelete(row) },
           round: true,
-        }, { default: () => h(Trash2, { size: 13 }) }),
-      ])
+        }, { default: () => h(Trash2, { size: 13 }) }))
+      }
+      return h('div', { style: 'display:flex;gap:4px;justify-content:flex-end;' }, btns)
     },
   },
 ])
@@ -286,7 +293,7 @@ onMounted(load)
           输入链接自动解析并保存为 Markdown 格式
         </NText>
       </div>
-      <NButton type="primary" @click="openParseModal" round>
+      <NButton v-if="!isStudent" type="primary" @click="openParseModal" round>
         <template #icon><Plus :size="16" /></template>
         解析文章
       </NButton>

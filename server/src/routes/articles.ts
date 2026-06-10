@@ -416,7 +416,7 @@ router.post(
 )
 
 // GET /api/articles — list all saved articles
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', requirePermission('articles.read'), (_req: Request, res: Response) => {
   const db = getDb()
   const articles = db.prepare(`
     SELECT id, url, title, cover_url, author, created_by, created_at, updated_at,
@@ -428,7 +428,7 @@ router.get('/', (_req: Request, res: Response) => {
 })
 
 // GET /api/articles/:id — get single article
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', requirePermission('articles.read'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')

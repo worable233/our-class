@@ -106,6 +106,7 @@ const menuOptions = computed<MenuOption[]>(() => {
         { key: '/student/points', label: '我的积分', icon: renderIcon(Star) },
         { key: '/student/leaderboard', label: '积分排行', icon: renderIcon(Trophy) },
         { key: '/student/assignments', label: '作业查询', icon: renderIcon(List) },
+        { key: '/student/articles', label: '公众号文章', icon: renderIcon(Globe) },
       ],
     },
     {

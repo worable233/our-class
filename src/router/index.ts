@@ -154,6 +154,12 @@ const router = createRouter({
           component: () => import('@/views/student/Profile.vue'),
         },
         {
+          path: 'articles',
+          name: 'student-articles',
+          component: () => import('@/views/teacher/Articles.vue'),
+          meta: { permissions: ['articles.read'] },
+        },
+        {
           path: 'disk',
           name: 'student-disk',
           component: () => import('@/views/student/StudentDisk.vue'),
