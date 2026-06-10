@@ -17,6 +17,7 @@ interface CourseInfo { id: number; name: string; class: string }
 
 const selectedClass = ref<ClassInfo | null>(null)
 const selectedCourse = ref<number | null>(null)
+const selectedCourseInfo = ref<CourseInfo | null>(null)
 const assignments = ref<Assignment[]>([])
 const submissions = ref<Submission[]>([])
 const students = ref<Student[]>([])
@@ -54,6 +55,15 @@ const filteredAssignments = computed(() => {
 function enterClass(cls: ClassInfo) {
   selectedClass.value = cls
   selectedCourse.value = null
+  selectedCourseInfo.value = null
+  selectedAssignment.value = null
+  submissions.value = []
+  load()
+}
+
+function selectCourse(crs: CourseInfo) {
+  selectedCourse.value = crs.id
+  selectedCourseInfo.value = crs
   selectedAssignment.value = null
   submissions.value = []
   load()
@@ -62,8 +72,16 @@ function enterClass(cls: ClassInfo) {
 function backToClasses() {
   selectedClass.value = null
   selectedCourse.value = null
+  selectedCourseInfo.value = null
   selectedAssignment.value = null
   assignments.value = []
+  submissions.value = []
+}
+
+function backToCourses() {
+  selectedCourse.value = null
+  selectedCourseInfo.value = null
+  selectedAssignment.value = null
   submissions.value = []
 }
 
@@ -73,9 +91,10 @@ async function load() {
     api.get<any[]>('/courses').catch(() => []),
   ])
   allCourses.value = crs
-  if (crs.length > 0 && !selectedCourse.value) selectedCourse.value = crs[0].id
   // Load assignments
-  assignments.value = await api.get<Assignment[]>('/assignments').catch(() => [])
+  if (selectedCourse.value) {
+    assignments.value = await api.get<Assignment[]>('/assignments').catch(() => [])
+  }
   loading.value = false
   const first = filteredAssignments.value[0]
   if (first) selectAssignment(first.id)
@@ -123,14 +142,19 @@ onMounted(() => { loadClasses(); load() })
 
 <template>
   <div>
-    <!-- ════ 班级内部视图：面包屑 ════ -->
+    <!-- ════ 面包屑 ════ -->
     <template v-if="selectedClass">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <NButton quaternary size="tiny" @click="backToClasses" style="padding:0;font-size:13px;color:var(--text-muted);height:auto;min-height:0" :bordered="false">
           作业管理
         </NButton>
         <span style="color:var(--text-muted);font-size:12px">/</span>
-        <span style="font-size:13px;font-weight:600;color:var(--text-primary)">{{ selectedClass.name }}</span>
+        <NButton v-if="selectedCourseInfo" quaternary size="tiny" @click="backToCourses" style="padding:0;font-size:13px;color:var(--text-muted);height:auto;min-height:0" :bordered="false">
+          {{ selectedClass.name }}
+        </NButton>
+        <span v-else style="font-size:13px;font-weight:600;color:var(--text-primary)">{{ selectedClass.name }}</span>
+        <span v-if="selectedCourseInfo" style="color:var(--text-muted);font-size:12px">/</span>
+        <span v-if="selectedCourseInfo" style="font-size:13px;font-weight:600;color:var(--text-primary)">{{ selectedCourseInfo.name }}</span>
       </div>
     </template>
 
@@ -138,7 +162,7 @@ onMounted(() => { loadClasses(); load() })
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">作业管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级后查看和发布作业，批改学生提交</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级和课程后查看和发布作业，批改学生提交</NText>
       </div>
     </div>
 
@@ -158,24 +182,38 @@ onMounted(() => { loadClasses(); load() })
             </div>
           </n-card>
         </n-gi>
-        <n-gi v-if="classList.length === 0">
-          <NEmpty description="暂无班级数据" />
+        <n-gi v-if="classList.length === 0"><NEmpty description="暂无班级数据" /></n-gi>
+      </n-grid>
+    </template>
+
+    <!-- ════ 课程选择视图 ════ -->
+    <template v-if="selectedClass && !selectedCourseInfo">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+        <BookOpen :size="20" style="color:var(--accent-text)" />
+        <NText style="font-size:17px;font-weight:700;color:var(--text-primary)">选择课程</NText>
+        <NText depth="3" style="font-size:13px">{{ selectedClass.name }}，共 {{ courseList.length }} 门课程</NText>
+      </div>
+      <n-grid :cols="4" :x-gap="16" :y-gap="16">
+        <n-gi v-for="crs in courseList" :key="crs.id">
+          <n-card hoverable size="small" :bordered="true" class="class-card" @click="selectCourse(crs)">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0">
+              <div class="class-card-icon" style="background:var(--surface-2);color:var(--text-secondary)"><BookOpen :size="28" /></div>
+              <NText style="font-size:16px;font-weight:700;color:var(--text-primary);text-align:center">{{ crs.name }}</NText>
+            </div>
+          </n-card>
+        </n-gi>
+        <n-gi v-if="courseList.length === 0">
+          <NEmpty description="该班级暂无课程" />
         </n-gi>
       </n-grid>
     </template>
 
-    <!-- ════ 班级内部视图 ════ -->
-    <template v-if="selectedClass">
+    <!-- ════ 作业+提交视图 ════ -->
+    <template v-if="selectedClass && selectedCourseInfo">
       <!-- Toolbar -->
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
-        <n-select
-          v-model:value="selectedCourse"
-          :options="courseOptions"
-          placeholder="选择课程"
-          clearable
-          style="width:160px"
-          size="small"
-        />
+        <span style="font-size:14px;font-weight:600;color:var(--text-primary)">{{ selectedCourseInfo.name }}</span>
+        <span style="flex:1" />
         <n-button type="primary" @click="showNew = true" size="small" round>
           <template #icon><Plus :size="14" /></template>
           发布作业
