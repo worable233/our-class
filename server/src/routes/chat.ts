@@ -476,7 +476,8 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       // Verify file belongs to a conversation the user has access to (same user)
       if (file.user_id !== userId) return JSON.stringify({ error: '无权访问该文件' })
 
-      const filePath = join(__dirname, '..', '..', 'uploads', file.stored_path)
+      let filePath = join(__dirname, '..', '..', 'uploads', file.stored_path)
+      if (!existsSync(filePath)) filePath = join(__dirname, '..', '..', 'storage', file.stored_path)
       if (!existsSync(filePath)) return JSON.stringify({ error: '文件已被删除' })
 
       const ext = extname(file.original_name).toLowerCase()
