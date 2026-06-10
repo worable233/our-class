@@ -3,21 +3,30 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { computed, h } from 'vue'
 import type { MenuOption } from 'naive-ui'
-import { NLayoutSider, NMenu, NIcon, NTooltip } from 'naive-ui'
+import { NLayoutSider, NMenu, NIcon, NTooltip, NBadge } from 'naive-ui'
 import { Star, List, Users, Trophy, User, Shield, Bot, Settings, History, LayoutDashboard, Globe, BookOpen, ClipboardList, RefreshCw, HardDrive } from '@lucide/vue'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
+import { useUpdateChecker } from '@/composables/useUpdateChecker'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { isDark } = useTheme()
+const { hasUpdate } = useUpdateChecker()
 
 const props = defineProps<{ collapsed: boolean; isMobile?: boolean; open?: boolean }>()
 const emit = defineEmits<{ 'update:collapsed': [boolean]; close: [] }>()
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
+}
+
+function renderUpdateLabel(text: string) {
+  return () => h('span', { style: 'display:inline-flex;align-items:center;gap:6px;position:relative;' }, [
+    text,
+    hasUpdate.value ? h('span', { style: 'width:8px;height:8px;border-radius:50%;background:#d03050;display:inline-block;flex-shrink:0;' }) : null,
+  ])
 }
 
 // Permission requirements per route (mirrors router meta.permissions)
@@ -92,7 +101,7 @@ const menuOptions = computed<MenuOption[]>(() => {
               { key: '/teacher/logs', label: '操作日志', icon: renderIcon(History) },
               { key: '/teacher/traffic', label: '流量监控', icon: renderIcon(Globe) },
               { key: '/teacher/site-data', label: '站点数据', icon: renderIcon(LayoutDashboard) },
-              { key: '/teacher/update', label: '系统更新', icon: renderIcon(RefreshCw) },
+              { key: '/teacher/update', label: renderUpdateLabel('系统更新'), icon: renderIcon(RefreshCw) },
             ],
           },
         ],

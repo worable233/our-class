@@ -8,8 +8,10 @@ import {
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { RefreshCw, Download, Save, History, Settings } from '@lucide/vue'
+import { useUpdateChecker } from '@/composables/useUpdateChecker'
 
 const message = useMessage()
+const { setUpdate, clearUpdate } = useUpdateChecker()
 
 const updateInfo = ref<{ current: string; latest: string; behind: boolean; commits: { hash: string; message: string; author: string; date: string }[] } | null>(null)
 const updateChecking = ref(false)
@@ -88,9 +90,12 @@ async function checkUpdate() {
   updateResult.value = ''
   updateInfo.value = null
   try {
-    updateInfo.value = await api.post('/system/update/check', {})
+    const info = await api.post<{ current: string; latest: string; behind: boolean; commits: any[] }>('/system/update/check', {})
+    updateInfo.value = info
+    setUpdate(!!info.behind, info.latest, info.commits || [])
   } catch (e: any) {
     updateResult.value = e.message || '检查失败'
+    clearUpdate()
   } finally {
     updateChecking.value = false
   }
