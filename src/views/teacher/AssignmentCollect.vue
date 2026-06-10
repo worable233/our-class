@@ -8,9 +8,16 @@ import {
   NTag, NSpin, NEmpty, NText, NInputNumber, NAvatar, NList, NListItem,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Plus } from '@lucide/vue'
+import { Plus, Eye, X } from '@lucide/vue'
 
 const auth = useAuthStore()
+
+// 开发中遮罩
+const overlayDismissed = ref(localStorage.getItem('assignment_overlay_dismissed') === 'true')
+function dismissOverlay() {
+  overlayDismissed.value = true
+  localStorage.setItem('assignment_overlay_dismissed', 'true')
+}
 const assignments = ref<Assignment[]>([])
 const submissions = ref<Submission[]>([])
 const students = ref<Student[]>([])
@@ -68,7 +75,22 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div style="position:relative">
+    <!-- 开发中遮罩 -->
+    <div v-if="!overlayDismissed" class="dev-overlay">
+      <div class="dev-overlay-content">
+        <Eye :size="40" style="color:#5E6AD2;margin-bottom:12px" />
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px;color:var(--text-primary)">功能开发中</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;max-width:300px;text-align:center;line-height:1.6">
+          作业管理系统正在紧锣密鼓地开发中，部分功能可能尚未完善
+        </div>
+        <n-button type="primary" round @click="dismissOverlay" size="medium">
+          <template #icon><X :size="16" /></template>
+          抢先体验
+        </n-button>
+      </div>
+    </div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">作业管理</NText>
@@ -231,6 +253,24 @@ onMounted(load)
 </template>
 
 <style scoped>
+.dev-overlay {
+  position: absolute;
+  inset: -4px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+}
+.dev-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px;
+}
 @media (max-width: 768px) {
   .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
   .page-header .n-button { width: 100%; }
