@@ -107,8 +107,8 @@ async function saveTeacher() {
     if (teacherForm.value.class.length > 0) payload.class = teacherForm.value.class.join(',')
     if (teacherForm.value.nickname) payload.nickname = teacherForm.value.nickname
     if (teacherForm.value.password) payload.password = teacherForm.value.password
-    payload.group_id = teacherForm.value.group_id
-    payload.role_id = teacherForm.value.role_id
+    if (teacherForm.value.group_id) payload.group_id = teacherForm.value.group_id
+    if (teacherForm.value.role_id) payload.role_id = teacherForm.value.role_id
 
     await api.put(`/teachers/${editingTeacher.value!.id}`, payload)
     showTeacherModal.value = false
