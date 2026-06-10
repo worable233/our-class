@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { NModal, NButton } from 'naive-ui'
-import { FileText, Download, X } from '@lucide/vue'
+import { FileText, Download, FileImage, FileSpreadsheet, FileType, File as FileIcon } from '@lucide/vue'
 import type { UploadedFileInfo } from '@/types'
 
 const props = defineProps<{
@@ -13,7 +13,6 @@ const emit = defineEmits<{ 'update:show': [boolean] }>()
 const textContent = ref('')
 const loadingText = ref(false)
 
-// Get auth token from localStorage for authenticated file access
 function getAuthUrl(url: string): string {
   try {
     const user = JSON.parse(localStorage.getItem('ourclass_user') || '{}')
@@ -28,6 +27,16 @@ function getAuthUrl(url: string): string {
 const isImage = (f: UploadedFileInfo) => f.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(f.name)
 const isPdf = (f: UploadedFileInfo) => f.mime_type === 'application/pdf' || f.name.endsWith('.pdf')
 const isText = (f: UploadedFileInfo) => /\.(txt|csv|md|json|xml|yaml|yml|log|js|ts|py|html|css|sql|sh|env)$/i.test(f.name)
+const isOffice = (f: UploadedFileInfo) => /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(f.name)
+const isVideo = (f: UploadedFileInfo) => f.mime_type?.startsWith('video/') || /\.(mp4|avi|mkv|mov|wmv)$/i.test(f.name)
+const isAudio = (f: UploadedFileInfo) => f.mime_type?.startsWith('audio/') || /\.(mp3|wav|flac|aac)$/i.test(f.name)
+
+/** Office Online 预览 URL */
+const officeViewUrl = computed(() => {
+  if (!props.file || !isOffice(props.file)) return ''
+  const fileUrl = getAuthUrl(props.file.url)
+  return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(window.location.origin + fileUrl)}`
+})
 
 async function loadText(url: string) {
   loadingText.value = true
@@ -66,8 +75,18 @@ watch(() => props.show, (v) => {
         <img :src="getAuthUrl(file.url)" :alt="file.name" class="preview-img" />
       </div>
 
-      <!-- PDF -->
+      <!-- PDF / Office / Video / Audio — all use iframe/embed -->
       <iframe v-else-if="isPdf(file)" :src="getAuthUrl(file.url)" class="preview-pdf" />
+
+      <iframe v-else-if="isOffice(file)" :src="officeViewUrl" class="preview-pdf" />
+
+      <video v-else-if="isVideo(file)" :src="getAuthUrl(file.url)" class="preview-video" controls />
+
+      <div v-else-if="isAudio(file)" class="preview-audio-wrap">
+        <div class="preview-audio-icon"><FileIcon :size="48" /></div>
+        <div class="preview-other-name">{{ file.name }}</div>
+        <audio :src="getAuthUrl(file.url)" controls class="preview-audio" />
+      </div>
 
       <!-- Text -->
       <div v-else-if="isText(file)" class="preview-text-wrap">
@@ -75,18 +94,21 @@ watch(() => props.show, (v) => {
         <pre v-else class="preview-text">{{ textContent }}</pre>
       </div>
 
-      <!-- Other -->
-      <div v-else class="preview-other">
-        <FileText :size="48" class="preview-other-icon" />
-        <div class="preview-other-name">{{ file.name }}</div>
-        <div class="preview-other-size">{{ (file.size / 1024).toFixed(1) }} KB</div>
-        <div class="preview-other-type">{{ file.mime_type || '未知类型' }}</div>
-        <a :href="getAuthUrl(file.url)" download :target="'_blank'" class="preview-download-link">
-          <NButton type="primary" size="small">
-            <template #icon><Download :size="14" /></template>
-            下载文件
-          </NButton>
-        </a>
+      <!-- Other — try iframe fallback -->
+      <div v-else class="preview-other-wrap">
+        <iframe :src="getAuthUrl(file.url)" class="preview-pdf" @error="$event.target.style.display='none'" />
+        <div class="preview-other-fallback">
+          <FileText :size="48" class="preview-other-icon" />
+          <div class="preview-other-name">{{ file.name }}</div>
+          <div class="preview-other-size">{{ (file.size / 1024).toFixed(1) }} KB</div>
+          <div class="preview-other-type">{{ file.mime_type || '未知类型' }}</div>
+          <a :href="getAuthUrl(file.url)" download :target="'_blank'" class="preview-download-link">
+            <NButton type="primary" size="small">
+              <template #icon><Download :size="14" /></template>
+              下载文件
+            </NButton>
+          </a>
+        </div>
       </div>
     </template>
   </NModal>
@@ -104,6 +126,15 @@ watch(() => props.show, (v) => {
 .preview-pdf {
   width: 100%; height: 100%; border: none;
 }
+.preview-video {
+  width: 100%; max-height: 60vh; margin: auto;
+}
+.preview-audio-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; width: 100%; gap: 12px; padding: 40px;
+}
+.preview-audio-icon { color: var(--text-muted); }
+.preview-audio { width: 80%; max-width: 400px; }
 .preview-text-wrap {
   width: 100%; padding: 16px; overflow: auto;
 }
@@ -117,12 +148,19 @@ watch(() => props.show, (v) => {
   white-space: pre-wrap; word-break: break-all;
   margin: 0;
 }
-.preview-other {
+.preview-other-wrap {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  position: relative;
+}
+.preview-other-wrap iframe {
+  flex: 1;
+}
+.preview-other-fallback {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; width: 100%; gap: 8px; padding: 40px;
 }
 .preview-other-icon { color: var(--text-muted); }
-.preview-other-name { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.preview-other-name { font-size: 16px; font-weight: 600; color: var(--text-primary); text-align: center; }
 .preview-other-size { font-size: 13px; color: var(--text-muted); }
 .preview-other-type { font-size: 12px; color: var(--text-muted); }
 .preview-download-link { text-decoration: none; margin-top: 12px; }

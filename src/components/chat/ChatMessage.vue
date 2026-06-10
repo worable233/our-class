@@ -466,7 +466,10 @@ watch(
               @click="openFilePreview(f)"
               :title="f.name"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <template v-if="f.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(f.name)">
+                <img :src="f.url" :alt="f.name" class="file-chip-thumb" @error="(e:any)=>e.target.style.display='none'" />
+              </template>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               {{ f.name }}
             </div>
           </div>
@@ -636,6 +639,13 @@ watch(
   border-color: var(--accent);
   color: var(--accent-text);
   background: var(--accent-glow);
+}
+.file-chip-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .text-bot { padding: 0; }
