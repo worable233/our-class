@@ -111,6 +111,8 @@ router.get('/upload/chunk/:identifier', (req: Request, res: Response) => {
   const { id: userId } = req.user!
   const identifier = req.params.identifier
   if (!identifier) throw new ValidationError('缺少 identifier')
+  // identifier 格式: userId_timestamp_random，验证归属
+  if (!identifier.startsWith(`${userId}_`)) throw new ValidationError('无权访问')
   const chunkDir = join(CHUNK_DIR, identifier)
   if (!existsSync(chunkDir)) return ok(res, { received: [], total_chunks: 0 })
   const files = readdirSync(chunkDir).filter(f => /^\d+$/.test(f)).map(Number).sort((a, b) => a - b)
@@ -143,76 +145,92 @@ router.post('/upload/chunk', (req: Request, res: Response) => {
       try { unlinkSync(req.file.path) } catch {}
       return fail(res, 400, 'VALIDATION', '缺少分片参数')
     }
+    const ci = Number(chunk_index)
+    const tc = Number(total_chunks)
+    if (!Number.isInteger(ci) || ci < 0 || ci >= tc || !Number.isInteger(tc) || tc < 1 || tc > 10000) {
+      try { unlinkSync(req.file.path) } catch {}
+      return fail(res, 400, 'VALIDATION', '分片参数不合法')
+    }
 
     const chunkDir = join(CHUNK_DIR, identifier)
     if (!existsSync(chunkDir)) mkdirSync(chunkDir, { recursive: true })
 
+    // 原子性检查：用 _lock 文件防止并发组装
+    const lockPath = join(chunkDir, '_lock')
+    if (existsSync(lockPath)) return ok(res, { done: false, received: [], total: tc, locked: true })
+
     // 保存分片
-    const chunkFile = join(chunkDir, String(chunk_index))
+    const chunkFile = join(chunkDir, String(ci))
     try { unlinkSync(chunkFile) } catch {}
     renameSync(req.file.path, chunkFile)
 
-    // 写入元数据
+    // 写入元数据（仅第一片时写入）
     const metaPath = join(chunkDir, '_meta.json')
-    writeFileSync(metaPath, JSON.stringify({
-      identifier,
-      total_chunks: Number(total_chunks),
-      original_name: original_name || 'untitled',
-      target_path: targetPath || '',
-      user_id: userId,
-      created_at: new Date().toISOString(),
-    }))
-
-    // 检查是否所有分片已到齐
-    const existing = readdirSync(chunkDir).filter(f => /^\d+$/.test(f))
-    const allReceived = existing.length >= Number(total_chunks)
-
-    if (allReceived) {
-      // 组装文件
-      const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
-      const targetDir = resolveSafePath(userId, meta.target_path || '')
-      if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
-
-      // 处理文件名冲突
-      let finalName = basename(meta.original_name || 'untitled')
-      const destPath = join(targetDir, finalName)
-      if (existsSync(destPath)) {
-        const ext = extname(finalName)
-        const base = basename(finalName, ext)
-        finalName = `${base}_${Date.now()}${ext}`
-      }
-
-      // 合并分片
-      const assembledPath = join(targetDir, `_assembling_${uuidv4()}`)
-      try {
-        const chunks = existing.map(Number).sort((a, b) => a - b)
-        for (const idx of chunks) {
-          const chunkData = readFileSync(join(chunkDir, String(idx)))
-          appendFileSync(assembledPath, chunkData)
-        }
-        // 检查配额
-        const st = statSync(assembledPath)
-        checkQuota(userId, st.size)
-        // 移动到最终位置
-        const finalPath = join(targetDir, finalName)
-        renameSync(assembledPath, finalPath)
-        // 清理分片目录
-        rmSync(chunkDir, { recursive: true, force: true })
-        updateStorageUsed(userId)
-        return ok(res, {
-          done: true,
-          name: finalName,
-          path: meta.target_path ? `${meta.target_path}/${finalName}` : finalName,
-          size: st.size,
-          size_display: fmtSize(st.size),
-        })
-      } catch (e: any) {
-        try { unlinkSync(assembledPath) } catch {}
-        throw e
-      }
+    if (!existsSync(metaPath)) {
+      writeFileSync(metaPath, JSON.stringify({
+        identifier,
+        total_chunks: tc,
+        original_name: original_name || 'untitled',
+        target_path: targetPath || '',
+        user_id: userId,
+        created_at: new Date().toISOString(),
+      }))
     }
 
-    ok(res, { done: false, received: existing.length, total: Number(total_chunks) })
+    // 检查是否所有分片已到齐
+    const existing = readdirSync(chunkDir).filter(f => /^\d+$/.test(f)).map(Number).sort((a, b) => a - b)
+    if (existing.length < tc) {
+      return ok(res, { done: false, received: existing.length, total: tc })
+    }
+
+    // 所有分片到齐，加锁后组装（防并发）
+    try { writeFileSync(lockPath, String(Date.now())) } catch {
+      return ok(res, { done: false, received: existing.length, total: tc })
+    }
+    // 二次确认：可能另一个请求已开始组装
+    if (!existsSync(chunkDir)) return ok(res, { done: true })
+
+    // 组装文件
+    const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
+    const targetDir = resolveSafePath(userId, meta.target_path || '')
+    if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+
+    // 处理文件名冲突
+    let finalName = basename(meta.original_name || 'untitled')
+    const destPath = join(targetDir, finalName)
+    if (existsSync(destPath)) {
+      const ext = extname(finalName)
+      const base = basename(finalName, ext)
+      finalName = `${base}_${Date.now()}${ext}`
+    }
+
+    // 合并分片
+    const assembledPath = join(STORAGE_ROOT, `_assemble_${uuidv4()}`)
+    try {
+      for (const idx of existing) {
+        const chunkData = readFileSync(join(chunkDir, String(idx)))
+        appendFileSync(assembledPath, chunkData)
+      }
+      // 检查配额
+      const st = statSync(assembledPath)
+      checkQuota(userId, st.size)
+      // 移动到最终位置
+      const finalPath = join(targetDir, finalName)
+      renameSync(assembledPath, finalPath)
+      // 清理分片目录
+      rmSync(chunkDir, { recursive: true, force: true })
+      updateStorageUsed(userId)
+      return ok(res, {
+        done: true,
+        name: finalName,
+        path: meta.target_path ? `${meta.target_path}/${finalName}` : finalName,
+        size: st.size,
+        size_display: fmtSize(st.size),
+      })
+    } catch (e: any) {
+      try { unlinkSync(assembledPath) } catch {}
+      throw e
+    }
   })
 })
 

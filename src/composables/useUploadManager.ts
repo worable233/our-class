@@ -8,7 +8,7 @@ export interface UploadTask {
   path: string
   size: number
   progress: number      // 0-100
-  status: 'pending' | 'uploading' | 'paused' | 'done' | 'error'
+  status: 'pending' | 'uploading' | 'paused' | 'done' | 'error' | 'cancelled'
   error?: string
   created_at: string
   done_at?: string
@@ -24,6 +24,17 @@ const MAX_HISTORY = 50
 const uploads = ref<UploadTask[]>([])
 const panelOpen = ref(false)
 const activeTab = ref<'active' | 'history'>('active')
+
+// 上传完成回调列表
+const onDoneCallbacks: Array<() => void> = []
+
+export function onUploadDone(cb: () => void) {
+  onDoneCallbacks.push(cb)
+}
+
+function notifyDone() {
+  onDoneCallbacks.forEach(cb => cb())
+}
 
 // 从 localStorage 加载历史
 function loadHistory() {
@@ -47,9 +58,17 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-// 生成分片标识符
+// 生成分片标识符（含 userId 防跨用户冲突）
 function makeIdentifier(file: File): string {
-  return `${file.name}_${file.size}_${Date.now()}`
+  const stored = localStorage.getItem('ourclass_user')
+  const userId = stored ? (JSON.parse(stored).id || '0') : '0'
+  return `${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+}
+
+// 获取当前用户 token
+function getToken(): string {
+  const stored = localStorage.getItem('ourclass_user')
+  return stored ? JSON.parse(stored).token || '' : ''
 }
 
 function addUpload(file: File, targetPath: string): UploadTask {
@@ -72,7 +91,7 @@ function addUpload(file: File, targetPath: string): UploadTask {
 
 async function startUpload(file: File, targetPath: string): Promise<void> {
   const task = addUpload(file, targetPath)
-  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  const token = getToken()
   const totalChunks = task.total_chunks
 
   // 先查询服务端已有分片（断点续传）
@@ -123,7 +142,8 @@ async function startUpload(file: File, targetPath: string): Promise<void> {
         task.progress = 100
         task.done_at = new Date().toISOString()
         saveHistory()
-        break
+        notifyDone()
+        return
       }
     } catch (e: any) {
       if (e.name === 'AbortError') {
@@ -135,6 +155,14 @@ async function startUpload(file: File, targetPath: string): Promise<void> {
       saveHistory()
       return
     }
+  }
+  // 0 分片（空文件）视为完成
+  if (totalChunks === 0) {
+    task.status = 'done'
+    task.progress = 100
+    task.done_at = new Date().toISOString()
+    saveHistory()
+    notifyDone()
   }
 }
 
@@ -148,10 +176,9 @@ function pauseUpload(taskId: string) {
 function resumeUpload(taskId: string) {
   const task = uploads.value.find(u => u.id === taskId)
   if (!task || task.status !== 'paused') return
-  // 从文件恢复 - 需要原始 File 对象
-  // 由于无法从已暂停的任务恢复 File 对象，需要用户重新选择文件
-  task.status = 'error'
-  task.error = '请重新选择文件后上传'
+  // 暂停后 File 对象在内存中丢失，无法恢复，需用户重新选择
+  task.status = 'cancelled'
+  uploads.value = uploads.value.filter(u => u.id !== taskId)
   saveHistory()
 }
 
@@ -159,8 +186,7 @@ function cancelUpload(taskId: string) {
   const task = uploads.value.find(u => u.id === taskId)
   if (!task) return
   task.abort_ctrl?.abort()
-  task.status = 'done'
-  task.progress = 100
+  task.status = 'cancelled'
   // 从列表中移除
   uploads.value = uploads.value.filter(u => u.id !== taskId)
   saveHistory()
@@ -201,5 +227,6 @@ export function useUploadManager() {
     cancelUpload,
     clearHistory,
     removeHistoryItem,
+    onUploadDone,
   }
 }

@@ -58,9 +58,7 @@ export const useAuthStore = defineStore('auth', () => {
   /** Call in router guard when route requires permissions that may not be loaded yet */
   function ensurePermissions(): Promise<void> {
     if (!user.value?.token) return Promise.resolve()
-    // If we already have permissions, return immediately
-    if (user.value.permissions && user.value.permissions.length > 0) return Promise.resolve()
-    // Otherwise wait for refresh
+    // Always refresh from server to get the latest permissions (e.g. after a migration adds a new code)
     return refreshPermissions()
   }
 

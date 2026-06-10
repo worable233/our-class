@@ -17,7 +17,8 @@ import {
 
 const message = useMessage()
 const dialog = useDialog()
-const { startUpload } = useUploadManager()
+const { startUpload, onUploadDone } = useUploadManager()
+onUploadDone(() => { loadList(currentPath.value); loadInfo() })
 
 // ── State ────────────────────────────────────────────────────────────
 interface FileEntry {
