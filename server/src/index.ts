@@ -98,7 +98,7 @@ app.post('/api/analytics/pv', (req, res) => {
 // Auth middleware — JWT valid only via Authorization header (NOT ?token= query param)
 // Skip auth for article images (public content from WeChat)
 app.use('/uploads', (req, res, next) => {
-  if (req.path.startsWith('/articles/')) return next()
+  if (req.path.startsWith('/articles/') || req.path.startsWith('/course_covers/')) return next()
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })

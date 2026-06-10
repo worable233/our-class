@@ -172,7 +172,7 @@ onMounted(load)
           <!-- Info -->
           <div class="course-info">
             <span class="course-name">{{ c.name }}</span>
-            <NTag size="tiny" :bordered="false" round style="font-size:10px;">{{ c.class }}</NTag>
+            <NTag v-if="c.class" size="tiny" :bordered="false" round style="font-size:10px;">{{ c.class }}</NTag>
           </div>
           <div v-if="c.description" class="course-desc">{{ c.description }}</div>
           <div class="course-meta">
