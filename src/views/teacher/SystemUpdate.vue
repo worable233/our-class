@@ -7,7 +7,7 @@ import {
   NForm, NFormItem, NGi, NGrid, NStatistic,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
-import { RefreshCw, Download, Save, History, Settings } from '@lucide/vue'
+import { RefreshCw, Download, Save, History, Settings, Clock, Info, Package, CheckCircle } from '@lucide/vue'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 
 const message = useMessage()
@@ -191,8 +191,8 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
             {{ versionInfo.message || '--' }}
           </div>
           <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
-            <span>🕐 {{ versionInfo.date ? formatDateTime(versionInfo.date) : '--' }}</span>
-            <span>📋 {{ lastCheckDisplay }}</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;"><Clock :size="13" /> {{ versionInfo.date ? formatDateTime(versionInfo.date) : '--' }}</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;"><Info :size="13" /> {{ lastCheckDisplay }}</span>
           </div>
         </div>
       </n-card>
@@ -215,7 +215,7 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
           <div :style="{padding:'20px',borderRadius:'10px',marginBottom: updateInfo.behind ? '16px': '0',background: updateInfo.behind ? 'var(--surface-2)' : 'transparent',border: updateInfo.behind ? '1px solid var(--hairline)' : 'none'}">
             <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
               <div :style="{width:36,height:36,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',background: updateInfo.behind ? 'rgba(240,160,32,0.12)' : 'rgba(24,160,88,0.12)'}">
-                <span :style="{fontSize:'18px'}">{{ updateInfo.behind ? '📦' : '✅' }}</span>
+                <component :is="updateInfo.behind ? Package : CheckCircle" :size="20" :stroke-width="1.5" :style="{color: updateInfo.behind ? '#f0a020' : '#18a058'}" />
               </div>
               <div>
                 <div style="font-size:15px;font-weight:600;color:var(--text-primary);">
