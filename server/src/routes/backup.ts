@@ -1,18 +1,20 @@
 import { Router, Request, Response } from 'express'
-import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync, unlinkSync, createReadStream, copyFileSync, renameSync } from 'fs'
-import { join, extname, basename } from 'path'
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync, unlinkSync, createReadStream, createWriteStream } from 'fs'
+import { join, basename, resolve, normalize } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import multer from 'multer'
+import jwt from 'jsonwebtoken'
 import { getDb } from '../db/init.js'
+import { config } from '../config/index.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const UPLOAD_ROOT = join(__dirname, '..', '..', 'uploads')
-const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
-const BACKUP_DIR = join(__dirname, '..', '..', 'backups')
+const UPLOAD_ROOT = resolve(join(__dirname, '..', '..', 'uploads'))
+const STORAGE_ROOT = resolve(join(__dirname, '..', '..', 'storage'))
+const BACKUP_DIR = resolve(join(__dirname, '..', '..', 'backups'))
 if (!existsSync(BACKUP_DIR)) mkdirSync(BACKUP_DIR, { recursive: true })
 
 const router = Router()
@@ -28,7 +30,7 @@ const upload = multer({
 
 const BACKUP_VERSION = 1
 
-/** Tables to backup in dependency-safe order */
+/** Tables to backup/restore in dependency-safe order */
 const BACKUP_TABLES = [
   'permission_groups',
   'permissions',
@@ -56,16 +58,23 @@ const BACKUP_TABLES = [
   'classes',
   'storage_meta',
   'storage_quotas',
-  'rate_limits',
   'courses',
 ]
 
-/** Collect all files recursively */
+/** Resolve a path safely within a root directory (prevents path traversal) */
+function safeJoin(root: string, relative: string): string | null {
+  const target = resolve(join(root, relative))
+  if (!target.startsWith(root)) return null
+  return target
+}
+
+/** Collect all files recursively, excluding _pending */
 function collectFiles(dir: string, basePath = ''): { path: string; src: string }[] {
   const results: { path: string; src: string }[] = []
   if (!existsSync(dir)) return results
   const entries = readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
+    if (entry.name === '_pending') continue // skip temp uploads
     const fullPath = join(dir, entry.name)
     const relPath = basePath ? `${basePath}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
@@ -100,17 +109,19 @@ router.get('/list', requirePermission('chat.config'), (_req: Request, res: Respo
 
 // POST /api/backup/export — create and download a full backup
 router.post('/export', requirePermission('chat.config'), async (req: Request, res: Response) => {
+  let cleanupPath: string | null = null
   try {
     const Archiver = (await import('archiver')).default
     const db = getDb()
     const archive = Archiver('zip', { zlib: { level: 6 } })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const filename = `backup-${timestamp}.zip`
+    const tag = uuidv4().slice(0, 8)
+    const filename = `backup-${timestamp}-${tag}.zip`
     const filePath = join(BACKUP_DIR, filename)
+    cleanupPath = filePath
 
-    const output = createReadStream // will be used later
-    const writeStream = require('fs').createWriteStream(filePath)
+    const writeStream = createWriteStream(filePath)
     archive.pipe(writeStream)
 
     // 1. Database data
@@ -123,29 +134,35 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
     }
     archive.append(JSON.stringify(dbData, null, 2), { name: 'database.json' })
 
-    // 2. Backup metadata
+    // 2. Uploaded files
+    const uploadFiles = collectFiles(UPLOAD_ROOT)
+    const storageFiles = collectFiles(STORAGE_ROOT)
+    const allFiles = [...uploadFiles, ...storageFiles]
+    for (const f of allFiles) {
+      archive.file(f.src, { name: `files/${f.path}` })
+    }
+
+    // 3. Backup metadata (compute all fields before writing)
+    const totalRecords = Object.values(dbData).reduce((sum, arr) => sum + arr.length, 0)
     const backupMeta = {
       version: BACKUP_VERSION,
       created_at: new Date().toISOString(),
       db_tables: tables.length,
-      db_records: Object.values(dbData).reduce((sum, arr) => sum + arr.length, 0),
+      db_records: totalRecords,
+      files_count: allFiles.length,
     }
     archive.append(JSON.stringify(backupMeta, null, 2), { name: 'backup.json' })
 
-    // 3. Uploaded files
-    const uploadFiles = collectFiles(UPLOAD_ROOT)
-    const storageFiles = collectFiles(STORAGE_ROOT)
-    for (const f of [...uploadFiles, ...storageFiles]) {
-      archive.file(f.src, { name: `files/${f.path}` })
-    }
-    backupMeta.files_count = uploadFiles.length + storageFiles.length
-
     await archive.finalize()
-
     await new Promise<void>((resolve, reject) => {
       writeStream.on('close', resolve)
       writeStream.on('error', reject)
     })
+
+    // Verify the zip was written
+    if (!existsSync(filePath) || statSync(filePath).size === 0) {
+      throw new Error('备份文件生成失败')
+    }
 
     // Stream download to client
     const st = statSync(filePath)
@@ -154,10 +171,12 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
     res.setHeader('Content-Length', st.size)
     const rs = createReadStream(filePath)
     rs.pipe(res)
-    rs.on('end', () => {
-      // Don't delete the backup file - keep it server-side
-    })
+    rs.on('error', () => { /* client disconnected — cleanup handled below */ })
   } catch (e: any) {
+    // Clean up partial file on error
+    if (cleanupPath && existsSync(cleanupPath)) {
+      try { unlinkSync(cleanupPath) } catch {}
+    }
     return fail(res, 500, 'BACKUP_FAILED', `导出失败: ${e.message}`)
   }
 })
@@ -165,80 +184,89 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
 // POST /api/backup/import — restore from a backup zip
 router.post('/import', requirePermission('chat.config'), upload.single('backup'), async (req: Request, res: Response) => {
   if (!req.file) return fail(res, 400, 'NO_FILE', '请选择备份文件')
-  const filePath = req.file.path
+  const uploadPath = req.file.path
 
   try {
     const AdmZip = (await import('adm-zip'))
-    const zip = new AdmZip.default(filePath)
+    const zip = new AdmZip.default(uploadPath)
 
-    // Read metadata
+    // Read and validate metadata
     const backupEntry = zip.getEntry('backup.json')
     if (!backupEntry) return fail(res, 400, 'INVALID_BACKUP', '无效的备份文件：缺少 backup.json')
     const backupMeta = JSON.parse(backupEntry.getData().toString('utf-8'))
-    if (!backupMeta.version || backupMeta.version > BACKUP_VERSION) {
-      return fail(res, 400, 'VERSION_MISMATCH', `备份版本 ${backupMeta.version} 不兼容，当前支持版本 ${BACKUP_VERSION}`)
+    if (typeof backupMeta.version !== 'number' || backupMeta.version < 1 || backupMeta.version > BACKUP_VERSION) {
+      return fail(res, 400, 'VERSION_MISMATCH',
+        `备份版本 ${backupMeta.version} 不兼容，当前支持版本 v${BACKUP_VERSION}`)
     }
 
     // Read database data
     const dbEntry = zip.getEntry('database.json')
     if (!dbEntry) return fail(res, 400, 'INVALID_BACKUP', '无效的备份文件：缺少 database.json')
     const dbData = JSON.parse(dbEntry.getData().toString('utf-8'))
+    if (typeof dbData !== 'object' || Array.isArray(dbData)) {
+      return fail(res, 400, 'INVALID_BACKUP', '无效的备份文件：database.json 格式错误')
+    }
 
     const db = getDb()
     const errors: string[] = []
 
     // Restore database
     db.pragma('foreign_keys = OFF')
-    const transaction = db.transaction(() => {
-      // Clear all tables (reverse order for FK safety)
-      const tables = getTableNames(db)
-      for (const table of tables) {
-        if (dbData[table]) {
-          db.prepare(`DELETE FROM ${table}`).run()
-        }
-      }
-      // Insert data in table order
-      for (const table of BACKUP_TABLES) {
-        const rows = dbData[table]
-        if (!rows || rows.length === 0) continue
-        try {
-          const columns = Object.keys(rows[0])
-          const placeholders = columns.map(() => '?').join(',')
-          const insert = db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${placeholders})`)
-          for (const row of rows) {
-            try {
-              insert.run(...columns.map(c => row[c] ?? null))
-            } catch (e: any) {
-              errors.push(`${table}: ${e.message}`)
-            }
+    try {
+      const transaction = db.transaction(() => {
+        // Clear all existing data
+        const tables = getTableNames(db)
+        for (const table of BACKUP_TABLES.slice().reverse()) {
+          if (dbData[table]) {
+            db.prepare(`DELETE FROM ${table}`).run()
           }
-        } catch (e: any) {
-          errors.push(`${table}: ${e.message}`)
         }
-      }
-    })
-    transaction()
+        // Insert data in dependency-safe order
+        for (const table of BACKUP_TABLES) {
+          const rows = dbData[table]
+          if (!rows || !Array.isArray(rows) || rows.length === 0) continue
+          try {
+            const columns = Object.keys(rows[0]).filter(c => typeof c === 'string')
+            const placeholders = columns.map(() => '?').join(',')
+            const insert = db.prepare(`INSERT INTO "${table}" (${columns.map(c => `"${c}"`).join(',')}) VALUES (${placeholders})`)
+            for (const row of rows) {
+              try {
+                insert.run(...columns.map(c => row[c] ?? null))
+              } catch (e: any) {
+                errors.push(`${table}: ${e.message}`)
+              }
+            }
+          } catch (e: any) {
+            errors.push(`${table}: ${e.message}`)
+          }
+        }
+      })
+      transaction()
+    } finally {
+      db.pragma('foreign_keys = ON') // always re-enable, even on error
+    }
 
-    // Restore files
+    // Restore files (with path traversal protection)
     const zipEntries = zip.getEntries()
     let restoredFiles = 0
     for (const entry of zipEntries) {
-      if (entry.entryName.startsWith('files/') && !entry.isDirectory) {
-        const relPath = entry.entryName.slice(6) // remove 'files/'
-        const targetPath = join(UPLOAD_ROOT, relPath)
-        const targetDir = join(targetPath, '..')
-        if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
-        try {
-          writeFileSync(targetPath, entry.getData())
-          restoredFiles++
-        } catch { /* skip file errors */ }
-      }
+      if (!entry.entryName.startsWith('files/') || entry.isDirectory) continue
+      const relPath = entry.entryName.slice(6) // remove 'files/'
+      if (!relPath || relPath.includes('..')) continue // block path traversal
+
+      const safePath = safeJoin(UPLOAD_ROOT, relPath)
+      if (!safePath) continue // rejects paths escaping uploads/
+
+      const targetDir = join(safePath, '..')
+      if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
+      try {
+        writeFileSync(safePath, entry.getData())
+        restoredFiles++
+      } catch { /* skip individual file errors */ }
     }
 
-    db.pragma('foreign_keys = ON')
-
-    // Cleanup temp file
-    try { unlinkSync(filePath) } catch {}
+    // Cleanup temp upload
+    try { unlinkSync(uploadPath) } catch {}
 
     ok(res, {
       success: true,
@@ -248,13 +276,25 @@ router.post('/import', requirePermission('chat.config'), upload.single('backup')
       errors: errors.length > 0 ? errors.slice(0, 20) : undefined,
     })
   } catch (e: any) {
-    try { unlinkSync(filePath) } catch {}
+    try { unlinkSync(uploadPath) } catch {}
     return fail(res, 500, 'IMPORT_FAILED', `导入失败: ${e.message}`)
   }
 })
 
 // GET /api/backup/download/:name — download a server-side backup
-router.get('/download/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
+// Supports both Authorization header and ?token= query param (for browser <a> downloads)
+router.get('/download/:name', (req: Request, res: Response) => {
+  // Check auth via header or query param
+  const token = (req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : (req.query.token as string)) || ''
+  if (!token) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
+  try {
+    jwt.verify(token, config.jwtSecret)
+  } catch {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
+  }
+
   const name = basename(req.params.name)
   if (!name.endsWith('.zip')) return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
   const fp = join(BACKUP_DIR, name)

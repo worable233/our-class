@@ -14,6 +14,7 @@ const createSchema = z.object({
   emoji: z.string().min(1, '请选择图标'),
   type: z.enum(['add', 'deduct']),
   amount: z.number().int().min(1).max(100),
+  class: z.string().optional().default(''),
 })
 
 const updateSchema = z.object({
@@ -22,22 +23,53 @@ const updateSchema = z.object({
   type: z.enum(['add', 'deduct']).optional(),
   amount: z.number().int().min(1).max(100).optional(),
   is_active: z.boolean().optional(),
+  class: z.string().optional(),
 })
 
-// GET /api/review-types
-router.get('/', (_req: Request, res: Response) => {
+// GET /api/review-types?class=xxx — 按班级获取点评类型
+router.get('/', (req: Request, res: Response) => {
   const db = getDb()
-  const types = db.prepare('SELECT * FROM review_types ORDER BY type, sort_order, id').all()
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+  const filterClass = req.query.class as string | undefined
+
+  // 决定可见的班级范围
+  let visibleClasses: string[] = []
+  if (hasViewAll) {
+    // 有全部权限时，可按筛选参数过滤
+    visibleClasses = filterClass ? [filterClass] : []
+  } else {
+    // 无全部权限时，只看自己班级 + 全局的('')
+    const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+    visibleClasses = filterClass
+      ? (myClasses.includes(filterClass) ? [filterClass, ''] : [''])  // 请求的班级不在权限内
+      : [...myClasses, '']
+  }
+
+  const placeholders = visibleClasses.map(() => '?').join(',')
+  const sql = visibleClasses.length > 0
+    ? `SELECT * FROM review_types WHERE class IN (${placeholders}) ORDER BY type, sort_order, id`
+    : 'SELECT * FROM review_types ORDER BY type, sort_order, id'
+
+  const types = db.prepare(sql).all(...visibleClasses)
   ok(res, types)
 })
 
 // POST /api/review-types
 router.post('/', requirePermission('points.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { name, emoji, type, amount } = req.body
+  const { name, emoji, type, amount, class: reviewClass } = req.body
+  // 班级权限检查
+  if (reviewClass) {
+    const hasViewAll = req.user!.permissions.includes('classes.view_all')
+    if (!hasViewAll) {
+      const myClasses = req.user!.class.split(',').filter(Boolean).map(c => c.trim())
+      if (!myClasses.includes(reviewClass)) return fail(res, 403, 'FORBIDDEN', '无权在该班级创建点评')
+    }
+  }
   const result = db.prepare(
-    'INSERT INTO review_types (name, emoji, type, amount) VALUES (?, ?, ?, ?)'
-  ).run(name, emoji, type, amount)
+    'INSERT INTO review_types (name, emoji, type, amount, class) VALUES (?, ?, ?, ?, ?)'
+  ).run(name, emoji, type, amount, reviewClass || '')
   const row = db.prepare('SELECT * FROM review_types WHERE id = ?').get(result.lastInsertRowid)
   ok(res, row)
 })
@@ -49,13 +81,14 @@ router.put('/:id', requirePermission('points.write'), validate(updateSchema), (r
   const existing = db.prepare('SELECT * FROM review_types WHERE id = ?').get(id)
   if (!existing) throw new NotFoundError('点评类型不存在')
 
-  const { name, emoji, type, amount, is_active } = req.body
+  const { name, emoji, type, amount, is_active, class: reviewClass } = req.body
   const fields: string[] = []; const vals: unknown[] = []
   if (name !== undefined) { fields.push('name = ?'); vals.push(name) }
   if (emoji !== undefined) { fields.push('emoji = ?'); vals.push(emoji) }
   if (type !== undefined) { fields.push('type = ?'); vals.push(type) }
   if (amount !== undefined) { fields.push('amount = ?'); vals.push(amount) }
   if (is_active !== undefined) { fields.push('is_active = ?'); vals.push(is_active ? 1 : 0) }
+  if (reviewClass !== undefined) { fields.push('class = ?'); vals.push(reviewClass) }
   if (fields.length > 0) {
     vals.push(id)
     db.prepare(`UPDATE review_types SET ${fields.join(', ')} WHERE id = ?`).run(...vals)

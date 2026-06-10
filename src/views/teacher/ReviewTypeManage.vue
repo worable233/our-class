@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import { useDialog, useMessage } from 'naive-ui'
 import {
-  NButton, NModal, NForm, NFormItem, NInput, NInputNumber,
+  NButton, NModal, NForm, NFormItem, NInput, NInputNumber, NSelect,
   NSpin, NEmpty, NText, NGrid, NGi, NTag, NAvatar, NIcon,
 } from 'naive-ui'
 import { Plus, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
@@ -16,16 +17,20 @@ interface ReviewType {
   amount: number
   sort_order: number
   is_active: number
+  class: string
 }
 
+const auth = useAuthStore()
 const dialog = useDialog()
 const message = useMessage()
 const types = ref<ReviewType[]>([])
+const classList = ref<string[]>([])
+const filterClass = ref('')
 const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<ReviewType | null>(null)
-const form = ref({ name: '', emoji: '', type: 'add' as 'add' | 'deduct', amount: 1 })
+const form = ref({ name: '', emoji: '', type: 'add' as 'add' | 'deduct', amount: 1, class: '' })
 
 const commonEmojis = [
   '🙋', '📝', '🤝', '🏆', '👍', '📈', '👂', '⭐', '🌟', '💯',
@@ -34,24 +39,32 @@ const commonEmojis = [
   '😡', '🤬', '💔', '⚠️', '🔇', '📛', '🛑', '🧊', '😪', '🤫',
 ]
 
+const hasViewAll = computed(() => auth.permissions.includes('classes.view_all'))
 const addTypes = computed(() => types.value.filter(t => t.type === 'add'))
 const deductTypes = computed(() => types.value.filter(t => t.type === 'deduct'))
 
 function load() {
   loading.value = true
-  api.get<ReviewType[]>('/review-types').then(d => { types.value = d || []; loading.value = false })
-    .catch(() => { message.error('加载失败'); loading.value = false })
+  const params = filterClass.value ? `?class=${encodeURIComponent(filterClass.value)}` : ''
+  Promise.all([
+    api.get<ReviewType[]>(`/review-types${params}`),
+    api.get<any[]>('/classes').catch(() => []),
+  ]).then(([d, cls]) => {
+    types.value = d || []
+    classList.value = cls.map((c: any) => c.name) || []
+    loading.value = false
+  }).catch(() => { message.error('加载失败'); loading.value = false })
 }
 
 function openNew() {
   editing.value = null
-  form.value = { name: '', emoji: '👍', type: 'add', amount: 1 }
+  form.value = { name: '', emoji: '👍', type: 'add', amount: 1, class: filterClass.value || '' }
   showModal.value = true
 }
 
 function openEdit(t: ReviewType) {
   editing.value = t
-  form.value = { name: t.name, emoji: t.emoji, type: t.type, amount: t.amount }
+  form.value = { name: t.name, emoji: t.emoji, type: t.type, amount: t.amount, class: t.class || '' }
   showModal.value = true
 }
 
@@ -91,15 +104,27 @@ onMounted(load)
 <template>
   <div>
     <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">点评类型</NText>
         <NText depth="3" style="display:block;margin:0;font-size:14px;">管理加减分的点评项，可在积分管理中使用</NText>
       </div>
-      <NButton type="primary" @click="openNew" round>
-        <template #icon><Plus :size="16" /></template>
-        新建点评
-      </NButton>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <NSelect
+          v-if="hasViewAll"
+          v-model:value="filterClass"
+          :options="[{label:'全部班级',value:''},...classList.map(c=>({label:c,value:c}))]"
+          style="width:160px"
+          size="small"
+          placeholder="全部班级"
+          clearable
+          @update:value="load"
+        />
+        <NButton type="primary" @click="openNew" round size="small">
+          <template #icon><Plus :size="16" /></template>
+          新建点评
+        </NButton>
+      </div>
     </div>
 
     <NSpin :show="loading" style="min-height:300px">
@@ -157,6 +182,7 @@ onMounted(load)
                 <n-text class="review-name" style="display:block;text-align:center;font-size:14px;font-weight:600;margin-top:10px;max-width:90px;line-height:1.3">
                   {{ t.name }}
                 </n-text>
+                <n-tag v-if="t.class" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;">{{ t.class }}</n-tag>
               </div>
             </n-gi>
           </n-grid>
@@ -216,6 +242,7 @@ onMounted(load)
                 <n-text class="review-name" style="display:block;text-align:center;font-size:14px;font-weight:600;margin-top:10px;max-width:90px;line-height:1.3">
                   {{ t.name }}
                 </n-text>
+                <n-tag v-if="t.class" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;">{{ t.class }}</n-tag>
               </div>
             </n-gi>
           </n-grid>
@@ -248,6 +275,9 @@ onMounted(load)
               @click="form.type = 'deduct'" style="flex:1" round
             ><ShieldBan :size="15" style="margin-right:4px" /> 扣分</NButton>
           </div>
+        </NFormItem>
+        <NFormItem label="班级" v-if="hasViewAll">
+          <NSelect v-model:value="form.class" :options="[{label:'全局（所有班级）',value:''},...classList.map(c=>({label:c,value:c}))]" placeholder="选择班级" :disabled="!!editing" />
         </NFormItem>
         <NFormItem label="名称" required>
           <NInput v-model:value="form.name" placeholder="例如：积极发言" :maxlength="10" show-count clearable />
