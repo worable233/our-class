@@ -37,12 +37,16 @@ const app = express()
 app.use(helmet({ contentSecurityPolicy: false }))
 
 // ── Rate limiting ─────────────────────────────────────────────────────
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200,
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
-}))
+})
+app.use((req, res, next) => {
+  if (req.path === '/api/analytics/pv') return next() // 不限制页面浏览跟踪
+  limiter(req, res, next)
+})
 
 // ── CORS (from config) ────────────────────────────────────────────────
 app.use(cors({ origin: config.corsOrigin.split(',').map((s) => s.trim()) }))
