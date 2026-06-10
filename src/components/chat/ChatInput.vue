@@ -191,7 +191,7 @@ function handleSend() {
   const ws = props.webSearch ?? false;
 
   pendingSend.value = true
-  const fileAttachments = fileIds.length > 0 ? { ids: fileIds, items: attachments.value.filter(a => a.uploadId).map(a => ({ id: a.uploadId!, name: a.name, url: a.url })) } : undefined
+  const fileAttachments = fileIds.length > 0 ? { ids: fileIds, items: attachments.value.filter(a => a.uploadId).map(a => ({ id: a.uploadId!, name: a.name, url: a.serverUrl || '' })) } : undefined
   emit('send', c, dt, ws, fileAttachments)
 }
 
