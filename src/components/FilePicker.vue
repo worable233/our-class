@@ -636,14 +636,14 @@ function fmtDate(iso: string) {
   .fp-modal :deep(.n-card__content) { padding: 0 !important; }
   .fp-modal :deep(.n-card__footer) { padding: 12px 16px !important; }
 
-  .fp-toolbar { padding: 8px 10px; gap: 6px; flex-wrap: wrap; }
-  .fp-toolbar-left { gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
-  .fp-toolbar-left .n-button { transform: scale(1.15); flex-shrink: 0; }
-  .fp-toolbar-divider { flex-shrink: 0; }
-  .fp-breadcrumb { font-size: 14px; overflow: hidden; min-width: 0; flex: 1; }
-  .fp-breadcrumb-item { padding: 4px 8px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-  .fp-breadcrumb-item.active { max-width: none; flex-shrink: 1; min-width: 0; }
-  .fp-search-box { width: 120px; flex-shrink: 0; }
+  .fp-toolbar { padding: 6px 8px; gap: 4px; flex-direction: column; align-items: stretch; }
+  .fp-toolbar-left { gap: 2px; width: 100%; overflow: hidden; min-height: 0; }
+  .fp-toolbar-left .n-button { transform: scale(1.1); flex-shrink: 0; }
+  .fp-toolbar-divider { display: none; }
+  .fp-breadcrumb { font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+  .fp-breadcrumb-item { padding: 3px 6px; }
+  .fp-toolbar-right { width: 100%; justify-content: flex-end; }
+  .fp-search-box { width: 100%; max-width: 200px; }
   .fp-search-input { font-size: 14px; height: 32px; padding: 0 8px 0 28px; }
   .fp-search-icon { left: 7px; transform: translateY(-50%) scale(1.15); }
   .fp-toolbar-right .fp-mobile-hide { display: none !important; }
