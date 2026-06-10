@@ -189,20 +189,20 @@ function toggleSelect(entry: DiskEntry) {
 }
 
 // ── Drag & drop upload ──
+const dragging = ref(false)
 let dragCounter = 0
 
 function onDragOver(e: DragEvent) { e.preventDefault() }
 function onDragEnter(e: DragEvent) {
   e.preventDefault(); dragCounter++
-  if (dragCounter === 1) (e.currentTarget as HTMLElement)?.classList.add('fp-drag-over')
+  if (dragCounter === 1) dragging.value = true
 }
 function onDragLeave(e: DragEvent) {
   e.preventDefault(); dragCounter--
-  if (dragCounter <= 0) { dragCounter = 0; (e.currentTarget as HTMLElement)?.classList.remove('fp-drag-over') }
+  if (dragCounter <= 0) { dragCounter = 0; dragging.value = false }
 }
 async function onDrop(e: DragEvent) {
-  e.preventDefault(); dragCounter = 0
-  const el = e.currentTarget as HTMLElement; el.classList.remove('fp-drag-over')
+  e.preventDefault(); dragCounter = 0; dragging.value = false
   const items = e.dataTransfer?.items; if (!items?.length) return
   const fileList: { file: File; path: string }[] = []
   for (const item of Array.from(items)) {
@@ -389,6 +389,7 @@ function fmtDate(iso: string) {
 
       <!-- 文件列表（支持拖拽） -->
       <div class="fp-content" @dragover.prevent="onDragOver" @dragenter="onDragEnter" @dragleave="onDragLeave" @drop.prevent="onDrop">
+        <div class="fp-drag-layer" :class="{ show: dragging }">+ 拖拽文件到此处上传</div>
         <NSpin :show="loading" style="min-height:240px;">
           <!-- 列头 -->
           <div v-if="sortedEntries.length > 0" class="fp-list-header">
@@ -614,35 +615,24 @@ function fmtDate(iso: string) {
 .fp-dir-label { font-size: 11px; color: var(--text-muted); }
 
 /* Drag overlay with smooth animation */
-.fp-content {
-  position: relative;
-  transition: background 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.fp-content.fp-drag-over {
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
-  background: rgba(94,106,210,0.06);
-}
-.fp-content::after {
-  content: '拖拽文件到此处上传';
+.fp-drag-layer {
   position: absolute; inset: 0;
+  border-radius: 6px;
+  z-index: 10;
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600;
   color: var(--accent);
-  background: rgba(94,106,210,0.04);
-  backdrop-filter: blur(3px);
-  border-radius: 6px;
-  z-index: 5;
+  background: rgba(94,106,210,0.05);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 2px dashed var(--accent);
   opacity: 0;
+  transform: scale(0.96);
   transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
               transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform: scale(0.96);
   pointer-events: none;
 }
-.fp-content.fp-drag-over::after {
-  opacity: 1;
-  transform: scale(1);
-}
+.fp-drag-layer.show { opacity: 1; transform: scale(1); }
 
 /* Empty state */
 .fp-empty {
