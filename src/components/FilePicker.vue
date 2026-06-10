@@ -642,8 +642,8 @@ function fmtDate(iso: string) {
   .fp-toolbar-divider { display: none; }
   .fp-breadcrumb { font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
   .fp-breadcrumb-item { padding: 3px 6px; }
-  .fp-toolbar-right { width: 100%; justify-content: flex-end; }
-  .fp-search-box { width: 100%; max-width: 200px; }
+  .fp-toolbar-right { width: 100%; justify-content: space-between; }
+  .fp-search-box { width: 100%; max-width: none; flex: 1; }
   .fp-search-input { font-size: 14px; height: 32px; padding: 0 8px 0 28px; }
   .fp-search-icon { left: 7px; transform: translateY(-50%) scale(1.15); }
   .fp-toolbar-right .fp-mobile-hide { display: none !important; }
