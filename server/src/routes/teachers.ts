@@ -8,7 +8,7 @@ import { NotFoundError } from '../lib/errors.js'
 
 const router = Router()
 
-const TEACHER_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE name = '教师')"
+const TEACHER_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE group_type = 'teacher' LIMIT 1)"
 
 const updateSchema = z.object({
   display_name: z.string().min(1).optional(),
@@ -26,7 +26,7 @@ router.get('/', requirePermission('students.write'), (_req: Request, res: Respon
   const teachers = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname
     FROM users u
-    JOIN permission_groups pg ON pg.name = '教师'
+    JOIN permission_groups pg ON pg.group_type = 'teacher'
     WHERE u.group_id = pg.id
     ORDER BY u.id
   `).all()

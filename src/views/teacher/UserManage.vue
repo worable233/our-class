@@ -22,7 +22,7 @@ const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456' })
+const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456', group_id: null as number | null })
 
 const classOptions = computed(() => [
   { label: '全部班级', value: '' },
@@ -50,7 +50,7 @@ const teachersLoading = ref(false)
 
 const showTeacherModal = ref(false)
 const editingTeacher = ref<Teacher | null>(null)
-const teacherForm = ref({ display_name: '', username: '', class: [] as string[], nickname: '', password: '' })
+const teacherForm = ref({ display_name: '', username: '', class: [] as string[], nickname: '', password: '', group_id: null as number | null })
 const classSelectOptions = computed(() => classList.value.map(c => ({ label: c, value: c })))
 const teacherSaving = ref(false)
 
@@ -73,6 +73,7 @@ function openEditTeacher(t: Teacher) {
     class: (t.class || '').split(',').filter(Boolean),
     nickname: t.nickname || '',
     password: '',
+    group_id: null,
   }
   showTeacherModal.value = true
 }
@@ -86,6 +87,7 @@ async function saveTeacher() {
     if (teacherForm.value.class.length > 0) payload.class = teacherForm.value.class.join(',')
     if (teacherForm.value.nickname) payload.nickname = teacherForm.value.nickname
     if (teacherForm.value.password) payload.password = teacherForm.value.password
+    if (teacherForm.value.group_id) payload.group_id = teacherForm.value.group_id
 
     await api.put(`/teachers/${editingTeacher.value!.id}`, payload)
     showTeacherModal.value = false
@@ -131,8 +133,9 @@ async function loadClasses() {
     const data = await api.get<ClassInfo[]>('/classes')
     classData.value = data
     classList.value = data.map(c => c.name)
-    // Set default class if form is empty and classes exist
     if (!form.value.class && data.length > 0) form.value.class = data[0]!.name
+    // 加载权限组
+    roleGroups.value = await api.get<{ id: number; name: string; permissions: string[] }[]>('/roles/groups').then(r => r.map(g => ({ id: g.id, name: g.name }))).catch(() => [])
   } catch (e: any) {
     message.error(e.message || '加载班级数据失败')
   } finally {
@@ -146,13 +149,13 @@ function autoGenerateStudentNo(): string {
 
 function openNew() {
   editing.value = null
-  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456' }
+  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456', group_id: null }
   showModal.value = true
 }
 
 function openEdit(s: Student) {
   editing.value = s
-  form.value = { student_no: s.student_no || '', display_name: s.display_name, nickname: s.nickname || '', class: s.class, password: s.password || '' }
+  form.value = { student_no: s.student_no || '', display_name: s.display_name, nickname: s.nickname || '', class: s.class, password: s.password || '', group_id: (s as any).group_id || null }
   showModal.value = true
 }
 
@@ -160,13 +163,14 @@ async function save() {
   saving.value = true
   try {
     const student_no = form.value.student_no || autoGenerateStudentNo()
-    const payload = {
+    const payload: any = {
       display_name: form.value.display_name,
       nickname: form.value.nickname || undefined,
       class: form.value.class,
       student_no,
       password: form.value.password || undefined,
     }
+    if (form.value.group_id) payload.group_id = form.value.group_id
     if (editing.value) {
       await api.put(`/students/${editing.value.id}`, payload)
     } else {
@@ -476,6 +480,14 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             :disabled="classList.length === 0"
           />
         </n-form-item>
+        <n-form-item label="身份职位" path="group_id">
+          <n-select
+            v-model:value="form.group_id"
+            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择权限组"
+            clearable
+          />
+        </n-form-item>
         <n-form-item label="密码" path="password">
           <n-input v-model:value="form.password" placeholder="留空则保持原密码（编辑时）或使用默认密码" />
         </n-form-item>
@@ -542,6 +554,14 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             multiple
             placeholder="选择所属班级（可多选）"
             style="width:100%"
+          />
+        </n-form-item>
+        <n-form-item label="身份职位" path="group_id">
+          <n-select
+            v-model:value="teacherForm.group_id"
+            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择权限组"
+            clearable
           />
         </n-form-item>
         <n-form-item label="密码" path="password">

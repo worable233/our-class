@@ -18,6 +18,7 @@ declare global {
         display_name: string
         role: 'teacher' | 'student'
         class: string
+        role_id?: number | null
         permissions: string[]
       }
     }
@@ -47,16 +48,16 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as JwtPayload
     const db = getDb()
     const row = db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, pg.name as group_name
+      SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, pg.name as group_name, pg.group_type
       FROM users u
       LEFT JOIN permission_groups pg ON u.group_id = pg.id
       WHERE u.id = ?
-    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; role_id: number | null; group_name: string | null } | undefined
+    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; role_id: number | null; group_name: string | null; group_type: string | null } | undefined
 
     if (!row) throw new AuthError()
 
-    // 从权限组名称推导角色
-    const role = row.group_name === '教师' ? 'teacher' as const : 'student' as const
+    // 从权限组类型推导角色（高度自治：不再硬编码组名称）
+    const role = row.group_type === 'teacher' ? ('teacher' as const) : ('student' as const)
 
     let permissions: string[] = []
     if (row.group_id) {
@@ -69,8 +70,8 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     } else {
       // User has no group — assign to default group
       const defaultGroup = db.prepare(
-        "SELECT id FROM permission_groups WHERE name = ?"
-      ).get('学生') as { id: number } | undefined
+        "SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1"
+      ).get() as { id: number } | undefined
       if (defaultGroup) {
         db.prepare("UPDATE users SET group_id = ? WHERE id = ? AND group_id IS NULL").run(defaultGroup.id, row.id)
         const permRows = db.prepare(

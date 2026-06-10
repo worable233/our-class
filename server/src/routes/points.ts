@@ -54,7 +54,7 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
       COALESCE(SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE -p.amount END), 0) as total_points
     FROM users u
     LEFT JOIN point_records p ON u.id = p.student_id
-    JOIN permission_groups pg ON pg.name = '学生'
+    JOIN permission_groups pg ON pg.group_type = 'student'
     WHERE u.group_id = pg.id`
   const params: (string | number)[] = []
 

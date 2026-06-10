@@ -8,7 +8,7 @@ import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 const router = Router()
 
-const STUDENT_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE name = '学生')"
+const STUDENT_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
 
 const createSchema = z.object({
   display_name: z.string().min(1, '请输入学生姓名'),
@@ -55,7 +55,7 @@ router.post('/', requirePermission('students.write'), validate(createSchema), (r
   const uname = username || display_name.toLowerCase().replace(/\s/g, '')
   const pw = req.body.password
   // Default to "学生" permission group if none specified
-  const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as any)?.id ?? null
+  const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as any)?.id ?? null
   const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .run(uname, display_name, stuClass, pw, finalGroupId, studentNo, nickname ?? null, 'student')
 

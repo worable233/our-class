@@ -12,7 +12,7 @@ const message = useMessage()
 const auth = useAuthStore()
 
 interface PermissionDef { code: string; label: string; category: string }
-interface PermissionGroup { id: number; name: string; description: string; parent_id: number | null; class: string; parent_name?: string; permissions: string[]; created_at: string }
+interface PermissionGroup { id: number; name: string; description: string; parent_id: number | null; class: string; parent_name?: string; group_type: string; permissions: string[]; created_at: string }
 
 // ── Shared state ─────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ const groups = ref<PermissionGroup[]>([])
 const loading = ref(false)
 const showModal = ref(false)
 const editing = ref<number | null>(null)
-const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, permissions: [] as string[] })
+const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, group_type: 'custom' as string, permissions: [] as string[] })
 const saving = ref(false)
 const activeTab = ref('identities')
 const currentUserPerms = computed(() => auth.permissions || [])
@@ -90,24 +90,25 @@ onMounted(load)
 
 function openIdentityNew() {
   editing.value = null
-  form.value = { name: '', description: '', class: '', parent_id: null, permissions: [] }
+  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [] }
   showModal.value = true
 }
 
 function openIdentityEdit(g: PermissionGroup) {
   editing.value = g.id
-  form.value = { name: g.name, description: g.description, class: '', parent_id: null, permissions: [...g.permissions] }
+  form.value = { name: g.name, description: g.description, class: '', parent_id: null, group_type: g.group_type || 'custom', permissions: [...g.permissions] }
   showModal.value = true
 }
 
 async function saveIdentity() {
   saving.value = true
   try {
+    const payload: any = { name: form.value.name, description: form.value.description, permissions: form.value.permissions, group_type: form.value.group_type }
     if (editing.value) {
-      await api.put(`/roles/groups/${editing.value}`, { name: form.value.name, description: form.value.description, permissions: form.value.permissions })
+      await api.put(`/roles/groups/${editing.value}`, payload)
       message.success('身份组已更新')
     } else {
-      await api.post('/roles/groups', { name: form.value.name, description: form.value.description, permissions: form.value.permissions })
+      await api.post('/roles/groups', payload)
       message.success('身份组已创建')
     }
     showModal.value = false
@@ -129,13 +130,13 @@ async function deleteIdentity(id: number) {
 
 function openRoleNew() {
   editing.value = null
-  form.value = { name: '', description: '', class: '', parent_id: null, permissions: [] }
+  form.value = { name: '', description: '', class: '', parent_id: null, group_type: 'custom', permissions: [] }
   showModal.value = true
 }
 
 function openRoleEdit(g: PermissionGroup) {
   editing.value = g.id
-  form.value = { name: g.name, description: g.description, class: g.class, parent_id: g.parent_id, permissions: [...g.permissions] }
+  form.value = { name: g.name, description: g.description, class: g.class, parent_id: g.parent_id, group_type: g.group_type || 'custom', permissions: [...g.permissions] }
   showModal.value = true
 }
 
@@ -181,6 +182,12 @@ async function deleteRole(id: number) {
                   <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ g.name }}</span>
                   <n-tag size="tiny" :type="tagType(g.permissions.length)" round :bordered="false" style="flex-shrink:0">
                     {{ g.permissions.length }} 项
+                  </n-tag>
+                  <n-tag v-if="g.group_type && g.group_type !== 'custom'" size="tiny" :bordered="false" :type="g.group_type === 'teacher' ? 'warning' : 'info'" round style="flex-shrink:0; font-size: 11px">
+                    {{ g.group_type === 'teacher' ? '教师端' : '学生端' }}
+                  </n-tag>
+                  <n-tag v-else size="tiny" :bordered="false" round style="flex-shrink:0; font-size: 11px; opacity: 0.5">
+                    自定义
                   </n-tag>
                 </div>
                 <div v-if="g.description" style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">{{ g.description }}</div>
@@ -233,6 +240,14 @@ async function deleteRole(id: number) {
 
         <n-form-item v-if="activeTab === 'identities'" label="描述">
           <n-input v-model:value="form.description" placeholder="可选描述" />
+        </n-form-item>
+
+        <n-form-item v-if="activeTab === 'identities' && currentUserPerms.includes('roles.manage')" label="类型">
+          <n-select v-model:value="form.group_type" :options="[
+            { label: '自定义（默认学生端）', value: 'custom' },
+            { label: '教师端', value: 'teacher' },
+            { label: '学生端', value: 'student' },
+          ]" :disabled="!!editing" />
         </n-form-item>
 
         <template v-if="activeTab === 'roles'">

@@ -28,12 +28,12 @@ function seedPermissionGroups(db: Database.Database) {
   if (count.c > 0) return
 
   // Default teacher group — all permissions
-  const teacherGroup = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?, ?)')
-    .run('教师', '默认教师权限组，拥有全部权限')
+  const teacherGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
+    .run('教师', '默认教师权限组，拥有全部权限', 'teacher')
 
   // Default student group — basic permissions
-  const studentGroup = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?, ?)')
-    .run('学生', '默认学生权限组，拥有基础权限')
+  const studentGroup = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)')
+    .run('学生', '默认学生权限组，拥有基础权限', 'student')
 
     const allPermissions = [
     'students.write',
@@ -82,8 +82,8 @@ function seedUsers(db: Database.Database) {
   )
 
   // Find the teacher and student group IDs
-  const tGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '教师'").get() as { id: number }
-  const sGroup = db.prepare("SELECT id FROM permission_groups WHERE name = '学生'").get() as { id: number }
+  const tGroup = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'teacher' ORDER BY id LIMIT 1").get() as { id: number }
+  const sGroup = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as { id: number }
 
   insertUser.run('teacher1', '张老师', 'teacher', '', '123456', tGroup.id, null)
   insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id, 'S2025001')

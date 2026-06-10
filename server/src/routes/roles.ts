@@ -10,28 +10,6 @@ import { writeAuditLog } from './audit.js'
 const router = Router()
 router.use(authMiddleware)
 
-// ── Constants ──────────────────────────────────────────────────────────────
-
-const ALL_PERMISSIONS = [
-  { code: 'students.write', label: '管理学生（添加/编辑/删除，含查看）', category: '学生管理' },
-  { code: 'points.read', label: '查看积分', category: '积分管理' },
-  { code: 'points.write', label: '加减积分', category: '积分管理' },
-  { code: 'scores.write', label: '管理成绩（录入/修改/删除，含查看）', category: '成绩管理' },
-  { code: 'assignments.write', label: '管理作业（布置/批改，含查看）', category: '作业管理' },
-  { code: 'assignments.submit', label: '提交作业', category: '作业管理' },
-  { code: 'chat.access', label: '使用AI助手', category: 'AI助手' },
-  { code: 'chat.config', label: '配置AI（含Skill管理）', category: 'AI助手' },
-  { code: 'chat.unlimited', label: '不受调用限制', category: 'AI助手' },
-  { code: 'tool.student.read', label: '查询学生信息', category: 'AI 工具' },
-  { code: 'tool.student.write', label: '管理学生账号（创建/修改/删除）', category: 'AI 工具' },
-  { code: 'tool.score.read', label: '查询成绩积分', category: 'AI 工具' },
-  { code: 'tool.score.write', label: '加减积分操作', category: 'AI 工具' },
-  { code: 'tool.assignment', label: '查看作业提交情况', category: 'AI 工具' },
-  { code: 'tool.utility', label: '通用工具（天气/搜索/抽人/文件等）', category: 'AI 工具' },
-  { code: 'roles.manage', label: '管理权限组', category: '系统设置' },
-  { code: 'audit_logs.read', label: '查看操作日志', category: '系统设置' },
-  { code: 'classes.view_all', label: '查看全部班级', category: '系统设置' },
-]
 // ── Zod Schemas ────────────────────────────────────────────────────────────
 
 const createGroupSchema = z.object({
@@ -40,6 +18,7 @@ const createGroupSchema = z.object({
   permissions: z.array(z.string()).optional().default([]),
   parent_id: z.number().int().nullable().optional(),
   class: z.string().optional().default(''),
+  group_type: z.enum(['teacher', 'student', 'custom']).optional().default('custom'),
 })
 
 const updateGroupSchema = z.object({
@@ -47,13 +26,16 @@ const updateGroupSchema = z.object({
   description: z.string().optional(),
   permissions: z.array(z.string()).optional(),
   class: z.string().optional(),
+  group_type: z.enum(['teacher', 'student', 'custom']).optional(),
 })
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 
-// GET /api/roles/permissions — list all available permission codes
+// GET /api/roles/permissions — list all available permission codes (from DB registry)
 router.get('/permissions', (_req: Request, res: Response) => {
-  ok(res, ALL_PERMISSIONS)
+  const db = getDb()
+  const perms = db.prepare('SELECT code, label, category, description FROM permissions ORDER BY category, code').all()
+  ok(res, perms)
 })
 
 // GET /api/roles/groups — list all permission groups
@@ -109,9 +91,10 @@ router.post('/groups', requirePermission('roles.manage'), validate(createGroupSc
     return fail(res, 409, 'DUPLICATE_NAME', `权限组「${name}」已存在`)
   }
 
+  const groupType = req.body.group_type || 'custom'
   const result = db.prepare(
-    'INSERT INTO permission_groups (name, description, parent_id, class) VALUES (?, ?, ?, ?)'
-  ).run(name, description, req.body.parent_id || null, req.body.class || '')
+    'INSERT INTO permission_groups (name, description, parent_id, class, group_type) VALUES (?, ?, ?, ?, ?)'
+  ).run(name, description, req.body.parent_id || null, req.body.class || '', groupType)
 
   const groupId = result.lastInsertRowid
 
@@ -152,6 +135,9 @@ router.put('/groups/:id', requirePermission('roles.manage'), validate(updateGrou
   }
   if (req.body.class !== undefined) {
     db.prepare("UPDATE permission_groups SET class = ? WHERE id = ?").run(req.body.class, id)
+  }
+  if (req.body.group_type !== undefined) {
+    db.prepare("UPDATE permission_groups SET group_type = ? WHERE id = ?").run(req.body.group_type, id)
   }
 
   // Update permissions if provided

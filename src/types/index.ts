@@ -95,6 +95,10 @@ export interface PermissionGroup {
   id: number
   name: string
   description: string
+  parent_id: number | null
+  class: string
+  group_type: string
+  parent_name?: string
   permissions: string[]
   created_at?: string
 }

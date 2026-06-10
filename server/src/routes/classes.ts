@@ -11,7 +11,7 @@ router.get('/', requirePermission('students.write'), (_req: Request, res: Respon
   const rows = db.prepare(`
     SELECT c.id, c.name, COUNT(u.id) AS student_count
     FROM classes c
-    LEFT JOIN users u ON u.class = c.name AND u.group_id = (SELECT id FROM permission_groups WHERE name = '学生')
+    LEFT JOIN users u ON u.class = c.name AND u.group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)
     GROUP BY c.id, c.name
     ORDER BY c.name
   `).all() as { id: number; name: string; student_count: number }[]

@@ -352,7 +352,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const cls = input.class as string | undefined
       const names = input.names as string[] | undefined
       const cf = getClassFilter(userClass, userPermissions)
-      const studentGroupSub = "(SELECT id FROM permission_groups WHERE name = '学生')"
+      const studentGroupSub = "(SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
       let sql = `SELECT id, display_name, class FROM users WHERE group_id = ${studentGroupSub}`
       const params: string[] = []
       if (names && names.length > 0) {
@@ -371,7 +371,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'get_student_points': {
       const name = input.student_name as string
       const cf = getClassFilter(userClass, userPermissions)
-      let stuSql = `SELECT id, display_name, class FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE name = '学生')`
+      let stuSql = `SELECT id, display_name, class FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)`
       if (cf.sql) stuSql += ' ' + cf.sql
       const student = db.prepare(stuSql).get(name, ...cf.params) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${name}」` })
@@ -390,7 +390,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'add_points': {
       // Only teachers can modify points
       const cf = getClassFilter(userClass, userPermissions)
-      let stuSql = `SELECT id FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE name = '学生')`
+      let stuSql = `SELECT id FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)`
       if (cf.sql) stuSql += ' ' + cf.sql
       const student = db.prepare(stuSql).get(input.student_name as string, ...cf.params) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${input.student_name}」` })
@@ -525,7 +525,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'random_pick': {
       const cls = input.class as string | undefined
       const count = Math.max(1, Math.min((input.count as number) || 1, 20))
-      const studentGroupSql = "group_id = (SELECT id FROM permission_groups WHERE name = '学生')"
+      const studentGroupSql = "group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
       let rows: any[]
       if (cls) {
         rows = db.prepare(`SELECT display_name, class FROM users WHERE ${studentGroupSql} AND class=? ORDER BY id`).all(cls)
@@ -606,7 +606,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'update_student': {
       const updateId = input.student_id as number
       const cf = getClassFilter(userClass, userPermissions)
-      let stuSql = "SELECT * FROM users WHERE id = ? AND group_id = (SELECT id FROM permission_groups WHERE name = '学生')"
+      let stuSql = "SELECT * FROM users WHERE id = ? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
       if (cf.sql) stuSql += ' ' + cf.sql
       const student = db.prepare(stuSql).get(updateId, ...cf.params) as any
       if (!student) return JSON.stringify({ error: `未找到 ID 为 ${updateId} 的学生` })
@@ -630,7 +630,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const cf = getClassFilter(userClass, userPermissions)
       const results: any[] = []
       for (const id of ids) {
-        let delSql = "SELECT id, display_name, class FROM users WHERE id = ? AND group_id = (SELECT id FROM permission_groups WHERE name = '学生')"
+        let delSql = "SELECT id, display_name, class FROM users WHERE id = ? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
         if (cf.sql) delSql += ' ' + cf.sql
         const student = db.prepare(delSql).get(id, ...cf.params) as any
         if (!student) { results.push({ id, error: `未找到 ID 为 ${id} 的学生或无权操作` }); continue }
