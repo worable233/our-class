@@ -328,6 +328,8 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
         <!-- Drop overlay -->
         <div class="dm-drag-layer" :class="{ show: dragging }">+ 拖拽文件到此处上传</div>
 
+        <!-- 可横向滚动的列表容器 -->
+        <div class="dm-table-wrap">
         <template v-if="sortedEntries.length > 0">
           <!-- 表头 -->
           <div class="dm-list-header">
@@ -372,6 +374,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
           </div>
         </template>
         <NEmpty v-else-if="!loading" :description="searchQuery ? '未找到匹配的文件' : '此文件夹为空'" style="padding:60px 0;" />
+        </div><!-- /dm-table-wrap -->
       </NSpin>
     </div>
 
@@ -549,9 +552,13 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
   .dm-breadcrumb { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .dm-toolbar-right { width: 100%; justify-content: space-between; }
   .dm-search-box { flex: 1; max-width: none; }
-  .dm-col-date { display: none; }
-  .dm-col-size { width: 56px; font-size: 11px; }
-  .dm-list-row { padding: 5px 6px; font-size: 12px; }
-  .dm-col-actions { width: 60px; opacity: 1; }
+
+  /* 可横向滚动 */
+  .dm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dm-list-header, .dm-list-body { min-width: 640px; }
+  .dm-col-date { width: 100px; display: block; }
+  .dm-col-size { width: 72px; }
+  .dm-list-row { padding: 5px 10px; font-size: 12px; }
+  .dm-col-actions { width: 72px; opacity: 1; }
 }
 </style>

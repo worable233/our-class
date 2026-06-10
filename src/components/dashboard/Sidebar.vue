@@ -17,11 +17,13 @@ const { isDark } = useTheme()
 const { hasUpdate } = useUpdateChecker()
 
 const siteTitle = ref('OurClass')
+const siteDescription = ref('')
 
 onMounted(async () => {
   try {
-    const data = await api.get<{ site_title: string }>('/site-settings')
+    const data = await api.get<{ site_title: string; site_description: string }>('/site-settings')
     if (data?.site_title) siteTitle.value = data.site_title
+    if (data?.site_description) siteDescription.value = data.site_description
   } catch { /* use default */ }
 })
 
@@ -210,6 +212,7 @@ function handleUpdateValue(key: string) {
           class="sidebar-menu"
         />
         <div v-show="!collapsed" class="sidebar-footer">
+          <div v-if="siteDescription" class="sidebar-footer-desc">{{ siteDescription }}</div>
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
               <a href="https://github.com/worable233/our-class" target="_blank" class="sidebar-footer-link">
@@ -301,6 +304,7 @@ function handleUpdateValue(key: string) {
 }
 .n-layout-sider--collapsed .n-menu-item-content { padding: 0 16px !important; }
 .sidebar-footer { padding: 8px 16px 16px; text-align: center; }
+.sidebar-footer-desc { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sidebar-footer-link {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; color: var(--text-muted); text-decoration: none; transition: color 0.2s;

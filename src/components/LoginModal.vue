@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import Logo from '@/components/Logo.vue'
 import { useTheme } from '@/composables/useTheme'
+import { api } from '@/api/client'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ 'update:show': [v: boolean] }>()
@@ -14,6 +15,18 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const siteDescription = ref('')
+
+// 弹窗打开时加载站点描述
+watch(() => props.show, async (val) => {
+  if (val) {
+    try {
+      const data = await api.get<{ site_description: string }>('/site-settings')
+      if (data?.site_description) siteDescription.value = data.site_description
+      else siteDescription.value = ''
+    } catch { siteDescription.value = '' }
+  }
+})
 
 async function handleLogin() {
   if (!username.value || !password.value) return
@@ -43,7 +56,7 @@ async function handleLogin() {
             <Logo :size="44" :theme="isDark ? 'dark' : 'light'" />
           </div>
           <h2 class="login-title">OurClass</h2>
-          <p class="login-subtitle">班级管理系统</p>
+          <p class="login-subtitle">{{ siteDescription || '班级管理系统' }}</p>
         </div>
 
         <form class="login-form" @submit.prevent="handleLogin()">

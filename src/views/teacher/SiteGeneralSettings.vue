@@ -32,6 +32,14 @@ function applySettings(s: SiteSettings) {
   // 更新网站图标
   const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]')
   if (link && s.site_icon) (link as HTMLLinkElement).href = s.site_icon
+  // 更新 meta description（SEO）
+  let meta = document.querySelector('meta[name="description"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.setAttribute('name', 'description')
+    document.head.appendChild(meta)
+  }
+  meta.setAttribute('content', s.site_description || 'OurClass 班级管理系统 — 现代化的课堂管理平台')
 }
 
 async function load() {
