@@ -10,6 +10,7 @@ const emit = defineEmits<{
   login: []
   'update:deepThink': [value: boolean]
   'update:webSearch': [value: boolean]
+  'conversation-created': [id: number]
 }>()
 
 const props = defineProps<{
@@ -79,17 +80,11 @@ async function onFileChange(e: Event) {
 
 async function uploadFile(att: Attachment) {
   const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-  const convId = props.convId
-
-  if (!convId) {
-    att.uploading = false
-    att.error = '请先发送一条消息创建对话后再上传文件'
-    return
-  }
 
   const formData = new FormData()
   formData.append('file', att.file)
-  formData.append('conversation_id', String(convId))
+  // 没有对话 ID 时不传，后端自动创建
+  if (props.convId) formData.append('conversation_id', String(props.convId))
 
   try {
     const res = await fetch('/api/chat/upload', {
@@ -104,6 +99,10 @@ async function uploadFile(att: Attachment) {
     att.uploading = false
     att.uploaded = true
     att.uploadId = body.data.id
+    // 后端可能自动创建了新对话，通知父组件更新
+    if (body.data.conversation_id && body.data.conversation_id !== props.convId) {
+      emit('conversation-created', body.data.conversation_id)
+    }
   } catch (e: any) {
     att.uploading = false
     att.error = e.message || '上传失败'

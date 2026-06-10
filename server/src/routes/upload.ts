@@ -91,17 +91,18 @@ router.post(
       if (!req.file) return fail(res, 400, 'NO_FILE', '请选择文件')
 
       // ── Now req.body is populated by multer — validate ──────────
-      const convId = Number(req.body.conversation_id)
+      let convId = Number(req.body.conversation_id)
       if (!convId || isNaN(convId)) {
-        try { unlinkSync(req.file.path) } catch {}
-        return fail(res, 400, 'VALIDATION_ERROR', '需要 conversation_id')
-      }
-
-      // Verify conversation belongs to user
-      const conv = db.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?').get(convId, userId)
-      if (!conv) {
-        try { unlinkSync(req.file.path) } catch {}
-        return fail(res, 404, 'NOT_FOUND', '对话不存在')
+        // 没有对话 ID 则自动创建新对话
+        const newConv = db.prepare('INSERT INTO conversations (user_id, title) VALUES (?, ?)').run(userId, '新对话')
+        convId = newConv.lastInsertRowid as number
+      } else {
+        // Verify conversation belongs to user
+        const conv = db.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?').get(convId, userId)
+        if (!conv) {
+          try { unlinkSync(req.file.path) } catch {}
+          return fail(res, 404, 'NOT_FOUND', '对话不存在')
+        }
       }
 
       // Get per-user settings
@@ -139,6 +140,7 @@ router.post(
 
       ok(res, {
         id: result.lastInsertRowid,
+        conversation_id: convId,
         url: `/uploads/${storedPath}`,
         name: req.file.originalname,
         size: req.file.size,

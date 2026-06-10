@@ -801,6 +801,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
         @send="sendMessage"
         @stop="stopStream"
         @login="emit('login')"
+        @conversation-created="selectConversation($event); sidebarRef?.load()"
       />
         </div>
         <SearchPanel class="search-sidebar" />
