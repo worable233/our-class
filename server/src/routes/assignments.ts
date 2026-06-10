@@ -16,8 +16,8 @@ const createSchema = z.object({
   title: z.string().min(1, '请输入标题'),
   description: z.string().optional().default(''),
   due_date: z.string().min(1, '请输入截止日期'),
-  course: z.string().min(1, '请输入科目'),
-  course_id: z.number().int().nullable().optional(),
+  course: z.string().optional().default(''),
+  course_id: z.number().int(),
   created_by: z.number().optional(),
 })
 
@@ -121,13 +121,19 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
 
 router.post('/', requirePermission('assignments.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { title, description, due_date, course, course_id, created_by } = req.body
+  const { title, description, due_date, course_id, created_by } = req.body
+
+  // 从课程中获取科目名称
+  const course = db.prepare('SELECT name, class FROM courses WHERE id = ?').get(course_id) as any
+  if (!course) throw new NotFoundError('课程不存在')
+  const courseName = course.name
+
   const result = db
     .prepare(
       `INSERT INTO assignments (title, description, due_date, course, course_id, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(title, description, due_date, course, course_id ?? null, created_by ?? req.user?.id)
-  ok(res, { id: result.lastInsertRowid, title, description, due_date, course, course_id })
+    .run(title, description, due_date, courseName, course_id, created_by ?? req.user?.id)
+  ok(res, { id: result.lastInsertRowid, title, description, due_date, course: courseName, course_id })
 })
 
 // ---------------------------------------------------------------------------

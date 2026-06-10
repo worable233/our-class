@@ -23,11 +23,11 @@ const submissions = ref<Submission[]>([])
 const students = ref<Student[]>([])
 const selectedAssignment = ref<number | null>(null)
 const loading = ref(true)
-const allCourses = ref<Array<{ id: number; name: string; class: string }>>([])
+interface CourseInfo { id: number; name: string; class: string }
+const allCourses = ref<CourseInfo[]>([])
 const showNew = ref(false)
-const newForm = ref({ title: '', description: '', due_date: '', course: '数学', course_id: null as number | null })
-const courses = ['数学', '英语', '语文', '物理']
-const courseOptions = courses.map(c => ({ label: c, value: c }))
+const newForm = ref({ title: '', description: '', due_date: '', course: '', course_id: null as number | null })
+const courseOptions = computed(() => allCourses.value.map(c => ({ label: `${c.name}（${c.class}）`, value: c.id })))
 const gradeInputs = reactive<Record<number, { score: number | null; feedback: string }>>({})
 
 async function load() {
@@ -45,11 +45,16 @@ async function load() {
 }
 
 async function createAssignment() {
-  const payload: any = { ...newForm.value, created_by: auth.user?.id }
-  if (newForm.value.course_id) payload.course_id = newForm.value.course_id
-  await api.post('/assignments', payload)
+  if (!newForm.value.course_id) { message.warning('请选择关联课程'); return }
+  await api.post('/assignments', {
+    title: newForm.value.title,
+    description: newForm.value.description,
+    due_date: newForm.value.due_date,
+    course_id: newForm.value.course_id,
+    created_by: auth.user?.id,
+  })
   showNew.value = false
-  newForm.value = { title: '', description: '', due_date: '', course: '数学', course_id: null }
+  newForm.value = { title: '', description: '', due_date: '', course: '', course_id: null }
   await load()
 }
 
@@ -116,11 +121,8 @@ onMounted(load)
         <n-form-item label="标题">
           <n-input v-model:value="newForm.title" placeholder="作业标题" />
         </n-form-item>
-        <n-form-item label="科目">
-          <n-select v-model:value="newForm.course" :options="courseOptions" />
-        </n-form-item>
-        <n-form-item label="关联课程（可选）">
-          <n-select v-model:value="newForm.course_id" :options="allCourses.map((c:any)=> ({ label: `${c.name} (${c.class})`, value: c.id }))" placeholder="选择课程" clearable />
+        <n-form-item label="关联课程">
+          <n-select v-model:value="newForm.course_id" :options="courseOptions" placeholder="选择课程" />
         </n-form-item>
         <n-form-item label="截止日期">
           <n-date-picker
