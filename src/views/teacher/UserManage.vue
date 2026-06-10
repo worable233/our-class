@@ -22,7 +22,7 @@ const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456', group_id: null as number | null, role_id: null as number | null })
+const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '', group_id: null as number | null, role_id: null as number | null })
 
 // 分离身份组 (parent_id IS NULL) 和职位组 (parent_id IS NOT NULL)
 const identityGroups = computed(() => allGroups.value.filter(g => !g.parent_id))
@@ -165,12 +165,13 @@ async function loadClasses() {
 }
 
 function autoGenerateStudentNo(): string {
-  return 'S' + Date.now()
+  return String(Date.now()).slice(-8)
 }
 
 function openNew() {
+  const no = autoGenerateStudentNo()
   editing.value = null
-  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456', group_id: null, role_id: null }
+  form.value = { student_no: no, display_name: '', nickname: '', class: '高三(2)班', password: no, group_id: null, role_id: null }
   showModal.value = true
 }
 
@@ -192,15 +193,17 @@ async function save() {
   if (!form.value.group_id) { message.error('请选择身份'); return }
   const canCreate = identityGroups.value.some(g => g.id === form.value.group_id)
   if (!canCreate) { message.error('请选择有效的身份组'); return }
+  const student_no = form.value.student_no || autoGenerateStudentNo()
+  // 学号只能为数字
+  if (!/^\d+$/.test(student_no)) { message.error('学号只能为数字'); return }
   saving.value = true
   try {
-    const student_no = form.value.student_no || autoGenerateStudentNo()
     const payload: any = {
       display_name: form.value.display_name,
       nickname: form.value.nickname || undefined,
       class: form.value.class,
       student_no,
-      password: form.value.password || undefined,
+      password: form.value.password || student_no,
       group_id: form.value.group_id,
       role_id: form.value.role_id,
     }
@@ -504,7 +507,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
     >
       <n-form :model="form" label-placement="top">
         <n-form-item label="学号" path="student_no">
-          <n-input v-model:value="form.student_no" placeholder="留空自动生成，格式：S + 时间戳" />
+          <n-input v-model:value="form.student_no" placeholder="留空自动生成，只能为数字" />
         </n-form-item>
         <n-form-item label="真实姓名" path="display_name">
           <n-input v-model:value="form.display_name" placeholder="学生真实姓名" />

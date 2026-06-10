@@ -14,7 +14,7 @@ const createSchema = z.object({
   display_name: z.string().min(1, '请输入学生姓名'),
   class: z.string().optional().default(''),
   username: z.string().optional(),
-  password: z.string().optional().default('123456'),
+  password: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
   role_id: z.number().int().nullable().optional(),
   student_no: z.string().optional(),
@@ -52,10 +52,12 @@ router.get('/', requirePermission('students.write'), (req: Request, res: Respons
 router.post('/', requirePermission('students.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { display_name, class: stuClass, username, group_id, role_id, nickname } = req.body
-  const studentNo = req.body.student_no || 'S' + Date.now()
+  // 学号只能为纯数字，自动生成时用时间戳后 8 位
+  const studentNo = req.body.student_no || String(Date.now()).slice(-8)
 
   const uname = username || display_name.toLowerCase().replace(/\s/g, '')
-  const pw = req.body.password
+  // 默认密码为学号
+  const pw = req.body.password || studentNo
   // Default to "学生" permission group if none specified
   const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as any)?.id ?? null
   const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, role_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
