@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { Square, X, FileText, FileSpreadsheet, FileImage, File, Presentation, Loader2 } from '@lucide/vue'
+import { Square, X, FileText, FileSpreadsheet, FileImage, File, Presentation } from '@lucide/vue'
 import { NTooltip } from 'naive-ui'
 
 const emit = defineEmits<{
@@ -48,6 +48,7 @@ interface Attachment {
   uploaded: boolean
   uploadId?: number
   error?: string
+  progress: number      // 0-100
 }
 
 const attachments = ref<Attachment[]>([])
@@ -70,6 +71,7 @@ async function onFileChange(e: Event) {
       name: file.name,
       uploading: true,
       uploaded: false,
+      progress: 0,
     }
     attachments.value.push(att)
     // Start upload
@@ -78,35 +80,54 @@ async function onFileChange(e: Event) {
   inputEl.value = ''
 }
 
-async function uploadFile(att: Attachment) {
+function uploadFile(att: Attachment) {
   const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
 
   const formData = new FormData()
   formData.append('file', att.file)
-  // 没有对话 ID 时不传，后端自动创建
   if (props.convId) formData.append('conversation_id', String(props.convId))
 
-  try {
-    const res = await fetch('/api/chat/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    })
-    const body = await res.json()
-    if (!res.ok || body.success === false) {
-      throw new Error(body.error?.message || '上传失败')
+  const xhr = new XMLHttpRequest()
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      att.progress = Math.round((e.loaded / e.total) * 100)
     }
-    att.uploading = false
-    att.uploaded = true
-    att.uploadId = body.data.id
-    // 后端可能自动创建了新对话，通知父组件更新
-    if (body.data.conversation_id && body.data.conversation_id !== props.convId) {
-      emit('conversation-created', body.data.conversation_id)
-    }
-  } catch (e: any) {
-    att.uploading = false
-    att.error = e.message || '上传失败'
   }
+
+  xhr.onload = () => {
+    try {
+      const body = JSON.parse(xhr.responseText)
+      if (xhr.status >= 200 && xhr.status < 300 && body.success) {
+        att.uploading = false
+        att.uploaded = true
+        att.progress = 100
+        att.uploadId = body.data.id
+        if (body.data.conversation_id && body.data.conversation_id !== props.convId) {
+          emit('conversation-created', body.data.conversation_id)
+        }
+      } else {
+        throw new Error(body.error?.message || '上传失败')
+      }
+    } catch (e: any) {
+      att.uploading = false
+      att.error = e.message || '上传失败'
+    }
+  }
+
+  xhr.onerror = () => {
+    att.uploading = false
+    att.error = '网络错误，上传失败'
+  }
+
+  xhr.onabort = () => {
+    att.uploading = false
+    att.error = '上传已取消'
+  }
+
+  xhr.open('POST', '/api/chat/upload')
+  xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+  xhr.send(formData)
 }
 
 function removeAttachment(id: string) {
@@ -203,9 +224,15 @@ defineExpose({ input })
             <span class="doc-size">{{ formatSize(att.file.size) }}</span>
           </div>
         </template>
-        <!-- Upload spinner / error -->
+        <!-- Upload progress / error -->
         <div v-if="att.uploading" class="photo-uploading">
-          <Loader2 :size="18" class="spin" />
+          <div class="upload-progress-ring">
+            <svg viewBox="0 0 36 36" class="progress-circle">
+              <path class="progress-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path class="progress-fill" :stroke-dasharray="`${att.progress}, 100`" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span class="progress-pct">{{ att.progress }}%</span>
+          </div>
         </div>
         <div v-else-if="att.error" class="photo-error">
           <span class="photo-error-text">{{ att.error }}</span>
@@ -485,8 +512,24 @@ html.dark .send-btn.on { background: #fff; color: #1d1d1d; }
   background: rgba(0,0,0,.35);
   color: #fff;
 }
-.photo-uploading .spin { animation: tpSpin 1s linear infinite; }
-@keyframes tpSpin { to { transform: rotate(360deg); } }
+.upload-progress-ring {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.progress-circle { width: 36px; height: 36px; transform: rotate(-90deg); }
+.progress-bg { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+.progress-fill { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray .2s; }
+.progress-pct {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1;
+}
 .photo-error {
   position: absolute;
   inset: 0;

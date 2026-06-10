@@ -145,6 +145,51 @@ function extractAuthor($: cheerio.CheerioAPI): string {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
+// POST /api/articles/preview — preview article metadata without saving
+router.post(
+  '/preview',
+  requirePermission('articles.manage'),
+  validate(fetchArticleSchema),
+  async (req: Request, res: Response) => {
+    const { url } = req.body
+
+    // Check duplicate
+    const db = getDb()
+    const dup = db.prepare('SELECT id, title, cover_url, author, created_at FROM articles WHERE url = ?').get(url) as any
+    if (dup) {
+      return ok(res, { ...dup, already_saved: true })
+    }
+
+    let html: string
+    try {
+      const resp = await fetch(url, {
+        signal: AbortSignal.timeout(30000),
+        headers: { 'User-Agent': UA },
+      })
+      if (!resp.ok) {
+        return fail(res, 400, 'FETCH_FAILED', `无法访问该页面 (HTTP ${resp.status})`)
+      }
+      html = await resp.text()
+    } catch (err: any) {
+      if (err.name === 'TimeoutError' || err.code === 'ETIMEOUT' || err.name === 'AbortError') {
+        return fail(res, 400, 'TIMEOUT', '请求超时，请稍后重试')
+      }
+      return fail(res, 400, 'FETCH_FAILED', '无法获取页面内容，请检查链接是否有效')
+    }
+
+    const $ = cheerio.load(html)
+    const title = extractTitle($)
+    const cover = extractCover($)
+    const author = extractAuthor($)
+
+    if (!title) {
+      return fail(res, 400, 'CONTENT_NOT_FOUND', '未能解析到文章标题，请确认链接有效')
+    }
+
+    ok(res, { title, cover_url: cover, author, already_saved: false, url })
+  },
+)
+
 // POST /api/articles/fetch — fetch a WeChat article and save to DB
 router.post(
   '/fetch',

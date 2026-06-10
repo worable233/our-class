@@ -5,11 +5,11 @@ import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumn } from 'naive-ui'
 import {
   NButton, NInput, NModal, NSpin, NEmpty, NText, NCard, NDivider,
-  NScrollbar, NSpace, NTag, NIcon, NDataTable, NBadge,
+  NScrollbar, NSpace, NTag, NIcon, NDataTable, NAlert,
 } from 'naive-ui'
 import {
   ExternalLink, Trash2, Eye, Globe, RefreshCw, Link as LinkIcon,
-  Newspaper, CalendarDays, User, FileText, ArrowUpRight,
+  Newspaper, CalendarDays, User, FileText, Plus, Loader2,
 } from '@lucide/vue'
 import { marked } from 'marked'
 
@@ -27,14 +27,28 @@ interface Article {
   updated_at: string
 }
 
+interface ArticlePreview {
+  title: string
+  cover_url: string
+  author: string
+  url: string
+  already_saved: boolean
+  created_at?: string
+}
+
 const dialog = useDialog()
 const message = useMessage()
 
 const articles = ref<Article[]>([])
 const loading = ref(false)
-const fetching = ref(false)
 const refreshingId = ref<number | null>(null)
-const articleUrl = ref('')
+
+// ── Parse modal ──
+const showParseModal = ref(false)
+const parseUrl = ref('')
+const parsing = ref(false)
+const preview = ref<ArticlePreview | null>(null)
+const saving = ref(false)
 
 // Detail modal
 const showDetail = ref(false)
@@ -68,20 +82,50 @@ function load() {
     .finally(() => { loading.value = false })
 }
 
-async function fetchArticle() {
-  if (!articleUrl.value.trim()) return
-  fetching.value = true
+// ── Parse flow ──
+
+function openParseModal() {
+  showParseModal.value = true
+  parseUrl.value = ''
+  preview.value = null
+}
+
+function closeParseModal() {
+  showParseModal.value = false
+  parseUrl.value = ''
+  preview.value = null
+}
+
+async function previewArticle() {
+  if (!parseUrl.value.trim()) return
+  parsing.value = true
+  preview.value = null
   try {
-    await api.post('/articles/fetch', { url: articleUrl.value.trim() })
-    message.success('文章提取成功')
-    articleUrl.value = ''
-    load()
+    const res = await api.post<ArticlePreview>('/articles/preview', { url: parseUrl.value.trim() })
+    preview.value = res
   } catch (e: any) {
-    message.error(e.message || '提取失败')
+    message.error(e.message || '解析失败')
   } finally {
-    fetching.value = false
+    parsing.value = false
   }
 }
+
+async function confirmSave() {
+  if (!preview.value || !parseUrl.value.trim()) return
+  saving.value = true
+  try {
+    await api.post('/articles/fetch', { url: parseUrl.value.trim() })
+    message.success('文章已保存')
+    closeParseModal()
+    load()
+  } catch (e: any) {
+    message.error(e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ── Detail modal ──
 
 async function openDetail(row: Article) {
   showDetail.value = true
@@ -114,12 +158,8 @@ function confirmDelete(row: Article) {
         await api.delete(`/articles/${row.id}`)
         message.success('已删除')
         load()
-        if (showDetail.value && detailArticle.value?.id === row.id) {
-          closeDetail()
-        }
-      } catch (e: any) {
-        message.error(e.message || '删除失败')
-      }
+        if (showDetail.value && detailArticle.value?.id === row.id) closeDetail()
+      } catch (e: any) { message.error(e.message || '删除失败') }
     },
   })
 }
@@ -212,24 +252,19 @@ const columns = computed<DataTableColumn[]>(() => [
     render(row: Article) {
       return h('div', { style: 'display:flex;gap:4px;justify-content:flex-end;' }, [
         h(NButton, {
-          size: 'tiny',
-          quaternary: true,
+          size: 'tiny', quaternary: true,
           loading: refreshingId.value === row.id,
           disabled: refreshingId.value !== null,
           onClick: (e: Event) => { e.stopPropagation(); refreshArticle(row) },
           round: true,
         }, { default: () => h(RefreshCw, { size: 13 }) }),
         h(NButton, {
-          size: 'tiny',
-          quaternary: true,
-          type: 'primary' as any,
+          size: 'tiny', quaternary: true, type: 'primary' as any,
           onClick: (e: Event) => { e.stopPropagation(); openDetail(row) },
           round: true,
         }, { default: () => h(Eye, { size: 13 }) }),
         h(NButton, {
-          size: 'tiny',
-          quaternary: true,
-          type: 'error' as any,
+          size: 'tiny', quaternary: true, type: 'error' as any,
           onClick: (e: Event) => { e.stopPropagation(); confirmDelete(row) },
           round: true,
         }, { default: () => h(Trash2, { size: 13 }) }),
@@ -244,51 +279,120 @@ onMounted(load)
 <template>
   <div style="display:flex;flex-direction:column;gap:20px;">
     <!-- ═══ 页面标题 ═══ -->
-    <div>
-      <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">
-        <span style="display:flex;align-items:center;gap:10px;">
-          公众号文章
-          <NTag v-if="totalCount > 0" size="small" :bordered="false" round style="font-size:11px;">{{ totalCount }}</NTag>
-        </span>
-      </NText>
-      <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">
-        输入链接自动提取内容，保存为 Markdown 格式
-      </NText>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+      <div>
+        <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">公众号文章</NText>
+        <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">
+          输入链接自动解析并保存为 Markdown 格式
+        </NText>
+      </div>
+      <NButton type="primary" @click="openParseModal" round>
+        <template #icon><Plus :size="16" /></template>
+        解析文章
+      </NButton>
     </div>
 
-    <!-- ═══ URL 输入区 ═══ -->
-    <NCard :bordered="true" size="small" style="padding:6px 0;">
-      <div style="display:flex;align-items:flex-end;gap:12px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-            <Globe :size="14" />
-            <span>公众号文章链接</span>
+    <!-- ═══ 解析弹窗 ═══ -->
+    <NModal
+      v-model:show="showParseModal"
+      preset="card"
+      title="解析公众号文章"
+      style="width:520px;max-width:92vw;"
+      :mask-closable="false"
+      :segmented="{ content: true, footer: true }"
+      header-style="font-size:18px;font-weight:600;"
+      content-style="padding:20px 24px;min-height:160px;"
+      footer-style="padding:12px 20px;"
+      @close="closeParseModal"
+    >
+      <!-- Step 1: URL input -->
+      <template v-if="!preview">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+              <Globe :size="14" />
+              <span>公众号文章链接</span>
+            </div>
+            <NInput
+              v-model:value="parseUrl"
+              placeholder="https://mp.weixin.qq.com/s/..."
+              :disabled="parsing"
+              clearable
+              @keyup.enter="previewArticle"
+              size="large"
+            />
           </div>
-          <NInput
-            v-model:value="articleUrl"
-            placeholder="https://mp.weixin.qq.com/s/..."
-            :disabled="fetching"
-            clearable
-            @keyup.enter="fetchArticle"
+          <NButton
+            type="primary"
+            @click="previewArticle"
+            :loading="parsing"
+            :disabled="!parseUrl.trim()"
+            block
+            round
             size="large"
-          />
+          >
+            {{ parsing ? '解析中...' : '解析预览' }}
+          </NButton>
         </div>
-        <NButton
-          type="primary"
-          @click="fetchArticle"
-          :loading="fetching"
-          :disabled="!articleUrl.trim()"
-          size="large"
-          round
-          style="flex-shrink:0;min-width:120px;height:40px;"
-        >
-          <template #icon><LinkIcon :size="16" /></template>
-          {{ fetching ? '提取中...' : '提取内容' }}
-        </NButton>
-      </div>
-    </NCard>
+      </template>
 
-    <!-- ═══ 文章列表（DataTable） ═══ -->
+      <!-- Step 2: Preview -->
+      <template v-else>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <!-- Already saved alert -->
+          <NAlert v-if="preview.already_saved" type="warning" :bordered="false" closable>
+            该文章已保存过
+          </NAlert>
+
+          <!-- Cover -->
+          <div
+            v-if="preview.cover_url"
+            style="width:100%;height:180px;border-radius:8px;overflow:hidden;background:var(--surface-2);"
+          >
+            <img
+              :src="preview.cover_url"
+              style="width:100%;height:100%;object-fit:cover;display:block;"
+              @error="($event.target as HTMLImageElement).style.display='none'"
+            />
+          </div>
+
+          <!-- Info -->
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <NText tag="div" style="font-size:17px;font-weight:700;line-height:1.4;">
+              {{ preview.title }}
+            </NText>
+            <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--text-muted);">
+              <span v-if="preview.author" style="display:flex;align-items:center;gap:4px;">
+                <User :size="13" /> {{ preview.author }}
+              </span>
+              <span v-if="preview.created_at" style="display:flex;align-items:center;gap:4px;">
+                <CalendarDays :size="13" /> {{ formatDate(preview.created_at) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div style="display:flex;justify-content:space-between;gap:8px;">
+          <NButton quaternary @click="preview ? preview = null : closeParseModal()" round>
+            {{ preview ? '返回修改' : '取消' }}
+          </NButton>
+          <NButton
+            v-if="preview"
+            type="primary"
+            @click="confirmSave"
+            :loading="saving"
+            :disabled="preview.already_saved"
+            round
+          >
+            {{ saving ? '保存中...' : '确认保存' }}
+          </NButton>
+        </div>
+      </template>
+    </NModal>
+
+    <!-- ═══ 文章列表 ═══ -->
     <NDataTable
       :columns="columns"
       :data="articles"
@@ -299,8 +403,7 @@ onMounted(load)
       size="small"
       striped
       :max-height="560"
-      :empty="h(NEmpty, { description: '暂无已提取的文章', style: 'padding:80px 0;' })"
-      @update:row-key="() => {}"
+      :empty="h(NEmpty, { description: '暂无已解析的文章', style: 'padding:80px 0;' })"
     />
 
     <!-- ═══ 详情弹窗 ═══ -->
@@ -319,11 +422,9 @@ onMounted(load)
       <NSpin :show="detailLoading" style="min-height:300px;">
         <template v-if="detailArticle">
           <NScrollbar style="max-height:65vh;padding:24px 28px;">
-            <!-- 标题 -->
             <h2 style="font-size:22px;font-weight:700;margin:0 0 10px;line-height:1.4;letter-spacing:-0.02em;color:var(--text-primary);">
               {{ detailArticle.title }}
             </h2>
-            <!-- 元信息 -->
             <div style="display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--text-muted);margin-bottom:20px;">
               <span v-if="detailArticle.author" style="display:flex;align-items:center;gap:4px;">
                 <User :size="13" /> {{ detailArticle.author }}
@@ -342,7 +443,6 @@ onMounted(load)
               </a>
             </div>
             <NDivider style="margin:0 0 20px;" />
-            <!-- 正文 -->
             <div class="text-bot" v-html="renderMarkdown(detailArticle.content_md)" />
           </NScrollbar>
         </template>
@@ -351,25 +451,17 @@ onMounted(load)
           <div style="margin-top:8px;">加载中...</div>
         </div>
       </NSpin>
-
       <template #footer>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <div style="display:flex;gap:6px;">
-            <NButton
-              v-if="detailArticle" size="tiny" quaternary
-              :loading="refreshingId === detailArticle?.id"
-              :disabled="refreshingId !== null"
-              @click="refreshArticle(detailArticle)" round
-            >
-              <template #icon><RefreshCw :size="13" /></template>
-              刷新
+            <NButton v-if="detailArticle" size="tiny" quaternary
+              :loading="refreshingId === detailArticle?.id" :disabled="refreshingId !== null"
+              @click="refreshArticle(detailArticle)" round>
+              <template #icon><RefreshCw :size="13" /></template>刷新
             </NButton>
-            <NButton
-              v-if="detailArticle" size="tiny" quaternary type="error"
-              @click="confirmDelete(detailArticle)" round
-            >
-              <template #icon><Trash2 :size="13" /></template>
-              删除
+            <NButton v-if="detailArticle" size="tiny" quaternary type="error"
+              @click="confirmDelete(detailArticle)" round>
+              <template #icon><Trash2 :size="13" /></template>删除
             </NButton>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
@@ -385,146 +477,71 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* ═══════════════════════════════════════════
-   Prose: Fumadocs-inspired — same as ChatMessage.vue
-   ═══════════════════════════════════════════ */
-
-.text-bot :deep(p) {
-  margin: 1.25em 0;
-}
+.text-bot :deep(p) { margin: 1.25em 0; }
 .text-bot :deep(p:first-child) { margin-top: 0; }
-.text-bot :deep(p:last-child)  { margin-bottom: 0; }
-
-.text-bot :deep(h1),
-.text-bot :deep(h2),
-.text-bot :deep(h3),
-.text-bot :deep(h4),
-.text-bot :deep(h5),
-.text-bot :deep(h6) {
-  line-height: 1.35;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
+.text-bot :deep(p:last-child) { margin-bottom: 0; }
+.text-bot :deep(h1), .text-bot :deep(h2), .text-bot :deep(h3), .text-bot :deep(h4),
+.text-bot :deep(h5), .text-bot :deep(h6) {
+  line-height: 1.35; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary);
 }
-.text-bot :deep(h1) { font-size: 1.5rem;   margin: 1.2em 0 0.6em; }
-.text-bot :deep(h2) { font-size: 1.3rem;   margin: 1.6em 0 0.5em; }
-.text-bot :deep(h3) { font-size: 1.15rem;  margin: 1.2em 0 0.4em; }
-.text-bot :deep(h4) { font-size: 1.05rem;  margin: 1em 0 0.3em;  }
-
-.text-bot :deep(ul) {
-  list-style: disc outside;
-  margin: 1em 0;
-  padding-left: 1.625em;
-}
-.text-bot :deep(ol) {
-  list-style: decimal outside;
-  margin: 1em 0;
-  padding-left: 1.625em;
-}
+.text-bot :deep(h1) { font-size: 1.5rem; margin: 1.2em 0 0.6em; }
+.text-bot :deep(h2) { font-size: 1.3rem; margin: 1.6em 0 0.5em; }
+.text-bot :deep(h3) { font-size: 1.15rem; margin: 1.2em 0 0.4em; }
+.text-bot :deep(h4) { font-size: 1.05rem; margin: 1em 0 0.3em; }
+.text-bot :deep(ul) { list-style: disc outside; margin: 1em 0; padding-left: 1.625em; }
+.text-bot :deep(ol) { list-style: decimal outside; margin: 1em 0; padding-left: 1.625em; }
 .text-bot :deep(li) { margin: 0.4em 0; display: list-item; }
 .text-bot :deep(li::marker) { color: var(--text-muted); }
-.text-bot :deep(li > ul),
-.text-bot :deep(li > ol) { margin: 0.4em 0; }
-
+.text-bot :deep(li > ul), .text-bot :deep(li > ol) { margin: 0.4em 0; }
 .text-bot :deep(a) {
-  color: var(--text-primary);
-  text-decoration: underline;
-  text-underline-offset: 3.5px;
-  text-decoration-thickness: 1.5px;
-  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  font-weight: 500;
-  transition: opacity 0.2s;
+  color: var(--text-primary); text-decoration: underline; text-underline-offset: 3.5px;
+  text-decoration-thickness: 1.5px; text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  font-weight: 500; transition: opacity 0.2s;
 }
 .text-bot :deep(a:hover) { opacity: 0.8; }
-
 .text-bot :deep(strong) { font-weight: 600; color: var(--text-primary); }
-
 .text-bot :deep(blockquote) {
-  font-style: italic;
-  font-weight: 500;
-  border-left: 3px solid var(--hairline-strong);
-  padding: 0.5em 1em;
-  margin: 1.2em 0;
-  background: var(--surface-2);
-  border-radius: 0 6px 6px 0;
-  color: var(--text-secondary);
+  font-style: italic; font-weight: 500; border-left: 3px solid var(--hairline-strong);
+  padding: 0.5em 1em; margin: 1.2em 0; background: var(--surface-2);
+  border-radius: 0 6px 6px 0; color: var(--text-secondary);
 }
 .text-bot :deep(blockquote p) { margin: 0.75em 0; }
 .text-bot :deep(blockquote p:first-child) { margin-top: 0; }
-.text-bot :deep(blockquote p:last-child)  { margin-bottom: 0; }
-
+.text-bot :deep(blockquote p:last-child) { margin-bottom: 0; }
 .text-bot :deep(.code-block-wrapper) {
-  position: relative;
-  margin: 1.5em 0;
-  border-radius: 8px;
-  border: 1px solid var(--hairline);
-  background: var(--surface-1);
-  overflow: hidden;
+  position: relative; margin: 1.5em 0; border-radius: 8px; border: 1px solid var(--hairline);
+  background: var(--surface-1); overflow: hidden;
 }
 .text-bot :deep(.code-block-header) {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-2);
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  font-family: 'JetBrains Mono','Fira Code',monospace;
+  display: flex; align-items: center; padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--hairline); background: var(--surface-2);
+  font-size: 0.8125rem; color: var(--text-muted); font-family: 'JetBrains Mono','Fira Code',monospace;
 }
-.text-bot :deep(.code-block-header figcaption) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.text-bot :deep(.code-block-header figcaption) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .text-bot :deep(.code-block-header .code-copy-btn) {
-  margin-left: auto;
-  display: flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  transition: all .12s;
-  opacity: 0;
+  margin-left: auto; display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer; padding: 0; flex-shrink: 0; transition: all .12s; opacity: 0;
 }
 .text-bot :deep(.code-block-wrapper:hover .code-copy-btn) { opacity: 1; }
 .text-bot :deep(.code-copy-btn:hover) { background: var(--surface-2); color: var(--text-primary); }
 .text-bot :deep(.code-copy-btn:active) { transform: scale(0.88); }
 .text-bot :deep(.code-block-body) { overflow-x: auto; }
 .text-bot :deep(.code-block-body pre) {
-  margin: 0;
-  padding: 1.25em 1.5em;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  font-size: 0.8125rem;
-  line-height: 1.7;
-  font-family: 'JetBrains Mono','Fira Code',monospace;
-  -webkit-font-smoothing: auto;
+  margin: 0; padding: 1.25em 1.5em; border: none; border-radius: 0; background: transparent;
+  font-size: 0.8125rem; line-height: 1.7; font-family: 'JetBrains Mono','Fira Code',monospace; -webkit-font-smoothing: auto;
 }
-.text-bot :deep(.code-block-body pre code) {
-  background: transparent; border: none; padding: 0;
-  font-size: inherit; line-height: inherit; color: var(--text-primary);
-}
+.text-bot :deep(.code-block-body pre code) { background: transparent; border: none; padding: 0; font-size: inherit; line-height: inherit; color: var(--text-primary); }
 .text-bot :deep(code) {
-  font-family: 'JetBrains Mono','Fira Code',monospace;
-  background: var(--surface-2);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  padding: 0.15em 0.4em;
-  font-size: 0.875em;
-  color: var(--text-primary);
+  font-family: 'JetBrains Mono','Fira Code',monospace; background: var(--surface-2);
+  border: 1px solid var(--hairline); border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.875em; color: var(--text-primary);
 }
 .text-bot :deep(pre code) { background: transparent; border: 0; padding: 0; font-size: inherit; color: inherit; }
 .text-bot :deep(hr) { margin: 1.5em 0; border: 0; border-top: 1px solid var(--hairline); opacity: 0.3; }
 .text-bot :deep(table) { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface-1); }
 .text-bot :deep(th) {
-  font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.02em;
-  color: var(--text-secondary); border-bottom: 1px solid var(--hairline-strong);
-  padding: 0.625rem 1rem; text-align: left; background: transparent;
+  font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.02em; color: var(--text-secondary);
+  border-bottom: 1px solid var(--hairline-strong); padding: 0.625rem 1rem; text-align: left; background: transparent;
 }
 .text-bot :deep(td) { padding: 0.625rem 1rem; border-bottom: 1px solid var(--hairline); font-size: 0.875rem; }
 .text-bot :deep(tr:last-child td) { border-bottom: none; }
