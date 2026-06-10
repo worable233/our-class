@@ -37,7 +37,10 @@ install_nodejs() {
       brew install node
     else
       info "下载 Node.js 安装包..."
-      curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0.pkg -o /tmp/node-installer.pkg
+      if ! curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0.pkg -o /tmp/node-installer.pkg; then
+        err "下载失败，请检查网络连接"
+        exit 1
+      fi
       sudo installer -pkg /tmp/node-installer.pkg -target /
       rm /tmp/node-installer.pkg
     fi
@@ -74,24 +77,65 @@ fi
 # ── 2. 安装项目依赖 ─────────────────────────────────────────────────
 info "安装后端依赖..."
 cd "$SCRIPT_DIR/server"
-npm install --production 2>&1 | tail -1 && ok "后端依赖安装完成"
+if npm install 2>&1; then
+  ok "后端依赖安装完成"
+else
+  err "后端依赖安装失败"
+  exit 1
+fi
 
 info "安装前端依赖..."
 cd "$SCRIPT_DIR"
-npm install 2>&1 | tail -1 && ok "前端依赖安装完成"
+if npm install 2>&1; then
+  ok "前端依赖安装完成"
+else
+  err "前端依赖安装失败"
+  exit 1
+fi
 
 # ── 3. 构建前端 ─────────────────────────────────────────────────────
 info "构建前端..."
-npm run build-only 2>&1 | tail -1 && ok "前端构建完成"
+if npm run build-only 2>&1; then
+  ok "前端构建完成"
+else
+  warn "前端构建失败，部分功能可能不可用"
+  echo "  可在安装后手动运行: cd $SCRIPT_DIR && npm run build"
+fi
 
 # ── 4. 启动配置向导 ────────────────────────────────────────────────
 info "启动配置向导..."
 echo ""
-echo -e "  打开浏览器访问: ${CYAN}http://localhost:3001${NC}"
+echo -e "  打开浏览器访问: ${CYAN}http://localhost:3001/setup${NC}"
 echo ""
 
 cd "$SCRIPT_DIR/server"
-npx tsx src/setup/index.ts
+# 后台启动配置向导，避免阻塞终端
+nohup npx tsx src/setup/index.ts > /tmp/ourclass-setup.log 2>&1 &
+SETUP_PID=$!
 
+# 等待 3 秒验证向导已启动
+sleep 3
+if kill -0 "$SETUP_PID" 2>/dev/null; then
+  ok "配置向导已启动 (PID: $SETUP_PID)"
+else
+  warn "配置向导可能未正常启动，查看日志: cat /tmp/ourclass-setup.log"
+fi
+
+echo -e "  提示: 安装完成后可按 Ctrl+C 退出此脚本"
+echo -e "        配置向导将继续在后台运行"
 echo ""
-ok "安装完成！"
+
+# 等待用户按 Ctrl+C 或 SIGTERM
+echo "  按 Ctrl+C 退出此脚本（配置向导仍在后台运行）"
+echo ""
+cleanup() {
+  echo ""
+  ok "配置向导已在后台运行"
+  echo "  如需停止: kill ${SETUP_PID}"
+  echo "  日志文件: /tmp/ourclass-setup.log"
+  exit 0
+}
+trap cleanup INT TERM
+while true; do
+  sleep 10
+done
