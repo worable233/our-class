@@ -6,6 +6,7 @@ import {
   NButton, NInput, NCard, NText, NSpace, NDivider, NSpin, NAlert,
 } from 'naive-ui'
 import { Save, Globe, Image as ImageIcon, FileText, MessageSquare } from '@lucide/vue'
+import FilePicker from '@/components/FilePicker.vue'
 
 interface SiteSettings {
   site_title: string
@@ -62,21 +63,13 @@ async function save() {
   }
 }
 
-function handleIconUpload() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    // Read as base64 or upload
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      settings.value.site_icon = e.target?.result as string
-    }
-    reader.readAsDataURL(file)
-  }
-  input.click()
+// ── File picker for icon ──
+const showIconPicker = ref(false)
+
+function onIconSelected(files: { name: string; path: string }[]) {
+  if (files.length === 0) return
+  // Use the selected file's path as the icon URL
+  settings.value.site_icon = `/uploads/${files[0].path}`
 }
 
 function removeIcon() {
@@ -134,8 +127,8 @@ onMounted(load)
                   />
                 </div>
                 <div style="display:flex;flex-direction:column;gap:6px;">
-                  <NButton size="tiny" @click="handleIconUpload" secondary round>
-                    上传图标
+                  <NButton size="tiny" @click="showIconPicker = true" secondary round>
+                    选择图标
                   </NButton>
                   <NButton
                     v-if="settings.site_icon"
@@ -201,6 +194,15 @@ onMounted(load)
             </div>
           </template>
         </NCard>
+
+        <!-- ═══ 图标选择器 ═══ -->
+        <FilePicker
+          :show="showIconPicker"
+          :accept="['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico']"
+          :multiple="false"
+          @update:show="(v: boolean) => showIconPicker = v"
+          @confirm="(files: any[]) => { showIconPicker = false; onIconSelected(files) }"
+        />
       </template>
     </NSpin>
   </div>
