@@ -219,7 +219,7 @@ function quickForRandom(rt: ReviewType) {
 }
 
 function openScoreCard(student: Student) {
-  openQuick(student)
+  if (auth.isTeacher) openQuick(student)
 }
 
 async function refreshAll() { await loadClasses() }
@@ -240,7 +240,7 @@ onMounted(loadClasses)
         <span style="font-size:13px;font-weight:600;color:var(--text-primary)">{{ selectedClass.name }}</span>
         <NTag size="tiny" type="info" round :bordered="false" style="margin-left:2px">{{ selectedClass.student_count }} 人</NTag>
         <div style="flex:1" />
-        <NButton @click="openRandomModal" round size="small">
+        <NButton v-if="auth.isTeacher" @click="openRandomModal" round size="small">
           <template #icon><Shuffle :size="16" /></template>
           抽号
         </NButton>
@@ -251,7 +251,7 @@ onMounted(loadClasses)
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
         <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">积分管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级后管理学生积分，支持加减分与随机抽取</NText>
+        <NText depth="3" style="display:block;margin:0;font-size:14px;">{{ auth.isTeacher ? '选择班级后管理学生积分，支持加减分与随机抽取' : '选择班级后查看学生积分排行' }}</NText>
       </div>
     </div>
 

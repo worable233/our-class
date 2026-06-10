@@ -144,6 +144,12 @@ const router = createRouter({
           component: () => import('@/views/student/Leaderboard.vue'),
         },
         {
+          path: 'points-manage',
+          name: 'student-points-manage',
+          component: () => import('@/views/teacher/PointsManage.vue'),
+          meta: { permissions: ['points.read'] },
+        },
+        {
           path: 'assignments',
           name: 'student-assignments',
           component: () => import('@/views/student/AssignmentQuery.vue'),
