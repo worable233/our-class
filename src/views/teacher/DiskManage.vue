@@ -562,17 +562,23 @@ onUnmounted(() => {
 
 /* ── List header ── */
 .dm-list-header {
-  display: flex; align-items: center; gap: 4px;
-  padding: 6px 10px; border-bottom: 1px solid var(--hairline);
+  display: flex; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--hairline);
   font-size: 11px; font-weight: 600; color: var(--text-muted);
   user-select: none; flex-shrink: 0;
 }
+.dm-list-header .dm-col { padding: 0 6px; }
+.dm-list-header .dm-col:first-child { padding-left: 10px; }
+.dm-list-header .dm-col:last-child { padding-right: 10px; }
 .dm-list-body { max-height: 480px; overflow-y: auto; min-height: 180px; }
 .dm-list-row {
-  display: flex; align-items: center; gap: 4px;
-  padding: 5px 10px; border-bottom: 1px solid var(--hairline);
+  display: flex; align-items: center;
+  padding: 5px 0; border-bottom: 1px solid var(--hairline);
   cursor: default; font-size: 13px; transition: background .08s;
 }
+.dm-list-row .dm-col { padding: 0 6px; }
+.dm-list-row .dm-col:first-child { padding-left: 10px; }
+.dm-list-row .dm-col:last-child { padding-right: 10px; }
 .dm-list-row:hover { background: var(--surface-2); }
 .dm-list-row.selected { background: rgba(94,106,210,0.08); }
 
@@ -595,13 +601,22 @@ onUnmounted(() => {
 .dm-col { position: relative; }
 .dm-col-grip {
   position: absolute; top: 0; right: -3px;
-  width: 6px; height: 100%;
+  width: 7px; height: 100%;
   cursor: col-resize; z-index: 5;
   background: transparent;
   transition: background .12s;
 }
+.dm-col-grip::after {
+  content: '';
+  position: absolute; top: 8px; bottom: 8px; left: 3px;
+  width: 1px;
+  background: var(--hairline);
+  transition: background .12s;
+}
+.dm-col-grip:hover::after,
+.dm-col-grip:active::after { background: var(--accent); }
 .dm-col-grip:hover,
-.dm-col-grip:active { background: var(--accent); }
+.dm-col-grip:active { background: rgba(94,106,210,0.08); }
 .dm-col:last-child .dm-col-grip { display: none; }
 .dm-list-row:hover .dm-col-actions { opacity: 1; }
 .dm-list-row .dm-col-actions { display: flex; gap: 2px; justify-content: flex-end; }
