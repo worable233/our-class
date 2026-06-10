@@ -353,7 +353,7 @@ function onPickModalDone(_cardData: PendingPickCard) {
 
 let sending = false
 
-async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?: boolean, fileIds?: number[]) {
+async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?: boolean, files?: { ids: number[]; items: Array<{ id: number; name: string; url: string }> }) {
   if (streaming.value || sending || terminated.value) return
   pendingPickCard.value = null  // Dismiss any pending pick modal
   sending = true
@@ -380,7 +380,21 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
     }
   }
 
-  messages.value.push({ role: 'user', content })
+  // 构建消息内容（带文件附件）
+  const msgContent = files?.items?.length
+    ? JSON.stringify({ text: content, files: files.ids })
+    : content
+  const msg: any = { role: 'user', content: msgContent }
+  if (files?.items?.length) {
+    msg.fileInfo = files.items.map(f => ({
+      id: f.id,
+      name: f.name,
+      url: `/uploads/${f.name}`, // placeholder, loaded via file_map on reload
+      size: 0,
+      mime_type: '',
+    }))
+  }
+  messages.value.push(msg)
   messages.value.push({ role: 'assistant', content: '' })
   const convId = currentConvId.value
   stoppedByUser.value = false
@@ -428,7 +442,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
         message: content,
         thinking: isDeepThink ?? deepThink.value,
         web_search: isWebSearch ?? webSearch.value,
-        ...(fileIds?.length ? { file_ids: fileIds } : {}),
+        ...(files?.ids?.length ? { file_ids: files.ids } : {}),
       }),
       signal: abortCtrl.signal,
     })

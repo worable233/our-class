@@ -4,8 +4,13 @@ import { useAuthStore } from '@/stores/auth'
 import { Square, X, FileText, FileSpreadsheet, FileImage, File, Presentation } from '@lucide/vue'
 import { NTooltip } from 'naive-ui'
 
+interface FileAttachments {
+  ids: number[]
+  items: Array<{ id: number; name: string; url: string }>
+}
+
 const emit = defineEmits<{
-  send: [content: string, deepThink: boolean, webSearch: boolean, fileIds?: number[]]
+  send: [content: string, deepThink: boolean, webSearch: boolean, files?: FileAttachments]
   stop: []
   login: []
   'update:deepThink': [value: boolean]
@@ -184,7 +189,8 @@ function handleSend() {
   const ws = props.webSearch ?? false;
 
   pendingSend.value = true
-  emit('send', c, dt, ws, fileIds.length > 0 ? fileIds : undefined)
+  const fileAttachments = fileIds.length > 0 ? { ids: fileIds, items: attachments.value.filter(a => a.uploadId).map(a => ({ id: a.uploadId!, name: a.name, url: a.url })) } : undefined
+  emit('send', c, dt, ws, fileAttachments)
 }
 
 function onInput() { autoResize() }
