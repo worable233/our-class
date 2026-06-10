@@ -600,24 +600,35 @@ onUnmounted(() => {
 /* ── Column resize grip ── */
 .dm-col { position: relative; }
 .dm-col-grip {
-  position: absolute; top: 0; right: -3px;
-  width: 7px; height: 100%;
+  position: absolute; top: 0; right: -4px;
+  width: 9px; height: 100%;
   cursor: col-resize; z-index: 5;
   background: transparent;
-  transition: background .12s;
+  transition: background .15s;
+  display: flex; align-items: center; justify-content: center;
 }
 .dm-col-grip::after {
   content: '';
-  position: absolute; top: 8px; bottom: 8px; left: 3px;
-  width: 1px;
-  background: var(--hairline);
-  transition: background .12s;
+  width: 2px; height: 20px;
+  border-radius: 1px;
+  background: var(--hairline-strong);
+  transition: background .15s, height .15s;
 }
 .dm-col-grip:hover::after,
-.dm-col-grip:active::after { background: var(--accent); }
+.dm-col-grip:active::after {
+  background: var(--accent);
+  height: 32px;
+}
 .dm-col-grip:hover,
-.dm-col-grip:active { background: rgba(94,106,210,0.08); }
+.dm-col-grip:active {
+  background: rgba(94,106,210,0.06);
+  border-radius: 2px;
+}
 .dm-col:last-child .dm-col-grip { display: none; }
+
+/* 列头之间的边框分隔 */
+.dm-list-header .dm-col { border-right: 1px solid var(--hairline); }
+.dm-list-header .dm-col:last-child { border-right: none; }
 .dm-list-row:hover .dm-col-actions { opacity: 1; }
 .dm-list-row .dm-col-actions { display: flex; gap: 2px; justify-content: flex-end; }
 

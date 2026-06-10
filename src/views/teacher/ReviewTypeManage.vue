@@ -40,6 +40,8 @@ const commonEmojis = [
 ]
 
 const hasViewAll = computed(() => auth.permissions.includes('classes.view_all'))
+const canEditGlobal = computed(() => hasViewAll.value)
+const isEditingReadonly = computed(() => editing.value && !editing.value.class && !canEditGlobal.value)
 const addTypes = computed(() => types.value.filter(t => t.type === 'add'))
 const deductTypes = computed(() => types.value.filter(t => t.type === 'deduct'))
 
@@ -141,7 +143,12 @@ onMounted(load)
 
           <n-grid v-if="addTypes.length > 0" :cols="6" :x-gap="48" :y-gap="32">
             <n-gi v-for="t in addTypes" :key="t.id">
-              <div class="review-item" @click="openEdit(t)" :title="'点击编辑'">
+              <div
+                class="review-item"
+                :class="{ 'review-item-readonly': !t.class && !canEditGlobal }"
+                @click="canEditGlobal || t.class ? openEdit(t) : undefined"
+                :title="!t.class && !canEditGlobal ? '仅可查看' : '点击编辑'"
+              >
                 <div class="review-circle-wrap">
                   <n-avatar
                     :size="80"
@@ -150,7 +157,7 @@ onMounted(load)
                       background: 'linear-gradient(135deg, rgba(24,160,88,0.15), rgba(24,160,88,0.06))',
                       border: '2px solid rgba(24,160,88,0.25)',
                       fontSize: '32px',
-                      cursor: 'pointer',
+                      cursor: !t.class && !canEditGlobal ? 'default' : 'pointer',
                       transition: 'box-shadow 0.2s var(--ease-out)',
                     }"
                     class="review-avatar"
@@ -183,6 +190,7 @@ onMounted(load)
                   {{ t.name }}
                 </n-text>
                 <n-tag v-if="t.class" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;">{{ t.class }}</n-tag>
+                <n-tag v-else-if="!canEditGlobal" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;" type="info">全局</n-tag>
               </div>
             </n-gi>
           </n-grid>
@@ -201,7 +209,12 @@ onMounted(load)
 
           <n-grid v-if="deductTypes.length > 0" :cols="6" :x-gap="48" :y-gap="32">
             <n-gi v-for="t in deductTypes" :key="t.id">
-              <div class="review-item" @click="openEdit(t)" :title="'点击编辑'">
+              <div
+                class="review-item"
+                :class="{ 'review-item-readonly': !t.class && !canEditGlobal }"
+                @click="canEditGlobal || t.class ? openEdit(t) : undefined"
+                :title="!t.class && !canEditGlobal ? '仅可查看' : '点击编辑'"
+              >
                 <div class="review-circle-wrap">
                   <n-avatar
                     :size="80"
@@ -210,7 +223,7 @@ onMounted(load)
                       background: 'linear-gradient(135deg, rgba(208,48,80,0.15), rgba(208,48,80,0.06))',
                       border: '2px solid rgba(208,48,80,0.25)',
                       fontSize: '32px',
-                      cursor: 'pointer',
+                      cursor: !t.class && !canEditGlobal ? 'default' : 'pointer',
                       transition: 'box-shadow 0.2s var(--ease-out)',
                     }"
                     class="review-avatar"
@@ -243,6 +256,7 @@ onMounted(load)
                   {{ t.name }}
                 </n-text>
                 <n-tag v-if="t.class" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;">{{ t.class }}</n-tag>
+                <n-tag v-else-if="!canEditGlobal" size="tiny" :bordered="false" round style="margin-top:4px;font-size:9px;" type="info">全局</n-tag>
               </div>
             </n-gi>
           </n-grid>
@@ -269,21 +283,23 @@ onMounted(load)
             <NButton
               :type="form.type === 'add' ? 'primary' : 'default'"
               @click="form.type = 'add'" style="flex:1" round
+              :disabled="isEditingReadonly"
             ><ThumbsUp :size="15" style="margin-right:4px" /> 加分</NButton>
             <NButton
               :type="form.type === 'deduct' ? 'primary' : 'default'"
               @click="form.type = 'deduct'" style="flex:1" round
+              :disabled="isEditingReadonly"
             ><ShieldBan :size="15" style="margin-right:4px" /> 扣分</NButton>
           </div>
         </NFormItem>
         <NFormItem label="班级" v-if="hasViewAll">
-          <NSelect v-model:value="form.class" :options="[{label:'全局（所有班级）',value:''},...classList.map(c=>({label:c,value:c}))]" placeholder="选择班级" :disabled="!!editing" />
+          <NSelect v-model:value="form.class" :options="[{label:'全局（所有班级）',value:''},...classList.map(c=>({label:c,value:c}))]" placeholder="选择班级" :disabled="!!editing || isEditingReadonly" />
         </NFormItem>
         <NFormItem label="名称" required>
-          <NInput v-model:value="form.name" placeholder="例如：积极发言" :maxlength="10" show-count clearable />
+          <NInput v-model:value="form.name" placeholder="例如：积极发言" :maxlength="10" show-count clearable :disabled="isEditingReadonly" />
         </NFormItem>
         <NFormItem label="分值" required>
-          <NInputNumber v-model:value="form.amount" :min="1" :max="100" style="width:120px" />
+          <NInputNumber v-model:value="form.amount" :min="1" :max="100" style="width:120px" :disabled="isEditingReadonly" />
         </NFormItem>
         <NFormItem label="图标" required>
           <div style="display:flex;flex-wrap:wrap;gap:4px">
@@ -292,22 +308,28 @@ onMounted(load)
               size="tiny"
               :type="form.emoji === e ? 'primary' : 'default'"
               :secondary="form.emoji === e"
-              @click="form.emoji = e"
+              @click="isEditingReadonly ? undefined : form.emoji = e"
               style="font-size:16px;padding:2px 6px;min-width:32px"
+              :disabled="isEditingReadonly"
             >{{ e }}</NButton>
           </div>
         </NFormItem>
       </NForm>
       <template #footer>
         <div style="display:flex;justify-content:space-between;gap:10px">
-          <NButton v-if="editing" type="error" quaternary @click="remove(editing.id)" :disabled="saving">
+          <NButton v-if="editing && !isEditingReadonly" type="error" quaternary @click="remove(editing.id)" :disabled="saving">
             <template #icon><Trash2 :size="14" /></template>删除
           </NButton>
           <span style="flex:1" />
           <NButton @click="showModal = false" quaternary :disabled="saving">取消</NButton>
-          <NButton type="primary" @click="save" :disabled="!form.name || !form.emoji" :loading="saving" round>
-            {{ editing ? '保存' : '创建' }}
-          </NButton>
+          <template v-if="isEditingReadonly">
+            <NButton type="primary" @click="showModal = false" round>关闭</NButton>
+          </template>
+          <template v-else>
+            <NButton type="primary" @click="save" :disabled="!form.name || !form.emoji" :loading="saving" round>
+              {{ editing ? '保存' : '创建' }}
+            </NButton>
+          </template>
         </div>
       </template>
     </NModal>
@@ -324,6 +346,14 @@ onMounted(load)
 }
 .review-item:hover {
   transform: translateY(-4px);
+}
+.review-item-readonly {
+  cursor: default;
+  opacity: 0.75;
+  filter: grayscale(0.3);
+}
+.review-item-readonly:hover {
+  transform: none;
 }
 .review-item:hover .review-avatar {
   box-shadow: 0 6px 20px rgba(0,0,0,0.12);
