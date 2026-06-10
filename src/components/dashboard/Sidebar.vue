@@ -22,7 +22,7 @@ function renderIcon(icon: any) {
 
 // Permission requirements per route (mirrors router meta.permissions)
 const ROUTE_PERMS: Record<string, string[]> = {
-  '/teacher/dashboard': ['students.write'],
+  '/teacher/dashboard': [],
   '/teacher/points': ['points.read'],
   '/teacher/assignments': ['assignments.write'],
   '/teacher/users': ['students.write'],

@@ -24,7 +24,6 @@ const router = createRouter({
           path: 'dashboard',
           name: 'teacher-dashboard',
           component: () => import('@/views/teacher/DashboardHome.vue'),
-          meta: { permissions: ['students.write'] },
         },
         {
           path: 'points',
