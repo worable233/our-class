@@ -344,7 +344,7 @@ function fmtDate(iso: string) {
         <NButton size="tiny" quaternary @click="loadDir(currentPath, false)" round title="刷新">
           <template #icon><RefreshCw :size="14" /></template>
         </NButton>
-        <NButton size="tiny" quaternary @click="showMkdirModal = true" round title="新建文件夹">
+        <NButton size="tiny" quaternary @click="showMkdirModal = true" round title="新建文件夹" class="fp-mobile-hide">
           <template #icon><Plus :size="14" /></template>
         </NButton>
         <NButton size="tiny" secondary @click="triggerUpload" round title="上传文件">
@@ -644,8 +644,8 @@ function fmtDate(iso: string) {
   .fp-search-box { width: 130px; }
   .fp-search-input { font-size: 14px; height: 32px; padding: 0 8px 0 28px; }
   .fp-search-icon { left: 7px; transform: translateY(-50%) scale(1.15); }
-  .fp-toolbar-right .n-button { display: none; }
-  .fp-toolbar-right .n-button:last-child { display: inline-flex; transform: scale(1.15); }
+  .fp-toolbar-right .fp-mobile-hide { display: none !important; }
+  .fp-toolbar-right .n-button { transform: scale(1.15); }
 
   .fp-body { flex-direction: column; max-height: none; min-height: 50vh; }
   .fp-sidebar { display: none; }

@@ -140,11 +140,13 @@ router.post('/create', requirePermission('chat.config'), async (req: Request, re
   }
   archive.append(JSON.stringify(dbData, null, 2), { name: 'database.json' })
 
-  // 2. Uploaded + storage files
+  // 2. Uploaded + storage files（跳过已被删除的）
   const uploadFiles = collectFiles(UPLOAD_ROOT)
   const storageFiles = collectFiles(STORAGE_ROOT)
   const allFiles = [...uploadFiles, ...storageFiles]
-  for (const f of allFiles) archive.file(f.src, { name: `files/${f.path}` })
+  for (const f of allFiles) {
+    try { if (existsSync(f.src)) archive.file(f.src, { name: `files/${f.path}` }) } catch {}
+  }
 
   // 3. Metadata
   const totalRecords = Object.values(dbData).reduce((sum, arr) => sum + arr.length, 0)
@@ -302,7 +304,7 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
     const storageFiles = collectFiles(STORAGE_ROOT)
     const allFiles = [...uploadFiles, ...storageFiles]
     for (const f of allFiles) {
-      archive.file(f.src, { name: `files/${f.path}` })
+      try { if (existsSync(f.src)) archive.file(f.src, { name: `files/${f.path}` }) } catch {}
     }
 
     // 3. Backup metadata (compute all fields before writing)
