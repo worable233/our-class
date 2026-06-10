@@ -17,6 +17,7 @@ const createSchema = z.object({
   description: z.string().optional().default(''),
   due_date: z.string().min(1, '请输入截止日期'),
   course: z.string().min(1, '请输入科目'),
+  course_id: z.number().int().nullable().optional(),
   created_by: z.number().optional(),
 })
 
@@ -40,6 +41,9 @@ interface AssignmentRow {
   description: string | null
   due_date: string
   course: string
+  course_id: number | null
+  course_name?: string | null
+  course_class?: string | null
   created_by: number
   created_at: string
   teacher_name: string
@@ -72,11 +76,12 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
     const id = Number(student_id)
     const assignments = db
       .prepare(
-        `SELECT a.*, u.display_name as teacher_name,
+        `SELECT a.*, u.display_name as teacher_name, c.name as course_name, c.class as course_class,
           (SELECT status FROM submissions WHERE assignment_id = a.id AND student_id = ?) as submit_status,
           (SELECT score FROM submissions WHERE assignment_id = a.id AND student_id = ?) as submit_score
         FROM assignments a
         JOIN users u ON a.created_by = u.id
+        LEFT JOIN courses c ON a.course_id = c.id
         ORDER BY a.due_date`,
       )
       .all(id, id) as AssignmentRow[]
@@ -84,9 +89,10 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
   } else {
     const assignments = db
       .prepare(
-        `SELECT a.*, u.display_name as teacher_name
+        `SELECT a.*, u.display_name as teacher_name, c.name as course_name, c.class as course_class
         FROM assignments a
         JOIN users u ON a.created_by = u.id
+        LEFT JOIN courses c ON a.course_id = c.id
         ORDER BY a.created_at DESC`,
       )
       .all() as AssignmentRow[]
@@ -100,13 +106,13 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
 
 router.post('/', requirePermission('assignments.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { title, description, due_date, course, created_by } = req.body
+  const { title, description, due_date, course, course_id, created_by } = req.body
   const result = db
     .prepare(
-      `INSERT INTO assignments (title, description, due_date, course, created_by) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO assignments (title, description, due_date, course, course_id, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(title, description, due_date, course, created_by ?? req.user?.id)
-  ok(res, { id: result.lastInsertRowid, title, description, due_date, course })
+    .run(title, description, due_date, course, course_id ?? null, created_by ?? req.user?.id)
+  ok(res, { id: result.lastInsertRowid, title, description, due_date, course, course_id })
 })
 
 // ---------------------------------------------------------------------------

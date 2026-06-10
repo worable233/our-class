@@ -23,31 +23,33 @@ const submissions = ref<Submission[]>([])
 const students = ref<Student[]>([])
 const selectedAssignment = ref<number | null>(null)
 const loading = ref(true)
+const allCourses = ref<Array<{ id: number; name: string; class: string }>>([])
 const showNew = ref(false)
-const newForm = ref({ title: '', description: '', due_date: '', course: '数学' })
+const newForm = ref({ title: '', description: '', due_date: '', course: '数学', course_id: null as number | null })
 const courses = ['数学', '英语', '语文', '物理']
 const courseOptions = courses.map(c => ({ label: c, value: c }))
 const gradeInputs = reactive<Record<number, { score: number | null; feedback: string }>>({})
 
 async function load() {
   loading.value = true
-  const [asgns, sts] = await Promise.all([
+  const [asgns, sts, crs] = await Promise.all([
     api.get<Assignment[]>('/assignments'),
     api.get<Student[]>('/students'),
+    api.get<any[]>('/courses').catch(() => []),
   ])
   assignments.value = asgns
   students.value = sts
+  allCourses.value = crs
   loading.value = false
   const first = asgns[0]; if (first) selectAssignment(first.id)
 }
 
 async function createAssignment() {
-  await api.post('/assignments', {
-    ...newForm.value,
-    created_by: auth.user?.id,
-  })
+  const payload: any = { ...newForm.value, created_by: auth.user?.id }
+  if (newForm.value.course_id) payload.course_id = newForm.value.course_id
+  await api.post('/assignments', payload)
   showNew.value = false
-  newForm.value = { title: '', description: '', due_date: '', course: '数学' }
+  newForm.value = { title: '', description: '', due_date: '', course: '数学', course_id: null }
   await load()
 }
 
@@ -117,6 +119,9 @@ onMounted(load)
         <n-form-item label="科目">
           <n-select v-model:value="newForm.course" :options="courseOptions" />
         </n-form-item>
+        <n-form-item label="关联课程（可选）">
+          <n-select v-model:value="newForm.course_id" :options="allCourses.map((c:any)=> ({ label: `${c.name} (${c.class})`, value: c.id }))" placeholder="选择课程" clearable />
+        </n-form-item>
         <n-form-item label="截止日期">
           <n-date-picker
             v-model:formatted-value="newForm.due_date"
@@ -183,6 +188,7 @@ onMounted(load)
               <NText style="font-weight:500;display:block;margin-bottom:2px">{{ a.title }}</NText>
               <div style="display:flex;gap:8px;align-items:center">
                 <NTag size="tiny" :bordered="false">{{ a.course }}</NTag>
+                <NTag v-if="a.course_name" size="tiny" :bordered="false" type="info" style="font-size:10px">{{ a.course_name }}</NTag>
                 <NText depth="3" style="font-size:12px">截止 {{ a.due_date }}</NText>
               </div>
             </NListItem>
