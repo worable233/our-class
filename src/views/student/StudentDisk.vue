@@ -5,7 +5,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { useUploadManager } from '@/composables/useUploadManager'
 import UploadPanel from '@/components/chat/UploadPanel.vue'
 import {
-  NCard, NButton, NProgress, NModal, NForm, NFormItem, NInput,
+  NCard, NButton, NModal, NForm, NFormItem, NInput,
   NSpace, NSpin, NEmpty, NText, NEllipsis,
 } from 'naive-ui'
 import {
@@ -37,9 +37,6 @@ const mkdirName = ref('')
 const showRenameModal = ref(false)
 const renameTarget = ref<FileEntry | null>(null)
 const renameValue = ref('')
-const uploading = ref(0)
-const uploadedCount = ref(0)
-
 const breadcrumbs = computed(() => {
   if (!currentPath.value) return [{ label: '根目录', path: '' }]
   const parts = currentPath.value.split('/')
