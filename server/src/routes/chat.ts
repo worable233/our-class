@@ -473,7 +473,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const fileId = input.file_id as number
       const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(fileId) as any
       if (!file) return JSON.stringify({ error: '文件不存在' })
-      // Verify file belongs to a conversation the user has access to (same user)
       if (file.user_id !== userId) return JSON.stringify({ error: '无权访问该文件' })
 
       let filePath = join(__dirname, '..', '..', 'uploads', file.stored_path)
@@ -481,36 +480,110 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       if (!existsSync(filePath)) return JSON.stringify({ error: '文件已被删除' })
 
       const ext = extname(file.original_name).toLowerCase()
-      const textExts = ['.txt', '.csv', '.md', '.json', '.xml', '.yaml', '.yml', '.log', '.js', '.ts', '.py', '.html', '.css', '.sql', '.sh', '.env']
-      const docExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf']
+      const maxLen = config?.max_result_length || 5000
+      const base = { file_name: file.original_name, file_size: file.file_size, mime_type: file.mime_type }
 
+      // ── 纯文本文件 ──
+      const textExts = ['.txt', '.csv', '.md', '.json', '.xml', '.yaml', '.yml', '.log', '.js', '.ts', '.py', '.html', '.css', '.sql', '.sh', '.env', '.ini', '.cfg', '.conf', '.bat', '.ps1']
       if (textExts.includes(ext)) {
-        // Read text file content
         const fs = await import('fs/promises')
         const content = await fs.readFile(filePath, 'utf-8')
-        const maxLen = config?.max_result_length || 5000
         const truncated = content.length > maxLen ? content.slice(0, maxLen) + `\n\n...（文件过长，仅显示前 ${maxLen} 字符）` : content
+        return JSON.stringify({ ...base, content: truncated })
+      }
+
+      // ── Word (.docx) ──
+      if (ext === '.docx') {
+        try {
+          const mammoth = await import('mammoth')
+          const result = await mammoth.extractRawText({ path: filePath })
+          const text = result.value.trim()
+          if (!text) return JSON.stringify({ ...base, note: '文档内容为空', content: '' })
+          const truncated = text.length > maxLen ? text.slice(0, maxLen) + `\n\n...（文档过长，仅显示前 ${maxLen} 字符）` : text
+          return JSON.stringify({
+            ...base,
+            format: 'word',
+            content: truncated,
+            paragraphs: result.messages.filter((m: any) => m.type === 'warning').length,
+          })
+        } catch (e: any) {
+          return JSON.stringify({ ...base, error: `无法解析 Word 文档: ${e.message}` })
+        }
+      }
+
+      // ── Excel (.xlsx) ──
+      if (ext === '.xlsx' || ext === '.xls') {
+        try {
+          const XLSX = await import('xlsx')
+          const workbook = XLSX.readFile(filePath)
+          const sheets = workbook.SheetNames
+          const allTables: string[] = []
+          for (const sheetName of sheets) {
+            const sheet = workbook.Sheets[sheetName]
+            const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
+            if (jsonData.length === 0) continue
+            // Build markdown table
+            const rows = jsonData.slice(0, 200) // max 200 rows per sheet
+            const cols = rows[0] || []
+            const sep = `| ${cols.map(() => '---').join(' | ')} |`
+            const mdRows = rows.map((row: any[]) =>
+              `| ${cols.map((_: any, ci: number) => String(row[ci] ?? '').replace(/\n/g, ' ')).join(' | ')} |`,
+            )
+            mdRows.splice(1, 0, sep) // insert separator after header
+            allTables.push(`## Sheet: ${sheetName}\n\n${mdRows.join('\n')}`)
+            if (sheets.length > 4) break // max 4 sheets
+          }
+          if (allTables.length === 0) return JSON.stringify({ ...base, note: '表格内容为空', content: '' })
+          let content = allTables.join('\n\n')
+          if (content.length > maxLen) content = content.slice(0, maxLen) + `\n\n...（表格过长，仅显示前 ${maxLen} 字符）`
+          return JSON.stringify({
+            ...base,
+            format: 'excel',
+            sheets: sheets.slice(0, 4),
+            content,
+            total_sheets: sheets.length,
+          })
+        } catch (e: any) {
+          return JSON.stringify({ ...base, error: `无法解析 Excel 文件: ${e.message}` })
+        }
+      }
+
+      // ── PDF ──
+      if (ext === '.pdf') {
+        try {
+          const fs = await import('fs/promises')
+          const pdfParse = await import('pdf-parse')
+          const buf = await fs.readFile(filePath)
+          const data = await pdfParse.default(buf)
+          const text = data.text.trim()
+          if (!text) return JSON.stringify({ ...base, note: 'PDF 内容为空（可能为扫描件）', content: '' })
+          const truncated = text.length > maxLen ? text.slice(0, maxLen) + `\n\n...（PDF 过长，仅显示前 ${maxLen} 字符）` : text
+          return JSON.stringify({
+            ...base,
+            format: 'pdf',
+            content: truncated,
+            pages: data.numpages,
+          })
+        } catch (e: any) {
+          return JSON.stringify({ ...base, error: `无法解析 PDF 文件: ${e.message}` })
+        }
+      }
+
+      // ── 图片 ──
+      const imgExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
+      if (imgExts.includes(ext)) {
         return JSON.stringify({
-          file_name: file.original_name,
-          file_size: file.file_size,
-          mime_type: file.mime_type,
-          content: truncated,
-        })
-      } else if (docExts.includes(ext) || ext === '.pdf') {
-        return JSON.stringify({
-          file_name: file.original_name,
-          file_size: file.file_size,
-          mime_type: file.mime_type,
-          note: `该文件类型（${ext}）暂不支持直接查看文本内容。用户已上传此文件，文件名：${file.original_name}，大小：${(file.file_size / 1024).toFixed(1)}KB。请告知用户文件已保存。`,
-        })
-      } else {
-        return JSON.stringify({
-          file_name: file.original_name,
-          file_size: file.file_size,
-          mime_type: file.mime_type,
-          note: `用户上传了文件：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB），类型：${file.mime_type || '未知'}。`,
+          ...base,
+          format: 'image',
+          note: `用户上传了图片：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB）。请告知用户图片已收到。`,
         })
       }
+
+      // ── 其他 ──
+      return JSON.stringify({
+        ...base,
+        note: `用户上传了文件：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB），类型：${file.mime_type || ext || '未知'}。`,
+      })
     }
 
     case 'get_weather': {

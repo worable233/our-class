@@ -47,11 +47,12 @@ watch(() => props.loading, (loading, prev) => {
 interface Attachment {
   id: string
   file: File
-  url: string
+  url: string          // blob URL for preview
   name: string
   uploading: boolean
   uploaded: boolean
   uploadId?: number
+  serverUrl?: string   // 上传后的真实服务端 URL
   error?: string
   progress: number      // 0-100
 }
@@ -108,6 +109,7 @@ function uploadFile(att: Attachment) {
         att.uploaded = true
         att.progress = 100
         att.uploadId = body.data.id
+        att.serverUrl = body.data.url
         if (body.data.conversation_id && body.data.conversation_id !== props.convId) {
           emit('conversation-created', body.data.conversation_id)
         }

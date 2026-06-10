@@ -389,7 +389,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
     msg.fileInfo = files.items.map(f => ({
       id: f.id,
       name: f.name,
-      url: `/uploads/${f.name}`, // placeholder, loaded via file_map on reload
+      url: f.url, // 真实服务器 URL
       size: 0,
       mime_type: '',
     }))
