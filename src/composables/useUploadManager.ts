@@ -90,8 +90,35 @@ function addUpload(file: File, targetPath: string): UploadTask {
 }
 
 async function startUpload(file: File, targetPath: string): Promise<void> {
-  const task = addUpload(file, targetPath)
   const token = getToken()
+
+  // 检查存储空间是否足够
+  try {
+    const spaceRes = await fetch('/api/storage/info', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (spaceRes.ok) {
+      const spaceData = await spaceRes.json()
+      if (spaceData.success) {
+        const info = spaceData.data as { storage_limit: number; storage_used: number }
+        const remaining = info.storage_limit - info.storage_used
+        if (file.size > remaining) {
+          throw new Error(`存储空间不足！剩余空间不足，无法上传「${file.name}」（${(file.size / 1048576).toFixed(1)}MB）`)
+        }
+      }
+    }
+  } catch (e: any) {
+    const msg = e.message || '存储空间检查失败'
+    uploads.value.unshift({
+      id: uid(), name: file.name, path: targetPath, size: file.size,
+      progress: 0, status: 'error', error: msg,
+      created_at: new Date().toISOString(), identifier: '', total_chunks: 0, uploaded_chunks: 0,
+    })
+    saveHistory()
+    throw e
+  }
+
+  const task = addUpload(file, targetPath)
   const totalChunks = task.total_chunks
 
   // 先查询服务端已有分片（断点续传）
