@@ -95,16 +95,3 @@ CREATE TABLE IF NOT EXISTS comments (
   FOREIGN KEY (author_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
-
--- Seed data (users)
-INSERT OR IGNORE INTO users (id, username, display_name, role, class) VALUES
-  (1, 'teacher1', '张老师', 'teacher', ''),
-  (2, 'zhangming', '张明', 'student', '高三(2)班'),
-  (3, 'lihua', '李华', 'student', '高三(2)班'),
-  (4, 'wangfang', '王芳', 'student', '高三(2)班'),
-  (5, 'zhaolei', '赵雷', 'student', '高三(2)班'),
-  (6, 'chenwei', '陈伟', 'student', '高三(2)班'),
-  (7, 'liuna', '刘娜', 'student', '高三(2)班'),
-  (8, 'sunyang', '孙洋', 'student', '高三(2)班'),
-  (9, 'zhoujie', '周杰', 'student', '高三(2)班'),
-  (10, 'wumei', '吴梅', 'student', '高三(2)班');
