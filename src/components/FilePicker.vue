@@ -299,12 +299,13 @@ function fmtDate(iso: string) {
     :show="show"
     preset="card"
     title="网盘文件选择"
-    style="width:780px;max-width:96vw;"
+    style="width:780px;max-width:100vw;"
     :mask-closable="false"
     :segmented="{ content: true, footer: true }"
     header-style="padding:14px 20px;font-size:16px;font-weight:600;"
     content-style="padding:0;"
     footer-style="padding:10px 16px;"
+    class="fp-modal"
     @update:show="(val: boolean) => emit('update:show', val)"
   >
     <!-- ═══ 工具栏 ═══ -->
@@ -626,4 +627,34 @@ function fmtDate(iso: string) {
 }
 .fp-footer-left { display: flex; align-items: center; gap: 8px; }
 .fp-footer-right { display: flex; align-items: center; gap: 6px; }
+
+/* ═══ Mobile responsive ═══ */
+@media (max-width: 768px) {
+  .fp-modal { border-radius: 0 !important; height: 100vh; max-height: 100vh; }
+  .fp-modal :deep(.n-card-header) { padding: 12px 16px !important; font-size: 15px !important; }
+  .fp-modal :deep(.n-card-header__close) { top: 10px !important; right: 12px !important; }
+  .fp-modal :deep(.n-card__content) { padding: 0 !important; }
+  .fp-modal :deep(.n-card__footer) { padding: 8px 12px !important; }
+
+  .fp-toolbar { padding: 4px 8px; gap: 4px; flex-wrap: wrap; }
+  .fp-toolbar-left { gap: 1px; }
+  .fp-breadcrumb { font-size: 11px; overflow: hidden; }
+  .fp-breadcrumb-item { max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+  .fp-search-box { width: 100px; }
+  .fp-search-input { font-size: 11px; height: 24px; padding: 0 6px 0 22px; }
+  .fp-search-icon { left: 5px; }
+  .fp-toolbar-right .n-button { display: none; }
+  .fp-toolbar-right .n-button:last-child { display: inline-flex; } /* only show upload on mobile */
+
+  .fp-body { flex-direction: column; max-height: none; min-height: 50vh; }
+  .fp-sidebar { display: none; }
+
+  .fp-col-date { display: none; }
+  .fp-col-size { width: 56px; font-size: 11px; }
+  .fp-list-row { padding: 4px 6px; font-size: 12px; }
+
+  .fp-footer { flex-direction: column; gap: 6px; }
+  .fp-footer-left { font-size: 11px; }
+  .fp-footer-right { width: 100%; justify-content: flex-end; }
+}
 </style>
