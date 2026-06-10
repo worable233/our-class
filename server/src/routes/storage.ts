@@ -109,7 +109,13 @@ function dirSize(dirPath: string): number {
   return total
 }
 
-/** 更新用户的已用存储量 */
+/** 增量更新存储用量：加减指定字节数（避免全量遍历） */
+function addStorageUsed(userId: number, delta: number): void {
+  const db = getDb()
+  db.prepare('UPDATE user_storage SET storage_used = MAX(0, storage_used + ?), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?').run(delta, userId)
+}
+
+/** 更新用户的已用存储量（全量，仅用于 info 接口） */
 function updateStorageUsed(userId: number): void {
   const db = getDb()
   const used = dirSize(getUserDir(userId))
@@ -139,7 +145,7 @@ function cleanStaleChunks(): void {
       const dir = join(CHUNK_DIR, name)
       try {
         const st = statSync(dir)
-        if (st.isDirectory() && now - st.mtimeMs > 86400000) rmSync(dir, { recursive: true, force: true })
+        if (st.isDirectory() && now - st.mtimeMs > 172800000) rmSync(dir, { recursive: true, force: true }) // 48h
       } catch {}
     }
   } catch {}
@@ -261,7 +267,7 @@ router.post('/upload/chunk', (req: Request, res: Response) => {
       renameSync(assembledPath, finalPath)
       // 清理分片目录
       rmSync(chunkDir, { recursive: true, force: true })
-      updateStorageUsed(userId)
+      addStorageUsed(userId, st.size)
       return ok(res, {
         done: true,
         name: finalName,
@@ -351,7 +357,7 @@ router.post('/mkdir', (req: Request, res: Response) => {
   const dirPath = resolveSafePath(userId, path)
   if (existsSync(dirPath)) throw new ValidationError('文件或文件夹已存在')
   mkdirSync(dirPath, { recursive: true })
-  updateStorageUsed(userId)
+  // mkdir 不改变存储用量
   ok(res, { success: true, path })
 })
 
@@ -401,9 +407,8 @@ router.post('/upload', (req: Request, res: Response) => {
     try { unlinkSync(finalPath) } catch {}
     renameSync(req.file.path, finalPath)
 
-    updateStorageUsed(userId)
-
     const st = statSync(finalPath)
+    addStorageUsed(userId, st.size)
     ok(res, {
       name: fileName,
       path: targetPath ? `${targetPath}/${fileName}` : fileName,
@@ -450,12 +455,15 @@ router.delete('/delete', (req: Request, res: Response) => {
   if (!existsSync(filePath)) throw new NotFoundError('文件或文件夹不存在')
 
   const st = statSync(filePath)
+  let size = 0
   if (st.isDirectory()) {
+    size = dirSize(filePath)
     rmdirSync(filePath, { recursive: true })
   } else {
+    size = st.size
     unlinkSync(filePath)
   }
-  updateStorageUsed(userId)
+  addStorageUsed(userId, -size)
   ok(res, { success: true })
 })
 
@@ -466,19 +474,28 @@ router.post('/batch-delete', (req: Request, res: Response) => {
   if (!Array.isArray(paths) || paths.length === 0) throw new ValidationError('请指定路径列表')
   const root = getUserDir(userId)
   let deleted = 0
+  let freedBytes = 0
+  const errors: string[] = []
   for (const p of paths) {
     try {
       const fp = resolveSafePath(userId, p)
-      if (fp === root) continue
-      if (!existsSync(fp)) continue
+      if (fp === root) { errors.push(`${p}: 不能删除根目录`); continue }
+      if (!existsSync(fp)) { errors.push(`${p}: 不存在`); continue }
       const st = statSync(fp)
-      if (st.isDirectory()) rmdirSync(fp, { recursive: true })
-      else unlinkSync(fp)
+      if (st.isDirectory()) {
+        freedBytes += dirSize(fp)
+        rmdirSync(fp, { recursive: true })
+      } else {
+        freedBytes += st.size
+        unlinkSync(fp)
+      }
       deleted++
-    } catch {}
+    } catch (e: any) {
+      errors.push(`${p}: ${e.message || '删除失败'}`)
+    }
   }
-  updateStorageUsed(userId)
-  ok(res, { success: true, deleted })
+  if (freedBytes > 0) addStorageUsed(userId, -freedBytes)
+  ok(res, { success: true, deleted, errors: errors.length > 0 ? errors : undefined })
 })
 
 // POST /api/storage/move — 移动文件/文件夹
@@ -491,12 +508,17 @@ router.post('/move', (req: Request, res: Response) => {
   if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
 
   let moved = 0
+  const errors: string[] = []
   for (const p of paths) {
     try {
       const src = resolveSafePath(userId, p)
       const root = getUserDir(userId)
-      if (src === root) continue
-      if (!existsSync(src)) continue
+      if (src === root) { errors.push(`${p}: 不能移动根目录`); continue }
+      if (!existsSync(src)) { errors.push(`${p}: 不存在`); continue }
+      // 检测是否将目录移入自身子目录
+      if (targetDir.startsWith(src + '/') || targetDir === src) {
+        errors.push(`${p}: 不能将目录移入自身`); continue
+      }
       const name = basename(src)
       let dest = join(targetDir, name)
       if (existsSync(dest)) {
@@ -506,10 +528,12 @@ router.post('/move', (req: Request, res: Response) => {
       }
       renameSync(src, dest)
       moved++
-    } catch {}
+    } catch (e: any) {
+      errors.push(`${p}: ${e.message || '移动失败'}`)
+    }
   }
-  updateStorageUsed(userId)
-  ok(res, { success: true, moved })
+  // move 不改变总用量（同一用户目录内）
+  ok(res, { success: true, moved, errors: errors.length > 0 ? errors : undefined })
 })
 
 // PUT /api/storage/rename — 重命名
@@ -563,11 +587,16 @@ router.put('/groups/:id', (req: Request, res: Response) => {
     ON CONFLICT(group_id) DO UPDATE SET storage_limit = ?, updated_at = CURRENT_TIMESTAMP
   `).run(id, storage_limit, storage_limit)
 
-  // 同步该组下所有用户的默认配额
+  // 同步该组下所有用户的默认配额（含子权限组）
   db.prepare(`
     UPDATE user_storage SET storage_limit = ?
-    WHERE user_id IN (SELECT id FROM users WHERE group_id = ?) AND storage_limit < ?
-  `).run(storage_limit, id, storage_limit)
+    WHERE user_id IN (
+      SELECT id FROM users WHERE group_id IN (
+        SELECT id FROM permission_groups
+        WHERE id = ? OR parent_id = ?
+      )
+    ) AND storage_limit < ?
+  `).run(storage_limit, id, id, storage_limit)
 
   ok(res, { success: true })
 })
