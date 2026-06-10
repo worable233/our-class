@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import Anthropic from '@anthropic-ai/sdk'
-import { existsSync, unlinkSync, readdirSync, rmdirSync } from 'fs'
-import { join, extname } from 'path'
+import { existsSync, unlinkSync, readdirSync, rmdirSync, statSync, mkdirSync } from 'fs'
+import { join, extname, basename, dirname as pathDirname } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { getDb } from '../db/init.js'
@@ -483,6 +483,16 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const maxLen = config?.max_result_length || 5000
       const base = { file_name: file.original_name, file_size: file.file_size, mime_type: file.mime_type }
 
+      // ── 文件类型限制检查 ──
+      const allowedSetting = db.prepare('SELECT allowed_file_types FROM chat_settings WHERE user_id = ?').get(file.user_id) as any
+      const allowedStr = allowedSetting?.allowed_file_types || ''
+      if (allowedStr) {
+        const allowedExts = allowedStr.split(',').map((s: string) => s.trim().toLowerCase())
+        if (!allowedExts.includes(ext)) {
+          return JSON.stringify({ error: `无法阅读此文件类型（${ext}）` })
+        }
+      }
+
       // ── 纯文本文件 ──
       const textExts = ['.txt', '.csv', '.md', '.json', '.xml', '.yaml', '.yml', '.log', '.js', '.ts', '.py', '.html', '.css', '.sql', '.sh', '.env', '.ini', '.cfg', '.conf', '.bat', '.ps1']
       if (textExts.includes(ext)) {
@@ -569,13 +579,15 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         }
       }
 
-      // ── 图片 ──
+      // ── 图片 → 发给 AI 视觉阅读 ──
       const imgExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
       if (imgExts.includes(ext)) {
         return JSON.stringify({
-          ...base,
-          format: 'image',
-          note: `用户上传了图片：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB）。请告知用户图片已收到。`,
+          _image: true,
+          text: `用户上传了图片：${file.original_name}（${(file.file_size / 1024).toFixed(1)}KB）`,
+          file_path: file.stored_path,
+          mime_type: file.mime_type || `image/${ext.replace('.', '')}`,
+          file_name: file.original_name,
         })
       }
 
@@ -1139,9 +1151,26 @@ async function agentLoopAnthropic(
           } catch {}
         }
 
+        // ── 图片工具结果：base64 编码后以 image block 发送 ──
+        let toolContent: any = result
+        try {
+          const parsedResult = JSON.parse(result)
+          if (parsedResult._image) {
+            const imagePath = join(__dirname, '..', '..', 'uploads', parsedResult.file_path)
+            if (existsSync(imagePath)) {
+              const imgBuf = await import('fs/promises').then(m => m.readFile(imagePath))
+              const b64 = imgBuf.toString('base64')
+              toolContent = [
+                { type: 'text', text: parsedResult.text },
+                { type: 'image', source: { type: 'base64', media_type: parsedResult.mime_type, data: b64 } },
+              ]
+            }
+          }
+        } catch {}
+
         loopMessages.push({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: tc.id, content: result }],
+          content: [{ type: 'tool_result', tool_use_id: tc.id, content: toolContent }],
         })
       }
     } else {
@@ -1303,10 +1332,22 @@ async function agentLoopOpenAI(
           } catch {}
         }
 
+        // ── 图片工具结果：OpenAI 格式传 base64（部分模型支持） ──
+        let toolResultContent: any = result
+        try {
+          const parsedResult = JSON.parse(result)
+          if (parsedResult._image) {
+            const imagePath = join(__dirname, '..', '..', 'uploads', parsedResult.file_path)
+            if (existsSync(imagePath)) {
+              toolResultContent = parsedResult.text
+            }
+          }
+        } catch {}
+
         loopMessages.push({
           role: 'tool',
           tool_call_id: tc.id,
-          content: result,
+          content: toolResultContent,
         })
       }
 
