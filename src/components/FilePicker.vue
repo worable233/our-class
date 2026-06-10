@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, shallowRef } from 'vue'
 import { api } from '@/api/client'
 import { useMessage } from 'naive-ui'
 import {
@@ -43,7 +43,7 @@ const loading = ref(false)
 const currentPath = ref('')
 const pathHistory = ref<string[]>([])
 const historyIndex = ref(-1)
-const entries = ref<DiskEntry[]>([])
+const entries = shallowRef<DiskEntry[]>([])
 const selectedPaths = ref<Set<string>>(new Set())
 const selectedFiles = ref<Map<string, DiskEntry>>(new Map())
 const searchQuery = ref('')
@@ -67,10 +67,12 @@ function closeCtxMenu() {
 }
 
 // Close context menu on click outside
-document.addEventListener('click', (e) => {
+function handleGlobalClick(e: MouseEvent) {
   const el = e.target as HTMLElement
   if (!el.closest('.fp-ctx-menu')) closeCtxMenu()
-})
+}
+onMounted(() => document.addEventListener('click', handleGlobalClick))
+onUnmounted(() => document.removeEventListener('click', handleGlobalClick))
 
 function ctxRefresh() { closeCtxMenu(); loadDir(currentPath.value, false) }
 function ctxNewFolder() { closeCtxMenu(); showMkdirModal.value = true }
