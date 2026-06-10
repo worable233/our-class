@@ -297,6 +297,17 @@ const TOOLS: ToolDef[] = [
       },
     },
   },
+  {
+    name: 'update_self_profile',
+    description: '修改自己的个人资料（头像和昵称）。头像需要用用户已上传的图片 URL，昵称可随意设置。只能修改自己的，改不了别人。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        avatar_url: { type: 'string', description: '新头像图片的 URL（用户上传图片后得到的地址，可选）' },
+        nickname: { type: 'string', description: '新的显示昵称（可选）' },
+      },
+    },
+  },
 ]
 
 // ── Tool execution ────────────────────────────────────────────────────────
@@ -312,9 +323,9 @@ function getClassFilter(userClass: string, userPermissions: string[]): { sql: st
 async function executeTool(name: string, input: Record<string, unknown>, userId: number, userRole: string, userPermissions: string[] = [], userClass: string = ''): Promise<string> {
   const db = getDb()
 
-  // Check tool permission
-  const toolPerm = TOOL_PERM_MAP[name] || `tool.${name}`
-  if (!userPermissions.includes(toolPerm)) {
+  // Check tool permission（不在 TOOL_PERM_MAP 的工具默认允许所有人使用）
+  const toolPerm = TOOL_PERM_MAP[name]
+  if (toolPerm && !userPermissions.includes(toolPerm)) {
     return JSON.stringify({ error: `您没有权限使用「${name}」工具` })
   }
 
@@ -639,6 +650,28 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         results.push({ id, success: true, display_name: student.display_name })
       }
       return JSON.stringify({ total: ids.length, deleted: results.filter((r: any) => r.success).length, results })
+    }
+
+    case 'update_self_profile': {
+      const updates: string[] = []
+      const params: any[] = []
+      if (input.nickname !== undefined) {
+        updates.push('nickname = ?')
+        params.push(input.nickname as string)
+      }
+      if (input.avatar_url !== undefined) {
+        updates.push('avatar = ?')
+        params.push(input.avatar_url as string)
+      }
+      if (updates.length === 0) return JSON.stringify({ error: '请提供要修改的字段（昵称或头像）' })
+      params.push(userId)
+      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params)
+      const updated = db.prepare('SELECT display_name, nickname, avatar FROM users WHERE id = ?').get(userId) as any
+      writeAuditLog(userId, userName, 'update_self_profile', 'user', userId, { nickname: input.nickname, avatar: input.avatar_url })
+      const changes: string[] = []
+      if (input.nickname !== undefined) changes.push(`昵称 → ${input.nickname}`)
+      if (input.avatar_url !== undefined) changes.push('头像已更新')
+      return JSON.stringify({ success: true, message: `已更新：${changes.join('，')}`, profile: { display_name: updated.display_name, nickname: updated.nickname, avatar: updated.avatar } })
     }
 
     case 'manage_roles': {
@@ -1238,6 +1271,7 @@ function toolLabel(name: string, input: Record<string, unknown>): string {
     case 'get_point_details': return '查询积分明细'
     case 'update_student': return `修改学生 #${input.student_id}`
     case 'delete_students': return `批量删除 ${(input.student_ids as number[] || []).length} 名学生`
+    case 'update_self_profile': return '修改个人资料'
     case 'manage_roles': return `管理权限组: ${input.action}`
     default: return `调用 ${name}`
   }
