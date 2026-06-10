@@ -370,6 +370,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' {
     >
       <n-spin :show="loading" style="min-height:200px;">
         <template v-if="entries.length > 0">
+          <div class="file-grid">
             <div v-for="entry in entries" :key="entry.path"
               class="file-item"
               :class="{ selected: selectedFile?.path === entry.path }"
