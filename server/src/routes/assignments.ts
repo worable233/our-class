@@ -71,6 +71,19 @@ interface SubmissionRow {
 router.get('/', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id } = req.query
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+
+  // 班级过滤条件
+  let classFilter = ''
+  const params: any[] = []
+  if (!hasViewAll) {
+    const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (allowed.length > 0) {
+      classFilter = ` AND (c.class IN (${allowed.map(() => '?').join(',')}) OR a.course_id IS NULL)`
+      params.push(...allowed)
+    }
+  }
 
   if (student_id) {
     const id = Number(student_id)
@@ -82,9 +95,10 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
         FROM assignments a
         JOIN users u ON a.created_by = u.id
         LEFT JOIN courses c ON a.course_id = c.id
+        WHERE 1=1${classFilter}
         ORDER BY a.due_date`,
       )
-      .all(id, id) as AssignmentRow[]
+      .all(id, id, ...params) as AssignmentRow[]
     ok(res, assignments)
   } else {
     const assignments = db
@@ -93,9 +107,10 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
         FROM assignments a
         JOIN users u ON a.created_by = u.id
         LEFT JOIN courses c ON a.course_id = c.id
+        WHERE 1=1${classFilter}
         ORDER BY a.created_at DESC`,
       )
-      .all() as AssignmentRow[]
+      .all(...params) as AssignmentRow[]
     ok(res, assignments)
   }
 })
@@ -121,6 +136,21 @@ router.post('/', requirePermission('assignments.write'), validate(createSchema),
 
 router.get('/:id/submissions', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
+  const { permissions, class: userClass } = req.user!
+  const hasViewAll = permissions.includes('classes.view_all')
+
+  // 验证该作业在当前用户权限范围内
+  const asgn = db.prepare(`
+    SELECT a.*, c.class as course_class FROM assignments a
+    LEFT JOIN courses c ON a.course_id = c.id
+    WHERE a.id = ?
+  `).get(req.params.id) as any
+  if (!asgn) throw new NotFoundError('作业不存在')
+  if (!hasViewAll && asgn.course_class) {
+    const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
+    if (!allowed.includes(asgn.course_class)) throw new NotFoundError('作业不存在')
+  }
+
   const subs = db
     .prepare(
       `SELECT s.*, u.display_name as student_name, u.class
