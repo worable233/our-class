@@ -25,11 +25,22 @@ const loading = ref(false)
 const saving = ref(false)
 const loaded = ref(false)
 
+function applySettings(s: SiteSettings) {
+  // 更新浏览器标签标题
+  if (s.site_title) document.title = s.site_title
+  // 更新网站图标
+  const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]')
+  if (link && s.site_icon) (link as HTMLLinkElement).href = s.site_icon
+}
+
 async function load() {
   loading.value = true
   try {
     const data = await api.get<SiteSettings>('/site-settings')
-    if (data) Object.assign(settings.value, data)
+    if (data) {
+      Object.assign(settings.value, data)
+      applySettings(data)
+    }
   } catch (e: any) {
     message.error(e.message || '加载失败')
   } finally {
@@ -41,7 +52,8 @@ async function load() {
 async function save() {
   saving.value = true
   try {
-    await api.put('/site-settings', settings.value)
+    const result = await api.put<SiteSettings>('/site-settings', settings.value)
+    if (result) applySettings(result)
     message.success('设置已保存')
   } catch (e: any) {
     message.error(e.message || '保存失败')

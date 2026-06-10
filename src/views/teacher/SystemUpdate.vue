@@ -24,7 +24,7 @@ const historyLoaded = ref(false)
 const updateSettings = ref({ auto_check_interval: 3600, ping_timeout: 3 })
 const savingSettings = ref(false)
 
-const versionInfo = ref({ sha: '', date: '', message: '', last_check_time: '' })
+const versionInfo = ref({ sha: '', date: '', message: '', author: '', last_check_time: '' })
 const versionLoading = ref(true)
 
 const lastCheckDisplay = computed(() => {
@@ -190,9 +190,10 @@ watch(() => updateSettings.value.auto_check_interval, () => { startAutoCheck() }
           <div style="font-size:14px;color:var(--text-secondary);line-height:1.6;max-width:480px;margin:0 auto 24px;">
             {{ versionInfo.message || '--' }}
           </div>
-          <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
+          <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
             <span style="display:inline-flex;align-items:center;gap:4px;"><Clock :size="13" /> {{ versionInfo.date ? formatDateTime(versionInfo.date) : '--' }}</span>
             <span style="display:inline-flex;align-items:center;gap:4px;"><Info :size="13" /> {{ lastCheckDisplay }}</span>
+            <span v-if="versionInfo.author" style="display:inline-flex;align-items:center;gap:4px;"><User :size="13" /> {{ versionInfo.author }}</span>
           </div>
         </div>
       </n-card>

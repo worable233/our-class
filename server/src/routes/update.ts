@@ -91,9 +91,10 @@ router.get('/version', (_req: Request, res: Response) => {
     const sha = execSync('git rev-parse --short HEAD', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
     const date = execSync('git log -1 --format=%cI', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
     const msg = execSync('git log -1 --format=%s', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
+    const author = execSync('git log -1 --format=%an', execOpts({ encoding: 'utf-8', timeout: 3000, cwd: PROJECT_ROOT })).trim()
     const db = getDb()
     const settings = db.prepare('SELECT last_check_time FROM update_settings WHERE id = 1').get() as any
-    ok(res, { sha, date, message: msg, last_check_time: settings?.last_check_time || null })
+    ok(res, { sha, date, message: msg, author, last_check_time: settings?.last_check_time || null })
   } catch {
     fail(res, 500, 'VERSION_FAILED', '获取版本信息失败，请确认项目是 Git 仓库')
   }
