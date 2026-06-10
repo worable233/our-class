@@ -28,6 +28,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
   const body = await res.json().catch(() => ({ success: false, error: { message: '请求失败' } }))
 
+  // 限流提示
+  if (res.status === 429) {
+    throw new Error('请求过于频繁，请稍后再试')
+  }
+
   if (!res.ok || body.success === false) {
     const message = typeof body.error === 'string' ? body.error : body.error?.message || '请求失败'
     throw new Error(message)
