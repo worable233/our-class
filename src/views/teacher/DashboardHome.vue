@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { BASE } from '@/api/client'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { NCard, NText, NGi, NGrid, NTag, NSpin, NAvatar, NButton, useThemeVars } from 'naive-ui'
 import { Star, Users, List, Shield, Bot, Award, TrendingUp, ChevronRight } from '@lucide/vue'
 import VChart from 'vue-echarts'
@@ -15,14 +16,18 @@ use([CanvasRenderer, BarChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
 const themeVars = useThemeVars()
+const auth = useAuthStore()
 
-const quickLinks = [
-  { label: '积分管理', icon: Star, route: '/teacher/points', color: '#0FC6C2' },
-  { label: '用户管理', icon: Users, route: '/teacher/users', color: '#5E6AD2' },
-  { label: '作业管理', icon: List, route: '/teacher/assignments', color: '#18a058' },
-  { label: '职位管理', icon: Shield, route: '/teacher/roles', color: '#f0a020' },
-  { label: 'AI 配置', icon: Bot, route: '/teacher/settings', color: '#a050dc' },
-]
+const quickLinks = computed(() => {
+  const links = [
+    { label: '积分管理', icon: Star, route: '/teacher/points', color: '#0FC6C2', perm: 'points.read' },
+    { label: '用户管理', icon: Users, route: '/teacher/users', color: '#5E6AD2', perm: 'students.write' },
+    { label: '作业管理', icon: List, route: '/teacher/assignments', color: '#18a058', perm: 'assignments.write' },
+    { label: '职位管理', icon: Shield, route: '/teacher/roles', color: '#f0a020', perm: '' },
+    { label: 'AI 配置', icon: Bot, route: '/teacher/settings', color: '#a050dc', perm: 'chat.config' },
+  ]
+  return links.filter(l => !l.perm || auth.hasPermission(l.perm))
+})
 
 interface TopRow {
   id: number
@@ -133,7 +138,7 @@ onMounted(load)
     </div>
 
     <!-- ═══ 快捷入口 ═══ -->
-    <n-grid :cols="5" :x-gap="14" :y-gap="14" style="max-width:820px;">
+    <n-grid :cols="quickLinks.length" :x-gap="14" :y-gap="14" style="max-width:820px;">
       <n-gi v-for="link in quickLinks" :key="link.label">
         <n-card
           size="small"
