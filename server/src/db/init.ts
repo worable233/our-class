@@ -86,15 +86,15 @@ function seedUsers(db: Database.Database) {
   const sGroup = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as { id: number }
 
   insertUser.run('teacher1', '张老师', 'teacher', '', '123456', tGroup.id, null)
-  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id, 'S2025001')
-  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456', sGroup.id, 'S2025002')
-  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456', sGroup.id, 'S2025003')
-  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456', sGroup.id, 'S2025004')
-  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456', sGroup.id, 'S2025005')
-  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456', sGroup.id, 'S2025006')
-  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456', sGroup.id, 'S2025007')
-  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456', sGroup.id, 'S2025008')
-  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id, 'S2025009')
+  insertUser.run('zhangming', '张明', 'student', '高三(2)班', '123456', sGroup.id, '2025001')
+  insertUser.run('lihua', '李华', 'student', '高三(2)班', '123456', sGroup.id, '2025002')
+  insertUser.run('wangfang', '王芳', 'student', '高三(2)班', '123456', sGroup.id, '2025003')
+  insertUser.run('zhaolei', '赵雷', 'student', '高三(2)班', '123456', sGroup.id, '2025004')
+  insertUser.run('chenwei', '陈伟', 'student', '高三(2)班', '123456', sGroup.id, '2025005')
+  insertUser.run('liuna', '刘娜', 'student', '高三(2)班', '123456', sGroup.id, '2025006')
+  insertUser.run('sunyang', '孙洋', 'student', '高三(2)班', '123456', sGroup.id, '2025007')
+  insertUser.run('zhoujie', '周杰', 'student', '高三(2)班', '123456', sGroup.id, '2025008')
+  insertUser.run('wumei', '吴梅', 'student', '高三(2)班', '123456', sGroup.id, '2025009')
 }
 
 function seedAllData(db: Database.Database) {

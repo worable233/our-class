@@ -605,9 +605,10 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
           results.push({ username, error: `无权在班级「${cls}」创建学生` }); continue
         }
         const maxId = db.prepare("SELECT MAX(id) as m FROM users").get() as any
+        const studentNo = String(maxId.m + 1).padStart(8, '0')
         const result = db.prepare(
-          'INSERT INTO users (username, display_name, role, class, password, group_id, student_no) VALUES (?,?,?,?,?,(SELECT id FROM permission_groups WHERE name=?),?)'
-        ).run(username, display_name, 'student', cls || '', password || '123456', '学生', `S${String(maxId.m + 1).padStart(7, '0')}`)
+          'INSERT INTO users (username, display_name, role, class, password, group_id, student_no) VALUES (?,?,?,?,?,(SELECT id FROM permission_groups WHERE group_type = ?),?)'
+        ).run(username, display_name, 'student', cls || '', password || studentNo, 'student', studentNo)
         writeAuditLog(userId, userName, 'create_student', 'user', result.lastInsertRowid, { username, display_name, class: cls })
         results.push({ success: true, id: result.lastInsertRowid, username, display_name, class: cls || '' })
       }
