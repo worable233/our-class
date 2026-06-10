@@ -13,6 +13,7 @@ import { writeAuditLog } from './audit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOAD_ROOT = join(__dirname, '..', '..', 'uploads')
+const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
 
 // Ensure upload root exists
 if (!existsSync(UPLOAD_ROOT)) mkdirSync(UPLOAD_ROOT, { recursive: true })
@@ -46,15 +47,15 @@ function getMulter(userId: number): multer.Multer {
   })
 }
 
-/** Move a pending file to per-conversation directory and return the relative stored path */
-function moveToConvDir(filename: string, convId: number): string {
-  const convDir = join(UPLOAD_ROOT, `conv_${convId}`)
-  if (!existsSync(convDir)) mkdirSync(convDir, { recursive: true })
+/** Move a pending file to user's storage/upload/ directory and return relative path */
+function moveToUserStorage(filename: string, userId: number): string {
+  const userDir = join(STORAGE_ROOT, `user_${userId}`, 'upload')
+  if (!existsSync(userDir)) mkdirSync(userDir, { recursive: true })
   const src = join(UPLOAD_ROOT, '_pending', filename)
-  const dest = join(convDir, filename)
+  const dest = join(userDir, filename)
   try { unlinkSync(dest) } catch {}
   renameSync(src, dest)
-  return `conv_${convId}/${filename}`
+  return `user_${userId}/upload/${filename}`
 }
 
 // Validation helper
@@ -124,8 +125,8 @@ router.post(
         return fail(res, 400, 'INVALID_FILE_TYPE', validationError)
       }
 
-      // Move file from temp dir to per-conversation dir
-      const storedPath = moveToConvDir(req.file.filename, convId)
+      // Move file from temp dir to user's storage/upload/ directory
+      const storedPath = moveToUserStorage(req.file.filename, userId)
 
       const result = db.prepare(`
         INSERT INTO uploaded_files (user_id, conversation_id, original_name, stored_path, mime_type, file_size)
@@ -163,16 +164,11 @@ router.delete(
     const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND user_id = ?').get(fileId, userId) as any
     if (!file) throw new NotFoundError('文件不存在')
 
-    // Delete physical file
-    const filePath = join(UPLOAD_ROOT, file.stored_path)
+    // Delete physical file（优先查 storage，再查 uploads）
+    let filePath = join(UPLOAD_ROOT, file.stored_path)
+    if (!existsSync(filePath)) filePath = join(STORAGE_ROOT, file.stored_path.replace(/^user_/, 'user_'))
     try {
       if (existsSync(filePath)) unlinkSync(filePath)
-      // Try to remove directory if empty
-      const dir = join(UPLOAD_ROOT, `conv_${file.conversation_id}`)
-      if (existsSync(dir)) {
-        const remaining = readdirSync(dir)
-        if (remaining.length === 0) rmdirSync(dir)
-      }
     } catch {}
 
     db.prepare('DELETE FROM uploaded_files WHERE id = ?').run(fileId)

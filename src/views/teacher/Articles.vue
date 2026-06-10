@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { api } from '@/api/client'
 import { useDialog, useMessage } from 'naive-ui'
+import type { DataTableColumn } from 'naive-ui'
 import {
   NButton, NInput, NModal, NSpin, NEmpty, NText, NCard, NDivider,
-  NScrollbar, NSpace, NTag,
+  NScrollbar, NSpace, NTag, NIcon, NDataTable, NBadge,
 } from 'naive-ui'
 import {
   ExternalLink, Trash2, Eye, Globe, RefreshCw, Link as LinkIcon,
@@ -30,7 +31,7 @@ const dialog = useDialog()
 const message = useMessage()
 
 const articles = ref<Article[]>([])
-const loading = ref(true)
+const loading = ref(false)
 const fetching = ref(false)
 const refreshingId = ref<number | null>(null)
 const articleUrl = ref('')
@@ -40,14 +41,16 @@ const showDetail = ref(false)
 const detailArticle = ref<Article | null>(null)
 const detailLoading = ref(false)
 
-async function refreshArticle(article: Article) {
-  refreshingId.value = article.id
+const totalCount = computed(() => articles.value.length)
+
+async function refreshArticle(row: Article) {
+  refreshingId.value = row.id
   try {
-    await api.post(`/articles/${article.id}/refresh`, {})
+    await api.post(`/articles/${row.id}/refresh`, {})
     message.success('文章已刷新')
     load()
-    if (showDetail.value && detailArticle.value?.id === article.id) {
-      const full = await api.get<Article>(`/articles/${article.id}`)
+    if (showDetail.value && detailArticle.value?.id === row.id) {
+      const full = await api.get<Article>(`/articles/${row.id}`)
       detailArticle.value = full
     }
   } catch (e: any) {
@@ -80,12 +83,12 @@ async function fetchArticle() {
   }
 }
 
-async function openDetail(article: Article) {
+async function openDetail(row: Article) {
   showDetail.value = true
   detailLoading.value = true
   detailArticle.value = null
   try {
-    const full = await api.get<Article>(`/articles/${article.id}`)
+    const full = await api.get<Article>(`/articles/${row.id}`)
     detailArticle.value = full
   } catch (e: any) {
     message.error(e.message || '加载失败')
@@ -99,19 +102,19 @@ function closeDetail() {
   detailArticle.value = null
 }
 
-function confirmDelete(article: Article) {
+function confirmDelete(row: Article) {
   dialog.warning({
     title: '确认删除',
-    content: `确定要删除「${article.title || '未命名文章'}」吗？图片文件也会一并删除。`,
+    content: `确定要删除「${row.title || '未命名文章'}」吗？图片文件也会一并删除。`,
     positiveText: '删除',
     negativeText: '取消',
     positiveButtonProps: { type: 'error' as const },
     onPositiveClick: async () => {
       try {
-        await api.delete(`/articles/${article.id}`)
+        await api.delete(`/articles/${row.id}`)
         message.success('已删除')
         load()
-        if (showDetail.value && detailArticle.value?.id === article.id) {
+        if (showDetail.value && detailArticle.value?.id === row.id) {
           closeDetail()
         }
       } catch (e: any) {
@@ -121,45 +124,141 @@ function confirmDelete(article: Article) {
   })
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+function formatDate(d: string) {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function formatDateTime(d: string) {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
 }
 
-function renderMarkdown(md: string): string {
+function renderMarkdown(md: string) {
   if (!md) return ''
   let html = marked.parse(md) as string
-  // Code blocks with copy button (matching ChatMessage.vue)
   html = html.replace(
     /<pre><code class="language-(\w*)">([\s\S]*?)<\/code><\/pre>/g,
-    (_, lang, code) => {
-      return `<div class="code-block-wrapper"><div class="code-block-header"><figcaption>${lang || 'code'}</figcaption><button class="code-copy-btn" data-action="copy-code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div><div class="code-block-body"><pre><code>${code}</code></pre></div></div>`
-    },
+    (_, lang, code) =>
+      `<div class="code-block-wrapper"><div class="code-block-header"><figcaption>${lang || 'code'}</figcaption><button class="code-copy-btn" data-action="copy-code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div><div class="code-block-body"><pre><code>${code}</code></pre></div></div>`,
   )
   return html
 }
+
+// ── DataTable columns ──
+
+const columns = computed<DataTableColumn[]>(() => [
+  {
+    key: 'title',
+    title: '标题',
+    width: 320,
+    ellipsis: { tooltip: true },
+    render(row: Article) {
+      return h('div', { style: 'display:flex;align-items:center;gap:10px;' }, [
+        row.cover_url
+          ? h('img', {
+              src: row.cover_url,
+              style: 'width:44px;height:30px;border-radius:4px;object-fit:cover;flex-shrink:0;background:var(--surface-2);display:block;',
+              onError: (e: Event) => ((e.target as HTMLElement).style.display = 'none'),
+            })
+          : h('div', {
+              style: 'width:44px;height:30px;border-radius:4px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;',
+            }, [h(Newspaper, { size: 16, style: 'color:var(--text-muted)' })]),
+        h('span', {
+          style: 'font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;',
+          onClick: () => openDetail(row),
+        }, row.title || '未命名文章'),
+      ])
+    },
+  },
+  {
+    key: 'author',
+    title: '作者',
+    width: 100,
+    render(row: Article) {
+      return row.author
+        ? h('span', { style: 'font-size:12px;color:var(--text-muted);' }, row.author)
+        : h('span', { style: 'font-size:12px;color:var(--text-muted);' }, '—')
+    },
+  },
+  {
+    key: 'content_length',
+    title: '字数',
+    width: 70,
+    align: 'right',
+    sorter: (a: Article, b: Article) => (a.content_length || 0) - (b.content_length || 0),
+    render(row: Article) {
+      return row.content_length
+        ? h('span', { style: 'font-size:12px;color:var(--text-muted);' }, `${(row.content_length / 1000).toFixed(1)}K`)
+        : ''
+    },
+  },
+  {
+    key: 'created_at',
+    title: '日期',
+    width: 110,
+    sorter: (a: Article, b: Article) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    render(row: Article) {
+      return h('span', { style: 'font-size:12px;color:var(--text-muted);' }, formatDate(row.created_at))
+    },
+  },
+  {
+    key: 'actions',
+    title: '操作',
+    width: 130,
+    align: 'right',
+    render(row: Article) {
+      return h('div', { style: 'display:flex;gap:4px;justify-content:flex-end;' }, [
+        h(NButton, {
+          size: 'tiny',
+          quaternary: true,
+          loading: refreshingId.value === row.id,
+          disabled: refreshingId.value !== null,
+          onClick: (e: Event) => { e.stopPropagation(); refreshArticle(row) },
+          round: true,
+        }, { default: () => h(RefreshCw, { size: 13 }) }),
+        h(NButton, {
+          size: 'tiny',
+          quaternary: true,
+          type: 'primary' as any,
+          onClick: (e: Event) => { e.stopPropagation(); openDetail(row) },
+          round: true,
+        }, { default: () => h(Eye, { size: 13 }) }),
+        h(NButton, {
+          size: 'tiny',
+          quaternary: true,
+          type: 'error' as any,
+          onClick: (e: Event) => { e.stopPropagation(); confirmDelete(row) },
+          round: true,
+        }, { default: () => h(Trash2, { size: 13 }) }),
+      ])
+    },
+  },
+])
 
 onMounted(load)
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:16px;">
+  <div style="display:flex;flex-direction:column;gap:20px;">
     <!-- ═══ 页面标题 ═══ -->
     <div>
-      <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">公众号文章</NText>
-      <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">输入链接自动提取内容，保存为 Markdown 格式</NText>
+      <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">
+        <span style="display:flex;align-items:center;gap:10px;">
+          公众号文章
+          <NTag v-if="totalCount > 0" size="small" :bordered="false" round style="font-size:11px;">{{ totalCount }}</NTag>
+        </span>
+      </NText>
+      <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">
+        输入链接自动提取内容，保存为 Markdown 格式
+      </NText>
     </div>
 
     <!-- ═══ URL 输入区 ═══ -->
-    <NCard :bordered="true" size="small" style="padding:2px 0;">
-      <div style="display:flex;align-items:flex-end;gap:10px;">
+    <NCard :bordered="true" size="small" style="padding:6px 0;">
+      <div style="display:flex;align-items:flex-end;gap:12px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
             <Globe :size="14" />
@@ -189,78 +288,20 @@ onMounted(load)
       </div>
     </NCard>
 
-    <!-- ═══ 文章列表 ═══ -->
-    <NCard :bordered="true" size="small" style="flex:1;min-height:260px;padding:0;overflow:hidden;">
-      <NSpin :show="loading" style="min-height:200px;">
-        <template v-if="articles.length > 0">
-          <!-- 表头 -->
-          <div class="list-header">
-            <div class="col-cover" style="width:52px;" />
-            <div class="col-title" style="flex:1;min-width:0;">标题</div>
-            <div class="col-author" style="width:100px;">作者</div>
-            <div class="col-date" style="width:110px;">日期</div>
-            <div class="col-size" style="width:72px;text-align:right;">字数</div>
-            <div class="col-actions" style="width:144px;text-align:right;">操作</div>
-          </div>
-          <!-- 行 -->
-          <div
-            v-for="article in articles" :key="article.id"
-            class="list-row"
-            @click="openDetail(article)"
-          >
-            <div class="col-cover" style="width:52px;">
-              <div
-                v-if="article.cover_url"
-                style="width:40px;height:28px;border-radius:4px;overflow:hidden;background:var(--surface-2);flex-shrink:0;"
-              >
-                <img
-                  :src="article.cover_url" alt=""
-                  style="width:100%;height:100%;object-fit:cover;display:block;"
-                  @error="($event.target as HTMLImageElement).style.display='none'"
-                />
-              </div>
-              <div
-                v-else
-                style="width:40px;height:28px;border-radius:4px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;"
-              >
-                <Newspaper :size="16" style="color:var(--text-muted);" />
-              </div>
-            </div>
-            <div class="col-title" style="flex:1;min-width:0;font-weight:500;">
-              <span style="cursor:pointer;">{{ article.title || '未命名文章' }}</span>
-            </div>
-            <div class="col-author" style="width:100px;color:var(--text-muted);font-size:12px;">
-              <span v-if="article.author">{{ article.author }}</span>
-              <span v-else style="color:var(--text-muted);">—</span>
-            </div>
-            <div class="col-date" style="width:110px;color:var(--text-muted);font-size:12px;">
-              {{ formatDate(article.created_at) }}
-            </div>
-            <div class="col-size" style="width:72px;text-align:right;color:var(--text-muted);font-size:12px;">
-              <span v-if="article.content_length !== undefined">{{ (article.content_length / 1000).toFixed(1) }}K</span>
-            </div>
-            <div class="col-actions" style="width:144px;text-align:right;display:flex;gap:2px;justify-content:flex-end;" @click.stop>
-              <NButton
-                size="tiny" quaternary
-                :loading="refreshingId === article.id"
-                :disabled="refreshingId !== null"
-                @click="refreshArticle(article)"
-                round
-              >
-                <template #icon><RefreshCw :size="12" /></template>
-              </NButton>
-              <NButton size="tiny" quaternary type="primary" @click="openDetail(article)" round>
-                <template #icon><Eye :size="12" /></template>
-              </NButton>
-              <NButton size="tiny" quaternary type="error" @click="confirmDelete(article)" round>
-                <template #icon><Trash2 :size="12" /></template>
-              </NButton>
-            </div>
-          </div>
-        </template>
-        <NEmpty v-else-if="!loading" description="暂无已提取的文章" style="padding:60px 0;" />
-      </NSpin>
-    </NCard>
+    <!-- ═══ 文章列表（DataTable） ═══ -->
+    <NDataTable
+      :columns="columns"
+      :data="articles"
+      :loading="loading"
+      :bordered="true"
+      :single-line="false"
+      :row-key="(row: Article) => row.id"
+      size="small"
+      striped
+      :max-height="560"
+      :empty="h(NEmpty, { description: '暂无已提取的文章', style: 'padding:80px 0;' })"
+      @update:row-key="() => {}"
+    />
 
     <!-- ═══ 详情弹窗 ═══ -->
     <NModal
@@ -272,7 +313,7 @@ onMounted(load)
       :segmented="{ content: true, footer: true }"
       header-style="padding:0;"
       content-style="padding:0;"
-      footer-style="padding:12px 20px;"
+      footer-style="padding:14px 24px;"
       @close="closeDetail"
     >
       <NSpin :show="detailLoading" style="min-height:300px;">
@@ -344,51 +385,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* ── List header ── */
-.list-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--hairline);
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  user-select: none;
-}
-
-/* ── List row ── */
-.list-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--hairline);
-  transition: background 0.12s;
-  cursor: pointer;
-  font-size: 13px;
-}
-.list-row:last-child { border-bottom: none; }
-.list-row:hover { background: var(--surface-2); }
-
-.col-cover { display:flex;align-items:center;flex-shrink:0; }
-.col-title { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.col-author { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0; }
-.col-date { flex-shrink:0; }
-.col-size { flex-shrink:0; }
-
-.col-actions {
-  flex-shrink:0;
-  display:flex;
-  gap:2px;
-  justify-content:flex-end;
-  opacity:0;
-  transition:opacity 0.15s;
-}
-.list-row:hover .col-actions { opacity:1; }
-
 /* ═══════════════════════════════════════════
    Prose: Fumadocs-inspired — same as ChatMessage.vue
    ═══════════════════════════════════════════ */
@@ -494,16 +490,9 @@ onMounted(load)
   transition: all .12s;
   opacity: 0;
 }
-.text-bot :deep(.code-block-wrapper:hover .code-copy-btn) {
-  opacity: 1;
-}
-.text-bot :deep(.code-copy-btn:hover) {
-  background: var(--surface-2);
-  color: var(--text-primary);
-}
-.text-bot :deep(.code-copy-btn:active) {
-  transform: scale(0.88);
-}
+.text-bot :deep(.code-block-wrapper:hover .code-copy-btn) { opacity: 1; }
+.text-bot :deep(.code-copy-btn:hover) { background: var(--surface-2); color: var(--text-primary); }
+.text-bot :deep(.code-copy-btn:active) { transform: scale(0.88); }
 .text-bot :deep(.code-block-body) { overflow-x: auto; }
 .text-bot :deep(.code-block-body pre) {
   margin: 0;
@@ -517,14 +506,9 @@ onMounted(load)
   -webkit-font-smoothing: auto;
 }
 .text-bot :deep(.code-block-body pre code) {
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-size: inherit;
-  line-height: inherit;
-  color: var(--text-primary);
+  background: transparent; border: none; padding: 0;
+  font-size: inherit; line-height: inherit; color: var(--text-primary);
 }
-
 .text-bot :deep(code) {
   font-family: 'JetBrains Mono','Fira Code',monospace;
   background: var(--surface-2);
@@ -534,51 +518,16 @@ onMounted(load)
   font-size: 0.875em;
   color: var(--text-primary);
 }
-.text-bot :deep(pre code) {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font-size: inherit;
-  color: inherit;
-}
-
-.text-bot :deep(hr) {
-  margin: 1.5em 0;
-  border: 0;
-  border-top: 1px solid var(--hairline);
-  opacity: 0.3;
-}
-
-.text-bot :deep(table) {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: var(--surface-1);
-}
+.text-bot :deep(pre code) { background: transparent; border: 0; padding: 0; font-size: inherit; color: inherit; }
+.text-bot :deep(hr) { margin: 1.5em 0; border: 0; border-top: 1px solid var(--hairline); opacity: 0.3; }
+.text-bot :deep(table) { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface-1); }
 .text-bot :deep(th) {
-  font-weight: 600;
-  font-size: 0.8125rem;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--hairline-strong);
-  padding: 0.625rem 1rem;
-  text-align: left;
-  background: transparent;
+  font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.02em;
+  color: var(--text-secondary); border-bottom: 1px solid var(--hairline-strong);
+  padding: 0.625rem 1rem; text-align: left; background: transparent;
 }
-.text-bot :deep(td) {
-  padding: 0.625rem 1rem;
-  border-bottom: 1px solid var(--hairline);
-  font-size: 0.875rem;
-}
+.text-bot :deep(td) { padding: 0.625rem 1rem; border-bottom: 1px solid var(--hairline); font-size: 0.875rem; }
 .text-bot :deep(tr:last-child td) { border-bottom: none; }
 .text-bot :deep(tbody tr:hover) { background: var(--surface-2); }
-
-.text-bot :deep(img) {
-  max-width: 100%;
-  border-radius: 8px;
-  margin: 12px 0;
-  display: block;
-}
+.text-bot :deep(img) { max-width: 100%; border-radius: 8px; margin: 12px 0; display: block; }
 </style>
