@@ -147,7 +147,7 @@ const router = createRouter({
           path: 'points-manage',
           name: 'student-points-manage',
           component: () => import('@/views/teacher/PointsManage.vue'),
-          meta: { permissions: ['points.read'] },
+          meta: { permissions: ['points.write'] },
         },
         {
           path: 'assignments',
