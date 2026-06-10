@@ -17,12 +17,29 @@ const useRef = useRefresh(load)
 const students = ref<Student[]>([])
 const classList = ref<string[]>([])
 const filterClass = ref('')
-const roleGroups = ref<{ id: number; name: string }[]>([])
+const allGroups = ref<PermissionGroup[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const showModal = ref(false)
 const editing = ref<Student | null>(null)
-const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456', group_id: null as number | null })
+const form = ref({ student_no: '', display_name: '', nickname: '', class: '', password: '123456', group_id: null as number | null, role_id: null as number | null })
+
+// 分离身份组 (parent_id IS NULL) 和职位组 (parent_id IS NOT NULL)
+const identityGroups = computed(() => allGroups.value.filter(g => !g.parent_id))
+const roleGroups = computed(() => allGroups.value.filter(g => g.parent_id))
+
+// 根据所选身份过滤可用职位
+const availableRoles = computed(() => {
+  if (!form.value.group_id) return []
+  return roleGroups.value.filter(g => g.parent_id === form.value.group_id)
+})
+
+// 根据 group_id / role_id 查找组名
+function groupName(id: number | null | undefined): string {
+  if (!id) return ''
+  const g = allGroups.value.find(g => g.id === id)
+  return g?.name || ''
+}
 
 const classOptions = computed(() => [
   { label: '全部班级', value: '' },
@@ -44,13 +61,15 @@ interface Teacher {
   avatar: string
   student_no: string | null
   nickname: string | null
+  group_id?: number | null
+  role_id?: number | null
 }
 const teachers = ref<Teacher[]>([])
 const teachersLoading = ref(false)
 
 const showTeacherModal = ref(false)
 const editingTeacher = ref<Teacher | null>(null)
-const teacherForm = ref({ display_name: '', username: '', class: [] as string[], nickname: '', password: '', group_id: null as number | null })
+const teacherForm = ref({ display_name: '', username: '', class: [] as string[], nickname: '', password: '', group_id: null as number | null, role_id: null as number | null })
 const classSelectOptions = computed(() => classList.value.map(c => ({ label: c, value: c })))
 const teacherSaving = ref(false)
 
@@ -73,7 +92,8 @@ function openEditTeacher(t: Teacher) {
     class: (t.class || '').split(',').filter(Boolean),
     nickname: t.nickname || '',
     password: '',
-    group_id: null,
+    group_id: t.group_id ?? null,
+    role_id: t.role_id ?? null,
   }
   showTeacherModal.value = true
 }
@@ -87,7 +107,8 @@ async function saveTeacher() {
     if (teacherForm.value.class.length > 0) payload.class = teacherForm.value.class.join(',')
     if (teacherForm.value.nickname) payload.nickname = teacherForm.value.nickname
     if (teacherForm.value.password) payload.password = teacherForm.value.password
-    if (teacherForm.value.group_id) payload.group_id = teacherForm.value.group_id
+    payload.group_id = teacherForm.value.group_id
+    payload.role_id = teacherForm.value.role_id
 
     await api.put(`/teachers/${editingTeacher.value!.id}`, payload)
     showTeacherModal.value = false
@@ -134,8 +155,8 @@ async function loadClasses() {
     classData.value = data
     classList.value = data.map(c => c.name)
     if (!form.value.class && data.length > 0) form.value.class = data[0]!.name
-    // 加载权限组
-    roleGroups.value = await api.get<{ id: number; name: string; permissions: string[] }[]>('/roles/groups').then(r => r.map(g => ({ id: g.id, name: g.name }))).catch(() => [])
+    // 加载全部权限组（身份+职位）
+    allGroups.value = await api.get<PermissionGroup[]>('/roles/groups').catch(() => [])
   } catch (e: any) {
     message.error(e.message || '加载班级数据失败')
   } finally {
@@ -149,17 +170,28 @@ function autoGenerateStudentNo(): string {
 
 function openNew() {
   editing.value = null
-  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456', group_id: null }
+  form.value = { student_no: autoGenerateStudentNo(), display_name: '', nickname: '', class: '高三(2)班', password: '123456', group_id: null, role_id: null }
   showModal.value = true
 }
 
 function openEdit(s: Student) {
   editing.value = s
-  form.value = { student_no: s.student_no || '', display_name: s.display_name, nickname: s.nickname || '', class: s.class, password: s.password || '', group_id: (s as any).group_id || null }
+  form.value = {
+    student_no: s.student_no || '',
+    display_name: s.display_name,
+    nickname: s.nickname || '',
+    class: s.class,
+    password: '',
+    group_id: s.group_id ?? null,
+    role_id: s.role_id ?? null,
+  }
   showModal.value = true
 }
 
 async function save() {
+  if (!form.value.group_id) { message.error('请选择身份'); return }
+  const canCreate = identityGroups.value.some(g => g.id === form.value.group_id)
+  if (!canCreate) { message.error('请选择有效的身份组'); return }
   saving.value = true
   try {
     const student_no = form.value.student_no || autoGenerateStudentNo()
@@ -169,8 +201,9 @@ async function save() {
       class: form.value.class,
       student_no,
       password: form.value.password || undefined,
+      group_id: form.value.group_id,
+      role_id: form.value.role_id,
     }
-    if (form.value.group_id) payload.group_id = form.value.group_id
     if (editing.value) {
       await api.put(`/students/${editing.value.id}`, payload)
     } else {
@@ -312,6 +345,10 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 <span v-if="s.student_no" style="font-size: 12px; color: var(--text-muted); font-family: monospace;">#{{ s.student_no }}</span>
                 <span v-if="s.class" style="font-size: 12px; color: var(--text-muted);">{{ s.class }}</span>
                 <span v-if="s.nickname" style="font-size: 12px; color: var(--text-muted);">📛 {{ s.nickname }}</span>
+                <!-- 身份标签 -->
+                <n-tag v-if="groupName(s.group_id)" size="tiny" :bordered="false" round style="font-size: 11px">{{ groupName(s.group_id) }}</n-tag>
+                <!-- 职位标签 -->
+                <n-tag v-if="groupName(s.role_id)" size="tiny" :bordered="false" type="info" round style="font-size: 11px">{{ groupName(s.role_id) }}</n-tag>
               </div>
               <template #suffix>
                 <div style="display: flex; gap: 4px; flex-shrink: 0;">
@@ -370,7 +407,10 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 <span style="font-size: 12px; color: var(--text-muted); font-family: monospace;">@{{ t.username }}</span>
                 <span v-if="t.class" style="font-size: 12px; color: var(--text-muted);">{{ t.class }}</span>
                 <span v-if="t.nickname" style="font-size: 12px; color: var(--text-muted);">📛 {{ t.nickname }}</span>
-                <n-tag size="small" type="primary" round :bordered="false">教师</n-tag>
+                <!-- 身份标签 -->
+                <n-tag v-if="groupName(t.group_id)" size="tiny" :bordered="false" round style="font-size: 11px">{{ groupName(t.group_id) }}</n-tag>
+                <!-- 职位标签 -->
+                <n-tag v-if="groupName(t.role_id)" size="tiny" :bordered="false" type="info" round style="font-size: 11px">{{ groupName(t.role_id) }}</n-tag>
               </div>
               <template #suffix>
                 <n-button quaternary size="small" @click.stop="openEditTeacher(t)" round>
@@ -480,12 +520,20 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             :disabled="classList.length === 0"
           />
         </n-form-item>
-        <n-form-item label="身份职位" path="group_id">
+        <n-form-item label="身份（必选）" path="group_id">
           <n-select
             v-model:value="form.group_id"
-            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
-            placeholder="选择权限组"
+            :options="identityGroups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择身份组"
+          />
+        </n-form-item>
+        <n-form-item label="职位（可选）" path="role_id">
+          <n-select
+            v-model:value="form.role_id"
+            :options="availableRoles.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择职位"
             clearable
+            :disabled="!form.group_id || availableRoles.length === 0"
           />
         </n-form-item>
         <n-form-item label="密码" path="password">
@@ -495,7 +543,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 10px">
           <n-button @click="showModal = false" quaternary>取消</n-button>
-          <n-button type="primary" @click="save" :disabled="!form.display_name" :loading="saving" round>保存</n-button>
+          <n-button type="primary" @click="save" :disabled="!form.display_name || !form.group_id" :loading="saving" round>保存</n-button>
         </div>
       </template>
     </n-modal>
@@ -556,12 +604,20 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             style="width:100%"
           />
         </n-form-item>
-        <n-form-item label="身份职位" path="group_id">
+        <n-form-item label="身份（必选）" path="group_id">
           <n-select
             v-model:value="teacherForm.group_id"
-            :options="roleGroups.map(g => ({ label: g.name, value: g.id }))"
-            placeholder="选择权限组"
+            :options="identityGroups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择身份组"
+          />
+        </n-form-item>
+        <n-form-item label="职位（可选）" path="role_id">
+          <n-select
+            v-model:value="teacherForm.role_id"
+            :options="availableRoles.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择职位"
             clearable
+            :disabled="!teacherForm.group_id || availableRoles.length === 0"
           />
         </n-form-item>
         <n-form-item label="密码" path="password">
@@ -571,7 +627,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 10px">
           <n-button @click="showTeacherModal = false" quaternary>取消</n-button>
-          <n-button type="primary" @click="saveTeacher" :disabled="!teacherForm.display_name" :loading="teacherSaving" round>保存</n-button>
+          <n-button type="primary" @click="saveTeacher" :disabled="!teacherForm.display_name || !teacherForm.group_id" :loading="teacherSaving" round>保存</n-button>
         </div>
       </template>
     </n-modal>

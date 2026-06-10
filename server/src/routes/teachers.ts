@@ -18,13 +18,14 @@ const updateSchema = z.object({
   nickname: z.string().nullable().optional(),
   avatar: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
+  role_id: z.number().int().nullable().optional(),
 })
 
 // GET /api/teachers — list all teachers
 router.get('/', requirePermission('students.write'), (_req: Request, res: Response) => {
   const db = getDb()
   const teachers = db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname
+    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
     FROM users u
     JOIN permission_groups pg ON pg.group_type = 'teacher'
     WHERE u.group_id = pg.id
@@ -37,7 +38,7 @@ router.get('/', requirePermission('students.write'), (_req: Request, res: Respon
 router.get('/:id', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const teacher = db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname
+    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
     FROM users u
     WHERE u.id = ? AND u.group_id = ${TEACHER_GROUP_SUBQUERY}
   `).get(req.params.id)
@@ -65,6 +66,7 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   if (req.body.nickname !== undefined) { fields.push('nickname = ?'); values.push(req.body.nickname) }
   if (req.body.avatar !== undefined) { fields.push('avatar = ?'); values.push(req.body.avatar) }
   if (req.body.group_id !== undefined) { fields.push('group_id = ?'); values.push(req.body.group_id) }
+  if (req.body.role_id !== undefined) { fields.push('role_id = ?'); values.push(req.body.role_id) }
 
   if (fields.length === 0) return fail(res, 400, 'NO_CHANGES', '没有要修改的字段')
 
@@ -72,7 +74,7 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   const updated = db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname
+    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
     FROM users u WHERE u.id = ?
   `).get(id)
 

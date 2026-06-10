@@ -16,6 +16,7 @@ const createSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional().default('123456'),
   group_id: z.number().int().nullable().optional(),
+  role_id: z.number().int().nullable().optional(),
   student_no: z.string().optional(),
   nickname: z.string().optional(),
 })
@@ -26,6 +27,7 @@ const updateSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
   group_id: z.number().int().nullable().optional(),
+  role_id: z.number().int().nullable().optional(),
   student_no: z.string().optional(),
   nickname: z.string().optional(),
 })
@@ -34,7 +36,7 @@ const updateSchema = z.object({
 router.get('/', requirePermission('students.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { class: className } = req.query
-  let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
+  let sql = `SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE group_id = ${STUDENT_GROUP_SUBQUERY}`
   const params: string[] = []
 
   if (className) {
@@ -49,19 +51,19 @@ router.get('/', requirePermission('students.write'), (req: Request, res: Respons
 // POST /api/students
 router.post('/', requirePermission('students.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const { display_name, class: stuClass, username, group_id, nickname } = req.body
+  const { display_name, class: stuClass, username, group_id, role_id, nickname } = req.body
   const studentNo = req.body.student_no || 'S' + Date.now()
 
   const uname = username || display_name.toLowerCase().replace(/\s/g, '')
   const pw = req.body.password
   // Default to "学生" permission group if none specified
   const finalGroupId = group_id ?? (db.prepare("SELECT id FROM permission_groups WHERE group_type = 'student' ORDER BY id LIMIT 1").get() as any)?.id ?? null
-  const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(uname, display_name, stuClass, pw, finalGroupId, studentNo, nickname ?? null, 'student')
+  const result = db.prepare('INSERT INTO users (username, display_name, class, password, group_id, role_id, student_no, nickname, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(uname, display_name, stuClass, pw, finalGroupId, role_id ?? null, studentNo, nickname ?? null, 'student')
 
   const student = db
     .prepare(
-      'SELECT id, username, display_name, class, avatar, student_no, nickname FROM users WHERE id = ?',
+      'SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE id = ?',
     )
     .get(result.lastInsertRowid)
   ok(res, student)
@@ -72,7 +74,7 @@ router.get('/:id', requirePermission('students.write'), (req: Request, res: Resp
   const db = getDb()
   const student = db
     .prepare(
-      `SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
+      `SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
     )
     .get(req.params.id)
 
@@ -111,6 +113,11 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
     values.push(req.body.group_id)
   }
 
+  if (req.body.role_id !== undefined) {
+    fields.push('role_id = ?')
+    values.push(req.body.role_id)
+  }
+
   if (req.body.student_no !== undefined) {
     fields.push('student_no = ?')
     values.push(req.body.student_no)
@@ -127,7 +134,7 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
 
   const updated = db
     .prepare(
-      'SELECT id, username, display_name, class, avatar, student_no, nickname, password FROM users WHERE id = ?',
+      'SELECT id, username, display_name, class, avatar, student_no, nickname, password, group_id, role_id FROM users WHERE id = ?',
     )
     .get(req.params.id)
 
