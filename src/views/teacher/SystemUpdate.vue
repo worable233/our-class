@@ -7,7 +7,7 @@ import {
   NForm, NFormItem, NGi, NGrid, NStatistic,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
-import { RefreshCw, Download, Save, History, Settings, Clock, Info, Package, CheckCircle } from '@lucide/vue'
+import { RefreshCw, Download, Save, History, Settings, Clock, Info, Package, CheckCircle, User } from '@lucide/vue'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 
 const message = useMessage()
