@@ -62,7 +62,7 @@ router.get(
       return ok(res, {
         enable_deep_think: false,
         enable_file_upload: false,
-        allowed_file_types: '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv,.md,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg',
+        allowed_file_types: '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.csv,.md,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg,.ico,.tif,.avif,.heic',
         max_file_size: 10485760,
         max_files_per_conversation: 10,
       })

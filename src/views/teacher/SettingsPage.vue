@@ -55,6 +55,10 @@ const fileTypeOptions = [
   { label: '.webp (WebP 图片)', value: '.webp' },
   { label: '.bmp (BMP 图片)', value: '.bmp' },
   { label: '.svg (SVG 矢量图)', value: '.svg' },
+  { label: '.ico (图标)', value: '.ico' },
+  { label: '.tif / .tiff (TIFF)', value: '.tif' },
+  { label: '.avif (AVIF 图片)', value: '.avif' },
+  { label: '.heic / .heif (HEIC)', value: '.heic' },
 ]
 
 const selectedFileTypes = computed({
