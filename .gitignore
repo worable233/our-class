@@ -64,7 +64,6 @@ OurClass Homepage.html
 
 # Runtime data
 server/storage/
-server/uploads/_pending/
-server/uploads/conv_*/
-server/uploads/_chunks/
+server/uploads/
 server/backups/
+server/src/setup/setup-state.json
