@@ -8,7 +8,7 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ComponentPublicInstance } from 'vue'
-import { NCarousel, NEllipsis, NTag } from 'naive-ui'
+import { NCarousel, NEllipsis } from 'naive-ui'
 import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload, Newspaper } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
@@ -862,22 +862,28 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 
           <!-- ═══ 最新公众号文章轮播 ═══ -->
           <div v-if="recentArticles.length > 0" class="article-carousel">
-            <n-carousel :interval="5000" dot-placement="bottom" show-arrow="hover" draggable>
-              <div v-for="art in recentArticles" :key="art.id" class="carousel-slide">
-                <div class="carousel-card" @click="openArticleChat(art)">
-                  <div class="carousel-cover-wrap">
-                    <img v-if="art.cover_url" :src="art.cover_url" :alt="art.title" class="carousel-cover-img"
-                      @error="($event.target as HTMLImageElement).style.display='none'" />
-                    <div v-else class="carousel-cover-placeholder">
-                      <Newspaper :size="28" />
-                    </div>
-                  </div>
-                  <div class="carousel-body">
-                    <n-ellipsis :line-clamp="2" class="carousel-title">{{ art.title }}</n-ellipsis>
-                    <div class="carousel-meta">
-                      <n-tag v-if="art.author" size="tiny" :bordered="false" round>{{ art.author }}</n-tag>
-                      <span class="carousel-date">{{ formatDate(art.created_at) }}</span>
-                    </div>
+            <n-carousel
+              :interval="5000"
+              direction="vertical"
+              mousewheel
+              draggable
+              dot-placement="right"
+              dot-type="dot"
+              show-arrow="hover"
+              style="height:240px"
+            >
+              <div v-for="art in recentArticles" :key="art.id" class="carousel-slide" @click="openArticleChat(art)">
+                <img v-if="art.cover_url" :src="art.cover_url" class="carousel-img" :alt="art.title"
+                  @error="($event.target as HTMLImageElement).style.display='none'" />
+                <div v-else class="carousel-img-fallback">
+                  <Newspaper :size="36" />
+                  <span>{{ art.title }}</span>
+                </div>
+                <div class="carousel-overlay">
+                  <n-ellipsis :line-clamp="2" class="carousel-title">{{ art.title }}</n-ellipsis>
+                  <div class="carousel-meta">
+                    <span v-if="art.author" class="carousel-author">{{ art.author }}</span>
+                    <span class="carousel-date">{{ formatDate(art.created_at) }}</span>
                   </div>
                 </div>
               </div>
@@ -1102,60 +1108,75 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .article-carousel {
   margin-top: 28px;
   width: 100%;
-  max-width: 540px;
+  max-width: 500px;
   margin-left: auto;
   margin-right: auto;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 .article-carousel .n-carousel {
-  --n-dot-color: rgba(94, 106, 210, 0.2);
-  --n-dot-color-focus: rgba(94, 106, 210, 0.4);
-  --n-dot-color-active: #5E6AD2;
+  --n-dot-color: rgba(255, 255, 255, 0.35);
+  --n-dot-color-focus: rgba(255, 255, 255, 0.55);
+  --n-dot-color-active: #fff;
 }
-.article-carousel .n-carousel .n-carousel__dots {
-  padding-top: 8px;
+.article-carousel .n-carousel .n-carousel__dots--right {
+  padding-right: 10px;
 }
 .carousel-slide {
-  padding: 4px;
-}
-.carousel-card {
-  cursor: pointer;
-  border-radius: 10px;
-  overflow: hidden;
-  transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s ease;
-  background: var(--surface-2);
-  border: 1px solid var(--hairline-strong);
-}
-.carousel-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-  border-color: var(--accent);
-}
-.carousel-cover-wrap {
+  position: relative;
   width: 100%;
-  height: 140px;
+  height: 240px;
+  cursor: pointer;
   overflow: hidden;
-  background: var(--surface-1);
-  border-radius: 6px 6px 0 0;
 }
-.carousel-cover-img {
+.carousel-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform .4s ease;
+  transition: transform .5s ease;
 }
-.carousel-card:hover .carousel-cover-img {
-  transform: scale(1.05);
+.carousel-slide:hover .carousel-img {
+  transform: scale(1.06);
 }
-.carousel-cover-placeholder {
+.carousel-img-fallback {
   width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px;
+  background: var(--surface-2);
   color: var(--text-muted);
-  opacity: .4;
 }
-.carousel-body {
-  padding: 10px 12px 8px;
+.carousel-overlay {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 20px 16px 14px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
   text-align: left;
+}
+.carousel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.45;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  margin-bottom: 4px;
+}
+.carousel-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.carousel-author {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.carousel-date {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 .carousel-title {
   font-size: 13px;
