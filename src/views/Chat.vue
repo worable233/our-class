@@ -31,43 +31,51 @@ async function loadRecentArticles() {
   finally { articlesLoading.value = false }
 }
 
-// ── 自定义轮播（不依赖 Naive UI） ──
+// ── 自定义轮播（模仿 Naive UI 质感/动画） ──
 const carouselIndex = ref(0)
+const carouselTransition = ref(true)
 let carouselTimer: ReturnType<typeof setInterval> | null = null
-let dragStartY = 0
-let dragStartIdx = 0
-let isDragging = false
+let dragState: { startY: number; startIdx: number; moved: boolean; offset: number } | null = null
 
 function carouselGoTo(i: number) {
   const len = recentArticles.value.length
   if (len === 0) return
+  carouselTransition.value = true
   carouselIndex.value = ((i % len) + len) % len
 }
 function carouselNext() { carouselGoTo(carouselIndex.value + 1) }
 function carouselPrev() { carouselGoTo(carouselIndex.value - 1) }
 
 function carouselWheel(e: WheelEvent) {
+  if (recentArticles.value.length < 2) return
   if (e.deltaY > 0) carouselNext()
   else carouselPrev()
 }
 
-function carouselDragStart(e: MouseEvent) {
-  dragStartY = e.clientY
-  dragStartIdx = carouselIndex.value
-  isDragging = false
-  window.addEventListener('mousemove', carouselDragMove)
-  window.addEventListener('mouseup', carouselDragEnd)
+function carouselPointerDown(e: PointerEvent) {
+  if (recentArticles.value.length < 2) return
+  dragState = { startY: e.clientY, startIdx: carouselIndex.value, moved: false, offset: 0 }
+  // @ts-ignore
+  e.target?.setPointerCapture?.(e.pointerId)
 }
-function carouselDragMove(e: MouseEvent) {
-  const diff = e.clientY - dragStartY
-  if (Math.abs(diff) > 20) isDragging = true
+function carouselPointerMove(e: PointerEvent) {
+  if (!dragState) return
+  const diff = e.clientY - dragState.startY
+  dragState.offset = diff
+  if (Math.abs(diff) > 10) { dragState.moved = true; carouselTransition.value = false }
 }
-function carouselDragEnd(e: MouseEvent) {
-  window.removeEventListener('mousemove', carouselDragMove)
-  window.removeEventListener('mouseup', carouselDragEnd)
-  const diff = e.clientY - dragStartY
-  if (diff < -30) carouselNext()
-  else if (diff > 30) carouselPrev()
+function carouselPointerUp(e: PointerEvent) {
+  if (!dragState) return
+  const diff = e.clientY - dragState.startY
+  if (diff < -40) carouselGoTo(dragState.startIdx + 1)
+  else if (diff > 40) carouselGoTo(dragState.startIdx - 1)
+  else carouselGoTo(dragState.startIdx)
+  dragState = null
+  setTimeout(() => { carouselTransition.value = true }, 50)
+}
+function carouselPointerLeave(e: PointerEvent) {
+  if (!dragState) return
+  carouselPointerUp(e)
 }
 
 function startCarousel() {
@@ -78,6 +86,16 @@ function startCarousel() {
 function stopCarousel() {
   if (carouselTimer) { clearInterval(carouselTimer); carouselTimer = null }
 }
+
+const carouselTrackStyle = computed(() => {
+  const idx = carouselIndex.value
+  const base = -idx * 240
+  const offset = dragState?.offset ?? 0
+  return {
+    transform: `translateY(${base + (carouselTransition.value ? 0 : offset)}px)`,
+    transition: carouselTransition.value ? 'transform .45s cubic-bezier(.25,.46,.45,.94)' : 'none',
+  }
+})
 
 // 文章数据变化时重置轮播
 watch(recentArticles, (arr) => {
@@ -915,12 +933,16 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
             <button class="welcome-btn" @click="welcomeAction('今天天气怎么样')"><Sun :size="14" />查天气</button>
           </div>
 
-          <!-- ═══ 最新公众号文章轮播（纯 CSS，无 Naive UI） ═══ -->
+          <!-- ═══ 最新公众号文章轮播（模仿 Naive UI 质感） ═══ -->
           <div v-if="recentArticles.length > 0" class="article-carousel"
             @wheel.prevent="carouselWheel"
+            @pointerdown="carouselPointerDown"
+            @pointermove="carouselPointerMove"
+            @pointerup="carouselPointerUp"
+            @pointerleave="carouselPointerLeave"
             @mouseenter="stopCarousel"
             @mouseleave="startCarousel">
-            <div class="carousel-track" :style="{ transform: `translateY(-${carouselIndex * 240}px)` }">
+            <div class="carousel-track" :style="carouselTrackStyle">
               <div v-for="art in recentArticles" :key="art.id" class="carousel-slide" @click="openArticleChat(art)">
                 <img v-if="art.cover_url" :src="art.cover_url" class="carousel-img" :alt="art.title"
                   @error="($event.target as HTMLImageElement).style.display='none'" />
@@ -937,15 +959,15 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
                 </div>
               </div>
             </div>
-            <!-- 箭头 -->
-            <button class="carousel-arrow carousel-arrow-prev" @click.stop="carouselPrev" aria-label="上一张">
-              <svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3.5a.5.5 0 0 1 .5.5v7.5H13a.5.5 0 0 1 0 1H3a.5.5 0 0 1 0-1h4.5V4a.5.5 0 0 1 .5-.5z" fill="currentColor"/></svg>
+            <!-- 箭头（Naive UI 风格） -->
+            <button v-if="recentArticles.length > 1" class="carousel-arrow carousel-arrow-prev" @click.stop="carouselPrev" aria-label="上一张">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M10.26 3.2a.75.75 0 0 1 .04 1.06L6.773 8l3.527 3.74a.75.75 0 1 1-1.1 1.02l-4-4.25a.75.75 0 0 1 0-1.02l4-4.25a.75.75 0 0 1 1.06-.04z"/></svg>
             </button>
-            <button class="carousel-arrow carousel-arrow-next" @click.stop="carouselNext" aria-label="下一张">
-              <svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 12.5a.5.5 0 0 1-.5-.5V4.5H3a.5.5 0 0 1 0-1h10a.5.5 0 0 1 0 1H8.5V12a.5.5 0 0 1-.5.5z" fill="currentColor"/></svg>
+            <button v-if="recentArticles.length > 1" class="carousel-arrow carousel-arrow-next" @click.stop="carouselNext" aria-label="下一张">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M5.74 3.2a.75.75 0 0 0-.04 1.06L9.227 8 5.7 11.74a.75.75 0 1 0 1.1 1.02l4-4.25a.75.75 0 0 0 0-1.02l-4-4.25a.75.75 0 0 0-1.06-.04z"/></svg>
             </button>
-            <!-- 指示点 -->
-            <div class="carousel-dots">
+            <!-- 指示点（Naive UI 风格） -->
+            <div v-if="recentArticles.length > 1" class="carousel-dots">
               <button v-for="(_, i) in recentArticles" :key="i"
                 :class="['carousel-dot', { active: i === carouselIndex }]"
                 @click="carouselGoTo(i)" :aria-label="'第' + (i+1) + '张'" />
@@ -1166,7 +1188,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 .drag-fade-enter-active, .drag-fade-leave-active { transition: opacity .2s; }
 .drag-fade-enter-from, .drag-fade-leave-to { opacity: 0; }
 
-/* ═══ 公众号文章轮播（纯 CSS） ═══ */
+/* ═══ 公众号文章轮播（Naive UI 风格） ═══ */
 .article-carousel {
   position: relative;
   margin-top: 28px;
@@ -1177,14 +1199,14 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   margin-right: auto;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
   background: var(--surface-1);
   user-select: none;
+  touch-action: none;
 }
 .carousel-track {
   display: flex;
   flex-direction: column;
-  transition: transform .45s cubic-bezier(.25,.46,.45,.94);
   will-change: transform;
 }
 .carousel-slide {
@@ -1200,7 +1222,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform .5s ease;
+  transition: transform .6s cubic-bezier(.22,1,.36,1);
 }
 .carousel-slide:hover .carousel-img {
   transform: scale(1.06);
@@ -1215,17 +1237,20 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 }
 .carousel-overlay {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
+  inset: 0;
+  background: linear-gradient(rgba(0,0,0,0.01) 55%, rgba(0,0,0,0.75));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   padding: 24px 16px 14px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.7));
   text-align: left;
   pointer-events: none;
 }
 .carousel-title {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: #fff;
-  line-height: 1.45;
+  line-height: 1.5;
   text-shadow: 0 1px 4px rgba(0,0,0,0.35);
   margin-bottom: 4px;
 }
@@ -1247,42 +1272,48 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 }
 .carousel-date {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.55);
   text-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
-/* 箭头 */
+/* ── 箭头（Naive UI 风格圆形按钮） ── */
 .carousel-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 2;
-  width: 28px; height: 28px;
+  z-index: 10;
+  width: 30px; height: 30px;
   border-radius: 50%;
   border: none;
-  background: rgba(0,0,0,0.25);
-  color: rgba(255,255,255,0.8);
+  background: rgba(0,0,0,0.2);
+  color: rgba(255,255,255,0.85);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity .2s, background .2s;
-  font-size: 14px;
+  transition: opacity .3s ease, background .25s ease, transform .25s ease;
+  padding: 0;
+  line-height: 0;
 }
 .article-carousel:hover .carousel-arrow { opacity: 1; }
-.carousel-arrow:hover { background: rgba(0,0,0,0.45); color: #fff; }
-.carousel-arrow-prev { left: 8px; }
-.carousel-arrow-next { right: 8px; }
-/* 指示点 */
+.carousel-arrow:hover {
+  background: rgba(0,0,0,0.45);
+  transform: translateY(-50%) scale(1.08);
+}
+.carousel-arrow:active { transform: translateY(-50%) scale(0.95); }
+.carousel-arrow-prev { left: 10px; }
+.carousel-arrow-next { right: 10px; }
+/* ── 指示点（Naive UI 风格右侧竖排） ── */
 .carousel-dots {
   position: absolute;
-  right: 10px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 2;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 .carousel-dot {
   width: 8px; height: 8px;
@@ -1291,12 +1322,14 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   background: rgba(255,255,255,0.35);
   cursor: pointer;
   padding: 0;
-  transition: background .2s, transform .2s;
+  transition: background .3s ease, transform .3s ease, box-shadow .3s ease;
+  position: relative;
 }
-.carousel-dot:hover { background: rgba(255,255,255,0.55); }
+.carousel-dot:hover { background: rgba(255,255,255,0.6); }
 .carousel-dot.active {
   background: #fff;
-  transform: scale(1.25);
+  transform: scale(1.3);
+  box-shadow: 0 0 6px rgba(255,255,255,0.3);
 }
 .carousel-title {
   font-size: 13px;
