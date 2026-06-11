@@ -126,6 +126,17 @@ else
   exit 1
 fi
 
+# ── 3.5 预装 PM2 进程管理器 ─────────────────────────────────────────
+# 提前装好，配置向导勾 PM2 时秒过
+info "预装 PM2 进程管理器..."
+if command -v pm2 &>/dev/null; then
+  ok "PM2 已安装，跳过"
+elif retry "npm install -g pm2 --registry https://registry.npmmirror.com 2>&1" "PM2 全局安装"; then
+  ok "PM2 预装完成"
+else
+  warn "PM2 预装失败，可在配置向导中重试"
+fi
+
 # ── 4. 构建前端 ─────────────────────────────────────────────────────
 info "构建前端..."
 if retry "npm run build-only 2>&1" "前端构建"; then

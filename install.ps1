@@ -7,6 +7,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# 解除 .ps1 执行限制，后续的 reset.ps1 可以直接运行
+$currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+if ($currentPolicy -eq 'Restricted' -or $currentPolicy -eq 'Undefined') {
+    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction SilentlyContinue
+}
+# PowerShell 5.1 兼容：用于在脚本退出前暂停，让用户看到错误信息
+function Pause-Exit($code = 1) {
+    Write-Host ""
+    Write-Host "按任意键退出..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit $code
+}
 
 # 颜色输出
 function Write-Info { Write-Host "[INFO] $args" -ForegroundColor Cyan }
@@ -15,6 +27,8 @@ function Write-Warn { Write-Host "[WARN] $args" -ForegroundColor Yellow }
 function Write-Err { Write-Host "[ERROR] $args" -ForegroundColor Red }
 
 # 重试机制
+# 注意：不要在被执行的脚本块中使用 2>&1 — PS 5.1 下 stderr 会被转为 ErrorRecord，
+# 与 $ErrorActionPreference = "Stop" 冲突，导致 npm 的正常 warnings 被误判为异常
 function Invoke-WithRetry {
     param(
         [scriptblock]$ScriptBlock,
@@ -26,12 +40,17 @@ function Invoke-WithRetry {
     while ($retry -lt $MaxRetries) {
         try {
             & $ScriptBlock
+            # 对原生命令检查退出码
+            if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) {
+                throw "Exit code: $LASTEXITCODE"
+            }
             return $true
         }
         catch {
             $retry++
             if ($retry -lt $MaxRetries) {
                 Write-Warn "$Description 失败，正在重试 ($retry/$MaxRetries)..."
+                if ($_.Exception.Message) { Write-Host "  → $($_.Exception.Message)" -ForegroundColor DarkGray }
                 Start-Sleep -Seconds 2
             }
         }
@@ -64,7 +83,7 @@ function Install-NodeJS {
         Invoke-WebRequest -Uri $nodeUrl -OutFile $installerPath -UseBasicParsing
     } -Description "下载 Node.js")) {
         Write-Err "下载失败，请检查网络连接或手动安装 Node.js 22+"
-        exit 1
+        Pause-Exit 1
     }
 
     Write-Info "安装 Node.js..."
@@ -105,24 +124,39 @@ Write-Ok "npm 镜像源已设置为淘宝源"
 # ── 3. 安装项目依赖 ─────────────────────────────────────────────────
 Write-Info "安装后端依赖..."
 Set-Location "$PSScriptRoot\server"
-if (-not (Invoke-WithRetry -ScriptBlock { npm install 2>&1 } -Description "后端依赖安装")) {
+if (-not (Invoke-WithRetry -ScriptBlock { npm install } -Description "后端依赖安装")) {
     Write-Err "后端依赖安装失败，请检查网络连接"
-    exit 1
+    Pause-Exit 1
 }
 Write-Ok "后端依赖安装完成"
 
 Write-Info "安装前端依赖..."
 Set-Location $PSScriptRoot
-if (-not (Invoke-WithRetry -ScriptBlock { npm install 2>&1 } -Description "前端依赖安装")) {
+if (-not (Invoke-WithRetry -ScriptBlock { npm install } -Description "前端依赖安装")) {
     Write-Err "前端依赖安装失败，请检查网络连接"
-    exit 1
+    Pause-Exit 1
 }
 Write-Ok "前端依赖安装完成"
+
+# ── 3.5 预装 PM2 进程管理器 ─────────────────────────────────────────
+# 提前安装好，这样配置向导中勾选 PM2 时就能秒过，无需等待下载
+Write-Info "预装 PM2 进程管理器..."
+if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) {
+    if (Invoke-WithRetry -ScriptBlock { npm install -g pm2 --registry https://registry.npmmirror.com } -Description "PM2 全局安装") {
+        Write-Ok "PM2 预装完成"
+    }
+    else {
+        Write-Warn "PM2 预装失败，可在配置向导中重试"
+    }
+}
+else {
+    Write-Ok "PM2 已安装，跳过"
+}
 
 # ── 4. 构建前端 ─────────────────────────────────────────────────────
 if (-not $SkipBuild) {
     Write-Info "构建前端..."
-    if (-not (Invoke-WithRetry -ScriptBlock { npm run build-only 2>&1 } -Description "前端构建")) {
+    if (-not (Invoke-WithRetry -ScriptBlock { npm run build-only } -Description "前端构建")) {
         Write-Warn "前端构建失败，部分功能可能不可用"
         Write-Host "  可在安装后手动运行: cd $PSScriptRoot && npm run build"
     }
@@ -140,16 +174,25 @@ Write-Host ""
 Set-Location "$PSScriptRoot\server"
 
 # 后台启动配置向导
-$setupProcess = Start-Process -FilePath "npx" -ArgumentList "tsx", "src/setup/index.ts" -PassThru -WindowStyle Hidden -RedirectStandardOutput "$env:TEMP\ourclass-setup.log" -RedirectStandardError "$env:TEMP\ourclass-setup-error.log"
+# 注意：必须用 npx.cmd 而不是 npx — Start-Process 使用 Windows CreateProcess，
+# 不识别 PATHEXT 之外的扩展名（如 .ps1），而 Get-Command 可能优先返回 npx.ps1
+try {
+    $setupProcess = Start-Process -FilePath "npx.cmd" -ArgumentList "tsx", "src/setup/index.ts" -PassThru -WindowStyle Hidden -RedirectStandardOutput "$env:TEMP\ourclass-setup.log" -RedirectStandardError "$env:TEMP\ourclass-setup-error.log" -ErrorAction Stop
+} catch {
+    Write-Warn "配置向导启动失败: $($_.Exception.Message)"
+    $setupProcess = $null
+}
 
 # 等待 3 秒验证向导已启动
-Start-Sleep -Seconds 3
-if (-not $setupProcess.HasExited) {
-    Write-Ok "配置向导已启动 (PID: $($setupProcess.Id))"
-}
-else {
-    Write-Warn "配置向导可能未正常启动"
-    Write-Host "  查看日志: Get-Content $env:TEMP\ourclass-setup.log"
+if ($setupProcess) {
+    Start-Sleep -Seconds 3
+    if (-not $setupProcess.HasExited) {
+        Write-Ok "配置向导已启动 (PID: $($setupProcess.Id))"
+    }
+    else {
+        Write-Warn "配置向导可能未正常启动"
+        Write-Host "  查看日志: Get-Content $env:TEMP\ourclass-setup.log"
+    }
 }
 
 # 自动打开 Edge 浏览器访问配置向导

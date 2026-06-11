@@ -74,8 +74,9 @@ function ensurePermissionGroups(db: any) {
     );
   `)
 
-  const count = db.prepare('SELECT COUNT(*) as c FROM permission_groups').get() as { c: number }
-  if (count.c > 0) return
+  // 只检查 admin 组是否存在——种子数据可能已有 教师/学生 组但没有 运维 组
+  const adminExists = db.prepare("SELECT COUNT(*) as c FROM permission_groups WHERE group_type = 'admin'").get() as { c: number }
+  if (adminExists.c > 0) return
 
   const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?, ?)')
 
@@ -147,11 +148,11 @@ const app = express()
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 
-// Serve favicon
-app.get('/favicon.ico', (_req, res) => {
-  const faviconPath = join(publicPath, 'favicon.ico')
+// Serve favicon — 都返回 SVG logo，覆盖浏览器默认请求 /favicon.ico
+app.get(['/favicon.ico', '/favicon.svg'], (_req, res) => {
+  const faviconPath = join(publicPath, 'favicon.svg')
   if (existsSync(faviconPath)) {
-    res.sendFile(faviconPath)
+    res.type('image/svg+xml').sendFile(faviconPath)
   } else {
     res.status(404).end()
   }
@@ -210,15 +211,25 @@ app.post('/api/setup/admin', async (req, res) => {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
     if (existing) return res.status(409).json({ error: '用户名已存在' })
 
-    const groupId = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'admin' LIMIT 1").get() as any
-    if (!groupId) return res.status(500).json({ error: '权限组初始化失败' })
+    // 查找运维权限组（按 group_type + 名称双重回退）
+    let groupRow = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'admin' LIMIT 1").get() as any
+    if (!groupRow) {
+      groupRow = db.prepare("SELECT id FROM permission_groups WHERE name = '运维' LIMIT 1").get() as any
+    }
+    if (!groupRow) {
+      // 仍没找到，直接创建
+      const result = db.prepare("INSERT INTO permission_groups (name, description, group_type) VALUES (?, ?, ?)")
+        .run('运维', '系统运维管理员，拥有全部权限', 'admin')
+      groupRow = { id: result.lastInsertRowid }
+    }
+    const groupId = groupRow.id
 
     // Hash password with bcrypt before storing
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS)
 
     db.prepare(
       'INSERT INTO users (username, display_name, role, class, password, group_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(username, display_name || '管理员', 'teacher', stuClass || '', hashedPassword, groupId.id)
+    ).run(username, display_name || '管理员', 'teacher', stuClass || '', hashedPassword, groupId)
 
     saveState({ admin_created: true, step: 'admin' })
     res.json({ success: true })
@@ -284,11 +295,10 @@ app.post('/api/setup/config', (req, res) => {
   }
 })
 
-// 5. 安装 PM2 并启动服务
+// 5. 安装 PM2 并启动服务（流式输出日志）
 app.post('/api/setup/apply', async (req, res) => {
   const { use_pm2 } = req.body
-  const port = getState().port || 3000
-  const log: string[] = []
+  let port = getState().port || 3000
 
   // Validate: admin and config must be done
   const state = getState()
@@ -310,77 +320,126 @@ app.post('/api/setup/apply', async (req, res) => {
     return res.status(400).json({ error: 'JWT_SECRET 未配置，请先保存配置' })
   }
 
+  // ── Start streaming response ──
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  function emit(msg: string) {
+    try { res.write(msg + '\n') } catch { /* client disconnected */ }
+  }
+  function emitDone(payload: object) {
+    try { res.write('__DONE__:' + JSON.stringify(payload) + '\n') } catch {}
+    try { res.end() } catch {}
+  }
+
   try {
     // 1. Build frontend
-    log.push('[1/3] 构建前端...')
+    emit('[1/3] 构建前端...')
     try {
       execSync('npm run build-only 2>&1', { encoding: 'utf-8', timeout: 120000, cwd: PROJECT_ROOT })
-      log.push('✅ 前端构建完成')
+      emit('✅ 前端构建完成')
     } catch (buildErr: any) {
-      log.push('⚠️ 前端构建失败: ' + buildErr.message)
-      // Continue anyway - backend can still work
+      emit('⚠️ 前端构建失败: ' + buildErr.message)
     }
 
-    // 2. Install PM2 if requested
+    // 2. Install PM2 if requested (with npm mirror for speed)
     if (use_pm2) {
-      log.push('[2/3] 安装 PM2...')
+      emit('[2/3] 安装 PM2...')
       try {
-        execSync('npm install -g pm2 2>&1', { encoding: 'utf-8', timeout: 120000 })
-        log.push('✅ PM2 安装完成')
+        execSync('npm install -g pm2 --registry https://registry.npmmirror.com 2>&1', { encoding: 'utf-8', timeout: 120000 })
+        emit('✅ PM2 安装完成')
       } catch (pm2Err: any) {
-        log.push('⚠️ PM2 安装失败: ' + pm2Err.message)
-        // Fall back to direct start
+        emit('⚠️ PM2 安装失败: ' + pm2Err.message)
+        emit('  → 跳过 PM2，走直接启动')
       }
     }
 
     // 3. Start server
-    log.push('[3/3] 启动服务...')
+    emit('[3/3] 启动服务...')
 
-    // Write ecosystem.config.js
+    // Write ecosystem.config.cjs (.cjs to work with "type":"module" in package.json)
+    const isWin = process.platform === 'win32'
+    const serverCwd = join(PROJECT_ROOT, 'server')
     const ecoConfig = {
       name: 'ourclass',
-      script: 'node_modules/.bin/tsx',
+      script: join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
       args: 'src/index.ts',
-      cwd: join(PROJECT_ROOT, 'server'),
+      cwd: serverCwd,
       env: { NODE_ENV: 'production' },
       instances: 1,
       exec_mode: 'fork',
     }
 
-    writeFileSync(join(PROJECT_ROOT, 'ecosystem.config.js'),
+    writeFileSync(join(PROJECT_ROOT, 'ecosystem.config.cjs'),
       `module.exports = { apps: [${JSON.stringify(ecoConfig, null, 2)}] }`)
 
     let started = false
-    if (use_pm2) {
-      try {
-        execSync(`cd "${PROJECT_ROOT}" && pm2 start ecosystem.config.js 2>&1`, { encoding: 'utf-8', timeout: 15000 })
-        execSync(`cd "${PROJECT_ROOT}" && pm2 save 2>&1`, { encoding: 'utf-8', timeout: 10000 })
-        started = true
-        log.push('✅ PM2 启动成功')
-      } catch (pm2StartErr: any) {
-        log.push('⚠️ PM2 启动失败，尝试直接启动...')
+    const targetPort = getState().port || 3000
+
+    // Health check: poll /api/health until server responds
+    async function waitForHealth(maxSec: number): Promise<boolean> {
+      for (let i = 0; i < maxSec; i++) {
+        await new Promise(r => setTimeout(r, 1000))
+        try {
+          const r = await fetch(`http://localhost:${targetPort}/api/health`)
+          if (r.ok) return true
+        } catch { /* server not ready yet */ }
       }
+      return false
     }
 
+    // ── Try PM2 first (short timeout — fail fast) ──
+    if (use_pm2) {
+      emit('[尝试] PM2 启动...')
+      try {
+        execSync(`pm2 start ecosystem.config.cjs`, {
+          encoding: 'utf-8', timeout: 8000, cwd: PROJECT_ROOT, shell: 'cmd.exe',
+        })
+        execSync(`pm2 save`, {
+          encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT, shell: 'cmd.exe',
+        })
+        if (await waitForHealth(8)) {
+          started = true
+          emit(`✅ PM2 启动成功 (http://localhost:${targetPort})`)
+        }
+      } catch (pm2StartErr: any) {
+        const pm2ErrMsg = pm2StartErr?.stderr?.toString().trim() || pm2StartErr?.message || ''
+        if (pm2ErrMsg) emit(`  PM2: ${pm2ErrMsg}`)
+      }
+      if (!started) emit('  → 走直接启动...')
+    }
+
+    // ── Direct start (reliable path) ──
     if (!started) {
-      // Direct start
-      const child = spawn('npx', ['tsx', 'src/index.ts'], {
-        cwd: join(PROJECT_ROOT, 'server'),
+      emit('[尝试] 直接启动...')
+      const tsxCli = join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+      const child = spawn('node', [tsxCli, 'src/index.ts'], {
+        cwd: serverCwd,
         stdio: 'ignore',
-        detached: true,
+        windowsHide: true,
+        ...(isWin ? {} : { detached: true }),
       })
       child.on('error', (err) => {
         console.error('[setup] failed to spawn server:', err)
       })
       child.unref()
-      log.push('✅ 服务启动成功')
+
+      if (await waitForHealth(12)) {
+        started = true
+        emit(`✅ 服务启动成功 (http://localhost:${targetPort})`)
+      } else {
+        emit('⚠️ 服务启动超时，请检查日志后手动启动')
+        emit('  cd server && npx tsx src/index.ts')
+      }
     }
 
     saveState({ step: 'done', pm2_installed: !!use_pm2 })
-    res.json({ success: true, port, pm2: !!use_pm2, log })
+    emitDone({ success: true, port: targetPort, pm2: !!use_pm2 })
   } catch (e: any) {
     console.error('[setup] apply error:', e)
-    res.status(500).json({ error: e.message, log })
+    emitDone({ success: false, error: e.message })
   }
 })
 
