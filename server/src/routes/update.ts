@@ -212,7 +212,8 @@ router.post('/apply', async (req: Request, res: Response) => {
       ['拉取代码', 'git', ['fetch', 'origin', 'main'], { timeout: 30000 }, true],
       ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000 }, true],
       ['清理文件', 'git', ['clean', '-fd'], { timeout: 10000 }, false],
-      ['安装依赖', 'npm', ['install'], { timeout: 120000 }, true],
+      ['安装前端依赖', 'npm', ['install'], { timeout: 120000, cwd: FRONTEND_ROOT }, true],
+      ['安装后端依赖', 'npm', ['install'], { timeout: 120000, cwd: PROJECT_ROOT }, true],
       ['构建前端', 'npm', ['run', 'build-only'], { timeout: 120000, cwd: FRONTEND_ROOT }, false],
     ] as const) {
       if (aborted) return
