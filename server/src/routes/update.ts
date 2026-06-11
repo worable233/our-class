@@ -9,6 +9,7 @@ import { writeAuditLog } from './audit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROJECT_ROOT = join(__dirname, '../..')
+const FRONTEND_ROOT = join(PROJECT_ROOT, '..')  // 前端项目根目录（含 package.json、dist/）
 
 let updating = false
 
@@ -212,6 +213,7 @@ router.post('/apply', async (req: Request, res: Response) => {
       ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000 }, true],
       ['清理文件', 'git', ['clean', '-fd'], { timeout: 10000 }, false],
       ['安装依赖', 'npm', ['install'], { timeout: 120000 }, true],
+      ['构建前端', 'npm', ['run', 'build-only'], { timeout: 120000, cwd: FRONTEND_ROOT }, false],
     ] as const) {
       if (aborted) return
       emit('step', { message: '正在' + label + '...' })
