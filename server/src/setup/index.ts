@@ -115,7 +115,7 @@ function ensurePermissionGroups(db: any) {
     'tool.student.read', 'tool.student.write',
     'tool.score.read', 'tool.score.write',
     'tool.assignment', 'tool.utility', 'tool.article',
-    'articles.manage', 'articles.read',
+    'articles.read',
   ]
   for (const perm of teacherPermissions) {
     insert.run(teacherGroup.lastInsertRowid, perm)
