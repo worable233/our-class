@@ -30,6 +30,18 @@ if (!existsSync(ARTICLES_DIR)) mkdirSync(ARTICLES_DIR, { recursive: true })
 const router = Router()
 router.use(authMiddleware)
 
+// ── Public: recent articles for homepage carousel (no auth required) ──
+router.get('/recent', (_req: Request, res: Response) => {
+  const db = getDb()
+  const articles = db.prepare(`
+    SELECT id, title, cover_url, author, created_at
+    FROM articles
+    ORDER BY created_at DESC
+    LIMIT 10
+  `).all()
+  ok(res, articles)
+})
+
 // ── Turndown config ──────────────────────────────────────────────────────────
 
 const turndown = new TurndownService({

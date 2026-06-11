@@ -24,10 +24,9 @@ const recentArticles = ref<ArticleItem[]>([])
 const articlesLoading = ref(false)
 
 async function loadRecentArticles() {
-  if (!auth.isLoggedIn) return
   articlesLoading.value = true
   try {
-    const data = await api.get<ArticleItem[]>('/articles')
+    const data = await api.get<ArticleItem[]>('/articles/recent')
     recentArticles.value = (data || []).slice(0, 4)
   } catch { recentArticles.value = [] }
   finally { articlesLoading.value = false }
@@ -199,10 +198,12 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 })
 
 onMounted(async () => {
+  // Load recent articles for homepage carousel (public, no auth needed)
+  loadRecentArticles()
+
   // Load AI feature settings early (needed on homepage too)
   if (auth.isLoggedIn) {
     try { const s = await api.get<any>('/chat/settings'); if (s) settings.value = s } catch {}
-    loadRecentArticles()
   }
 
   // Only load conversation if URL has an encoded ID
