@@ -33,11 +33,15 @@ const pageTitle = computed(() => {
     '/teacher/articles': '公众号文章',
     '/teacher/disk': '网盘空间',
     '/teacher/update': '系统更新',
+    '/teacher/courses': '课程管理',
+    '/teacher/backup': '备份管理',
     '/student/disk': '网盘空间',
     '/student/points': '我的积分',
     '/student/leaderboard': '积分排行',
     '/student/assignments': '作业查询',
     '/student/profile': '个人主页',
+    '/student/points-manage': '积分管理',
+    '/student/articles': '公众号文章',
   }
   return titles[path] || 'OurClass'
 })
