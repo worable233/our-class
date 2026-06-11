@@ -1184,7 +1184,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 /* ═══ 公众号文章轮播（Naive UI 风格） ═══ */
 .article-carousel {
   position: relative;
-  margin: 28px 16px 8px;
+  margin: 28px 12px 8px;
   width: 100%;
   max-width: 500px;
   height: 240px;
