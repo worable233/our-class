@@ -1809,6 +1809,20 @@ const saveConfigSchema = z.object({
   city: z.string().optional(),
 })
 
+const updateConfigSchema = z.object({
+  api_key: z.string().optional(),
+  api_url: z.string().optional(),
+  model: z.string().optional(),
+  provider: z.enum(['anthropic', 'openai']).optional(),
+  search_api_url: z.string().optional(),
+  search_api_key: z.string().optional(),
+  city: z.string().optional(),
+})
+
+const testByIdSchema = z.object({
+  id: z.number().optional(),
+})
+
 const createConversationSchema = z.object({
   title: z.string().optional(),
 })
@@ -1938,25 +1952,22 @@ router.get(
   requirePermission('chat.config'),
   (req: Request, res: Response) => {
     const db = getDb()
-    const keyRecord = db
-      .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
-      .get() as ApiKeyRow | undefined
+    const rows = db
+      .prepare('SELECT * FROM api_keys ORDER BY is_active DESC, id ASC')
+      .all() as ApiKeyRow[]
 
-    if (!keyRecord) {
-      return ok(res, null)
-    }
+    const models = rows.map((r) => ({
+      id: r.id,
+      provider: r.provider,
+      model: r.model,
+      api_url: r.api_url || '',
+      has_key: !!r.api_key,
+      api_key: maskApiKey(r.api_key || ''),
+      is_active: !!r.is_active,
+      created_at: r.created_at,
+    }))
 
-    ok(res, {
-      id: keyRecord.id,
-      provider: keyRecord.provider,
-      has_key: !!keyRecord.api_key,
-      api_key: keyRecord.api_key ? maskApiKey(keyRecord.api_key) : '',
-      api_url: keyRecord.api_url || '',
-      model: keyRecord.model,
-      search_api_url: keyRecord.search_api_url || '',
-      has_search_key: !!keyRecord.search_api_key,
-      created_at: keyRecord.created_at,
-    })
+    ok(res, models)
   },
 )
 
@@ -1970,17 +1981,86 @@ router.post(
     const provider = explicitProvider || detectProvider(api_url || '', model || '')
     const userId = req.user!.id
 
-    const existing = db.prepare('SELECT * FROM api_keys ORDER BY id ASC LIMIT 1').get() as ApiKeyRow | undefined
-    const finalKey = api_key || existing?.api_key || ''
-    if (!finalKey) return fail(res, 400, 'NO_API_KEY', '请先输入 API Key')
+    if (!api_key) return fail(res, 400, 'NO_API_KEY', '请输入 API Key')
 
-    db.prepare('DELETE FROM api_keys').run()
+    // 如果是第一个模型，自动设为激活
+    const count = db.prepare('SELECT COUNT(*) as c FROM api_keys').get() as any
+    const isActive = count.c === 0 ? 1 : 0
+
+    const result = db.prepare(
+      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(userId, provider, api_key, api_url || '', model || '', search_api_url || '', search_api_key || '', isActive)
+
+    writeAuditLog(req.user!.id, req.user!.display_name, 'add_api_model', 'config', Number(result.lastInsertRowid), { provider, model: model || '' })
+    ok(res, { id: Number(result.lastInsertRowid), message: '模型已添加' })
+  },
+)
+
+router.put(
+  '/config/:id',
+  requirePermission('chat.config'),
+  validate(updateConfigSchema),
+  (req: Request, res: Response) => {
+    const db = getDb()
+    const id = Number(req.params.id)
+    if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的模型 ID')
+
+    const existing = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+    if (!existing) return fail(res, 404, 'NOT_FOUND', '模型不存在')
+
+    const { api_key, api_url, model, provider: explicitProvider, search_api_url, search_api_key } = req.body
+    const provider = explicitProvider || existing.provider
+    const finalKey = api_key || existing.api_key
+
     db.prepare(
-      'INSERT INTO api_keys (user_id, provider, api_key, api_url, model, search_api_url, search_api_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).run(userId, provider, finalKey, api_url || '', model || '', search_api_url || '', search_api_key || '')
+      'UPDATE api_keys SET provider = ?, api_key = ?, api_url = ?, model = ?, search_api_url = ?, search_api_key = ? WHERE id = ?',
+    ).run(provider, finalKey, api_url ?? existing.api_url, model ?? existing.model, search_api_url ?? existing.search_api_url, search_api_key ?? existing.search_api_key, id)
 
-    writeAuditLog(req.user!.id, req.user!.display_name, 'update_api_config', 'config', undefined, { provider, model: model || '' })
-    ok(res, { message: 'API 配置已保存', provider })
+    writeAuditLog(req.user!.id, req.user!.display_name, 'update_api_model', 'config', id, { provider, model: model || existing.model })
+    ok(res, { message: '模型已更新' })
+  },
+)
+
+router.delete(
+  '/config/:id',
+  requirePermission('chat.config'),
+  (req: Request, res: Response) => {
+    const db = getDb()
+    const id = Number(req.params.id)
+    if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的模型 ID')
+
+    const existing = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+    if (!existing) return fail(res, 404, 'NOT_FOUND', '模型不存在')
+
+    db.prepare('DELETE FROM api_keys WHERE id = ?').run(id)
+
+    // 如果删除的是激活模型，自动激活剩余第一个
+    if (existing.is_active) {
+      const first = db.prepare('SELECT id FROM api_keys ORDER BY id ASC LIMIT 1').get() as any
+      if (first) db.prepare('UPDATE api_keys SET is_active = 1 WHERE id = ?').run(first.id)
+    }
+
+    writeAuditLog(req.user!.id, req.user!.display_name, 'delete_api_model', 'config', id, { provider: existing.provider, model: existing.model })
+    ok(res, { message: '模型已删除' })
+  },
+)
+
+router.post(
+  '/config/:id/activate',
+  requirePermission('chat.config'),
+  (req: Request, res: Response) => {
+    const db = getDb()
+    const id = Number(req.params.id)
+    if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的模型 ID')
+
+    const existing = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+    if (!existing) return fail(res, 404, 'NOT_FOUND', '模型不存在')
+
+    db.prepare('UPDATE api_keys SET is_active = 0').run()
+    db.prepare('UPDATE api_keys SET is_active = 1 WHERE id = ?').run(id)
+
+    writeAuditLog(req.user!.id, req.user!.display_name, 'activate_api_model', 'config', id, { provider: existing.provider, model: existing.model })
+    ok(res, { message: '模型已激活' })
   },
 )
 
@@ -2244,11 +2324,16 @@ router.put('/conversations/:id/title', (req: Request, res: Response) => {
 
 // ── Test endpoint ────────────────────────────────────────────────────────
 
-router.post('/test', requirePermission('chat.config'), async (req: Request, res: Response) => {
+router.post('/test', requirePermission('chat.config'), validate(testByIdSchema), async (req: Request, res: Response) => {
   const db = getDb()
-  const keyRecord = db
-    .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
-    .get() as ApiKeyRow | undefined
+  const { id } = req.body
+
+  let keyRecord: ApiKeyRow | undefined
+  if (id) {
+    keyRecord = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+  } else {
+    keyRecord = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as ApiKeyRow | undefined
+  }
 
   if (!keyRecord) {
     return fail(res, 400, 'NO_API_KEY', '请先配置 API')
