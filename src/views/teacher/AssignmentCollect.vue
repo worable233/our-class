@@ -27,7 +27,8 @@ const selectedAssignment = ref<number | null>(null)
 const loading = ref(true)
 const allCourses = ref<CourseInfo[]>([])
 const showNew = ref(false)
-const newForm = ref({ title: '', description: '', due_date: '', course_id: null as number | null })
+const newForm = ref({ title: '', description: '', course_id: null as number | null })
+const dueDateTs = ref<number | null>(null)
 const gradeInputs = reactive<Record<number, { score: number | null; feedback: string }>>({})
 
 // Classes user can manage
@@ -107,18 +108,20 @@ async function loadClasses() {
 }
 
 function openNewForm() {
-  newForm.value = { title: '', description: '', due_date: '', course_id: selectedCourse.value }
+  newForm.value = { title: '', description: '', course_id: selectedCourse.value }
+  dueDateTs.value = null
   showNew.value = true
 }
 
 async function createAssignment() {
-  if (!newForm.value.title || !newForm.value.due_date) { message.warning('请填写标题和截止日期'); return }
+  if (!newForm.value.title || !dueDateTs.value) { message.warning('请填写标题和截止日期'); return }
   if (!newForm.value.course_id) { message.warning('请选择关联课程'); return }
   try {
+    const dueDate = new Date(dueDateTs.value).toISOString().slice(0, 10)
     await api.post('/assignments', {
       title: newForm.value.title,
       description: newForm.value.description,
-      due_date: newForm.value.due_date,
+      due_date: dueDate,
       course_id: newForm.value.course_id,
     })
     showNew.value = false
@@ -239,7 +242,7 @@ onMounted(() => { loadClasses(); load() })
             <n-select v-model:value="newForm.course_id" :options="courseOptions" placeholder="选择课程" />
           </n-form-item>
           <n-form-item label="截止日期">
-            <n-date-picker v-model:formatted-value="newForm.due_date" type="date" value-format="yyyy-MM-dd" placeholder="选择截止日期" style="width:100%" clearable />
+            <n-date-picker v-model:value="dueDateTs" type="date" placeholder="选择截止日期" style="width:100%" clearable />
           </n-form-item>
           <n-form-item label="描述">
             <n-input type="textarea" v-model:value="newForm.description" rows="3" placeholder="作业描述" />
@@ -248,7 +251,7 @@ onMounted(() => { loadClasses(); load() })
         <template #footer>
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <n-button @click="showNew = false">取消</n-button>
-            <n-button type="primary" @click="createAssignment" :disabled="!newForm.title || !newForm.due_date">发布</n-button>
+            <n-button type="primary" @click="createAssignment" :disabled="!newForm.title || !dueDateTs">发布</n-button>
           </div>
         </template>
       </n-modal>
