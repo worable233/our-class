@@ -41,7 +41,6 @@ const formSaving = ref(false)
 
 // Test state per model
 const testingId = ref<number | null>(null)
-const testResults = ref<Record<number, { ok: boolean; model?: string; latency?: number; tokens?: number; error?: string }>>({})
 
 // ── Tab 2: Feature Toggles ──────────────────────────────────
 
@@ -187,13 +186,10 @@ async function activateModel(id: number) {
 
 async function testModel(id: number) {
   testingId.value = id
-  delete testResults.value[id]
   try {
     const res = await api.post<{ success: boolean; model: string; latency_ms: number; input_tokens: number }>('/chat/test', { id })
-    testResults.value[id] = { ok: true, model: res.model, latency: res.latency_ms, tokens: res.input_tokens }
     message.success(`连接成功 · ${res.model} · ${res.latency_ms}ms`, { duration: 4000 })
   } catch (e: any) {
-    testResults.value[id] = { ok: false, error: e.message || '连接失败' }
     message.error(e.message || '连接失败', { duration: 5000 })
   } finally {
     testingId.value = null
@@ -366,12 +362,6 @@ onMounted(() => {
                     <div class="model-meta">
                       {{ m.api_url || (m.provider === 'anthropic' ? 'api.anthropic.com' : 'api.openai.com') }}
                       <span v-if="m.has_key" class="key-ok">Key 已配置</span>
-                    </div>
-                    <div v-if="testResults[m.id]" class="test-result">
-                      <n-tag v-if="testResults[m.id]!.ok" type="success" size="tiny">
-                        连接成功 · {{ testResults[m.id]!.latency }}ms · {{ testResults[m.id]!.model }}
-                      </n-tag>
-                      <n-tag v-else type="error" size="tiny">{{ testResults[m.id]!.error }}</n-tag>
                     </div>
                   </div>
                   <n-space size="small" :wrap="false">
@@ -694,10 +684,6 @@ onMounted(() => {
 .key-ok {
   color: var(--success-color);
   margin-left: 8px;
-}
-
-.test-result {
-  margin-top: 4px;
 }
 
 .active-summary {
