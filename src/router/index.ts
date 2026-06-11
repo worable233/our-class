@@ -125,6 +125,12 @@ const router = createRouter({
           component: () => import('@/views/teacher/CourseManage.vue'),
           meta: { permissions: ['points.read'] },
         },
+        {
+          path: 'grades',
+          name: 'teacher-grades',
+          component: () => import('@/views/teacher/GradeManage.vue'),
+          meta: { permissions: ['scores.read'] },
+        },
       ],
     },
     {
@@ -169,6 +175,18 @@ const router = createRouter({
           path: 'disk',
           name: 'student-disk',
           component: () => import('@/views/student/StudentDisk.vue'),
+        },
+        {
+          path: 'scores',
+          name: 'student-scores',
+          component: () => import('@/views/student/ScoreDetails.vue'),
+          meta: { permissions: ['scores.read'] },
+        },
+        {
+          path: 'grade-ranking',
+          name: 'student-grade-ranking',
+          component: () => import('@/views/student/GradeRanking.vue'),
+          meta: { permissions: ['scores.read'] },
         },
       ],
     },

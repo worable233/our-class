@@ -59,6 +59,9 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/logs': ['audit_logs.read'],
   '/teacher/update': ['chat.config'],
   '/teacher/courses': ['points.read'],
+  '/teacher/grades': ['scores.read'],
+  '/student/scores': ['scores.read'],
+  '/student/grade-ranking': ['scores.read'],
 }
 
 function hasRouteAccess(path: string): boolean {
@@ -97,6 +100,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { key: '/teacher/articles', label: '公众号文章', icon: renderIcon(Globe) },
           { key: '/teacher/disk', label: '网盘空间', icon: renderIcon(HardDrive) },
           { key: '/teacher/courses', label: '课程管理', icon: renderIcon(BookOpen) },
+          { key: '/teacher/grades', label: '成绩管理', icon: renderIcon(ClipboardList) },
         ],
       },
       {
@@ -128,6 +132,8 @@ const menuOptions = computed<MenuOption[]>(() => {
         { key: '/student/leaderboard', label: '积分排行', icon: renderIcon(Trophy) },
         { key: '/student/points-manage', label: '积分总览', icon: renderIcon(Star) },
         { key: '/student/assignments', label: '作业查询', icon: renderIcon(List) },
+        { key: '/student/scores', label: '成绩查询', icon: renderIcon(ClipboardList) },
+        { key: '/student/grade-ranking', label: '成绩排名', icon: renderIcon(Trophy) },
         { key: '/student/articles', label: '公众号文章', icon: renderIcon(Globe) },
       ],
     },

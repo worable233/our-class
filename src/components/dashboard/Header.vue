@@ -35,6 +35,7 @@ const pageTitle = computed(() => {
     '/teacher/update': '系统更新',
     '/teacher/courses': '课程管理',
     '/teacher/backup': '备份管理',
+    '/teacher/grades': '成绩管理',
     '/student/disk': '网盘空间',
     '/student/points': '我的积分',
     '/student/leaderboard': '积分排行',
@@ -42,6 +43,8 @@ const pageTitle = computed(() => {
     '/student/profile': '个人主页',
     '/student/points-manage': '积分管理',
     '/student/articles': '公众号文章',
+    '/student/scores': '成绩查询',
+    '/student/grade-ranking': '成绩排名',
   }
   return titles[path] || 'OurClass'
 })
