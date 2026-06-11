@@ -56,8 +56,8 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
 
     if (!row) throw new AuthError()
 
-    // 从权限组类型推导角色（高度自治：不再硬编码组名称）
-    const role = (row.group_type === 'teacher' || row.group_type === 'admin') ? ('teacher' as const) : ('student' as const)
+    // 从权限组类型推导角色：只有明确标记为 student 的组才用学生端，其余（teacher/admin/custom）均为教师端
+    const role = row.group_type === 'student' ? ('student' as const) : ('teacher' as const)
 
     let permissions: string[] = []
     if (row.group_id) {

@@ -208,8 +208,8 @@ async function deleteRole(id: number) {
                   <n-tag size="tiny" :type="tagType(g.permissions.length)" round :bordered="false" style="flex-shrink:0">
                     {{ g.permissions.length }} 项
                   </n-tag>
-                  <n-tag v-if="g.group_type && g.group_type !== 'custom'" size="tiny" :bordered="false" :type="g.group_type === 'teacher' ? 'warning' : 'info'" round style="flex-shrink:0; font-size: 11px">
-                    {{ g.group_type === 'teacher' ? '教师端' : '学生端' }}
+                  <n-tag v-if="g.group_type && g.group_type !== 'custom'" size="tiny" :bordered="false" :type="g.group_type === 'student' ? 'info' : 'warning'" round style="flex-shrink:0; font-size: 11px">
+                    {{ g.group_type === 'student' ? '学生端' : '教师端' }}
                   </n-tag>
                   <n-tag v-else size="tiny" :bordered="false" round style="flex-shrink:0; font-size: 11px; opacity: 0.5">
                     自定义
@@ -284,7 +284,7 @@ async function deleteRole(id: number) {
 
         <n-form-item v-if="activeTab === 'identities' && currentUserPerms.includes('roles.manage')" label="类型">
           <n-select v-model:value="form.group_type" :options="[
-            { label: '自定义（默认学生端）', value: 'custom' },
+            { label: '自定义', value: 'custom' },
             { label: '教师端', value: 'teacher' },
             { label: '学生端', value: 'student' },
           ]" :disabled="!!editing" />

@@ -70,9 +70,9 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
     db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, user.id)
   }
 
-  // 从权限组类型推导角色（高度自治：不再硬编码组名称）
+  // 从权限组类型推导角色：只有明确标记为 student 的组才用学生端，其余（teacher/admin/custom）均为教师端
   const groupType = user.group_type || 'custom'
-  const role = (groupType === 'teacher' || groupType === 'admin') ? ('teacher' as const) : ('student' as const)
+  const role = groupType === 'student' ? ('student' as const) : ('teacher' as const)
   const token = signToken({ id: user.id, role })
 
   // Load user permissions from group
