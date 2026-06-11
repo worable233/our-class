@@ -191,8 +191,10 @@ async function testModel(id: number) {
   try {
     const res = await api.post<{ success: boolean; model: string; latency_ms: number; input_tokens: number }>('/chat/test', { id })
     testResults.value[id] = { ok: true, model: res.model, latency: res.latency_ms, tokens: res.input_tokens }
+    message.success(`连接成功 · ${res.model} · ${res.latency_ms}ms`, { duration: 4000 })
   } catch (e: any) {
     testResults.value[id] = { ok: false, error: e.message || '连接失败' }
+    message.error(e.message || '连接失败', { duration: 5000 })
   } finally {
     testingId.value = null
   }
