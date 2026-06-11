@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Loader2, Check, ChevronDown, Copy, CheckCheck } from '@lucide/vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
 import * as XLSX from 'xlsx'
@@ -123,151 +123,7 @@ function handleContentClick(e: MouseEvent) {
   }
 }
 
-// ── Inline markdown formatting via marked.lexer() tokens ────────────────────
-
-let _fmtCache: string[] | null = null
-let _fmtCacheText = ''
-
-/**
- * 用 marked.lexer() 精确解析 markdown 语法树，
- * 返回每个字符位置的格式标记字符串（空格分隔的 class 名）
- */
-function computeCharFormats(content: string): string[] {
-  if (content === _fmtCacheText && _fmtCache) return _fmtCache
-
-  const n = content.length
-  const fmt: string[] = new Array(n).fill('')
-  let pos = 0
-
-  try {
-    function walk(tokens: marked.Token[], inherited = '') {
-      for (const token of tokens) {
-        const startPos = pos
-        const raw = (token as any).raw || ''
-
-        switch (token.type) {
-          case 'text': {
-            const t = token as marked.Tokens.Text
-            for (let i = 0; i < t.text.length; i++) fmt[pos + i] = inherited
-            pos += t.text.length
-            break
-          }
-          case 'strong': {
-            pos += 2 // **
-            walk((token as any).tokens || [], inherited + ' strong')
-            pos += 2 // **
-            break
-          }
-          case 'em': {
-            pos += 1 // *
-            walk((token as any).tokens || [], inherited + ' em')
-            pos += 1 // *
-            break
-          }
-          case 'del': {
-            pos += 2 // ~~
-            walk((token as any).tokens || [], inherited + ' del')
-            pos += 2 // ~~
-            break
-          }
-          case 'codespan': {
-            const t = token as marked.Tokens.CodeSpan
-            const delimLen = raw.length - t.text.length
-            const openLen = Math.ceil(delimLen / 2)
-            const closeLen = Math.floor(delimLen / 2)
-            pos += openLen
-            for (let i = 0; i < t.text.length; i++) fmt[pos + i] = inherited + ' code'
-            pos += t.text.length
-            pos += closeLen
-            break
-          }
-          case 'link': {
-            const t = token as marked.Tokens.Link
-            pos += 1 // [
-            walk(t.tokens || [], inherited + ' link')
-            pos += 1 // ]
-            pos += 1 // (
-            pos += t.href.length
-            if (t.title) pos += t.title.length + 3 //  "title"
-            pos += 1 // )
-            break
-          }
-          case 'image': {
-            pos += raw.length
-            break
-          }
-          default: {
-            // block-level: paragraph, heading, list_item, etc.
-            if ((token as any).tokens) {
-              walk((token as any).tokens, inherited)
-            } else {
-              pos += raw.length
-            }
-          }
-        }
-
-        // 确保总向前推进了 raw.length 个字符
-        pos = startPos + raw.length
-      }
-    }
-
-    walk(marked.lexer(content))
-  } catch {}
-
-  _fmtCache = fmt
-  _fmtCacheText = content
-  return fmt
-}
-
-/**
- * 将格式标记字符串应用到 DOM span 的 inline style 上
- */
-function applyFormatting(span: HTMLElement, fmtToken: string) {
-  const bold = fmtToken.includes('strong')
-  const italic = fmtToken.includes('em')
-  const code = fmtToken.includes('code')
-  const link = fmtToken.includes('link')
-  const del = fmtToken.includes('del')
-
-  span.style.fontWeight = bold ? '700' : ''
-  span.style.fontStyle = italic ? 'italic' : ''
-
-  if (code) {
-    span.style.fontFamily = "'JetBrains Mono','Fira Code',monospace"
-    span.style.background = 'var(--surface-2)'
-    span.style.border = '1px solid var(--hairline)'
-    span.style.borderRadius = '3px'
-    span.style.padding = '0 0.25em'
-    span.style.margin = '0 1px'
-  } else {
-    span.style.fontFamily = ''
-    span.style.background = ''
-    span.style.border = ''
-    span.style.borderRadius = ''
-    span.style.padding = ''
-    span.style.margin = ''
-  }
-
-  if (link) {
-    span.style.textDecoration = 'underline'
-    span.style.textUnderlineOffset = '3px'
-    span.style.textDecorationThickness = '1.5px'
-    span.style.textDecorationColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
-    span.style.cursor = 'pointer'
-  } else if (!code) {
-    span.style.textDecoration = ''
-    span.style.textDecorationColor = ''
-    span.style.cursor = ''
-  }
-
-  if (del) {
-    span.style.textDecoration = span.style.textDecoration
-      ? span.style.textDecoration + ' line-through'
-      : 'line-through'
-  }
-}
-
-// ── Streaming: v-html 渲染完整 markdown + nextTick 加动画 ──────────────────
+// ── Streaming: v-html 渲染完整 markdown + rAF 加动画 ───────────────────────
 
 const streamEl = ref<HTMLElement | null>(null)
 
@@ -420,9 +276,8 @@ watch(
     el.innerHTML = render(props.content)
 
     if (props.streaming) {
-      // streaming 态：在同一个微任务内把文本节点换成动画 span
-      // 此时浏览器尚未渲染，用户看不到"闪烁"
-      nextTick(() => animateTextNodes(el, props.content!))
+      // 用 requestAnimationFrame 确保在浏览器绘制前应用动画 span，避免闪烁
+      requestAnimationFrame(() => animateTextNodes(el, props.content!))
     }
   },
   { flush: 'post' },

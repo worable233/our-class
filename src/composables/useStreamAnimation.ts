@@ -30,19 +30,3 @@ export function getGlowRgb(): string {
     : '60,120,255'
 }
 
-/**
- * 生成 .stream-char 动画用 CSS 字符串（注入到组件 style 或全局）
- */
-export function buildStreamAnimationCSS(config = STREAM_CONFIG): string {
-  const dur = `${config.ANIMATION_DURATION_MS}ms`
-  const easing = config.ANIMATION_EASING
-  const opacity = config.INITIAL_OPACITY
-  return `
-@keyframes charGlow {
-  0%   { opacity: ${opacity}; }
-  100% { opacity: 1; }
-}
-.stream-char {
-  animation: charGlow ${dur} ${easing} forwards;
-}`
-}

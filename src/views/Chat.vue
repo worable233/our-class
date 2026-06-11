@@ -251,6 +251,7 @@ const pendingPickCard = ref<PendingPickCard | null>(null)
 let abortCtrl: AbortController | null = null
 let streamTimer = 0
 let loadSeq = 0   // prevent stale async loads
+let morphClone: HTMLElement | null = null  // morph 动画飞行元素，卸载时清理
 
 function cleanup() {
   clearTimeout(streamTimer)
@@ -258,6 +259,8 @@ function cleanup() {
   abortCtrl?.abort()
   abortCtrl = null
   streaming.value = false
+  // 清理 morph 动画残留
+  if (morphClone) { morphClone.remove(); morphClone = null }
 }
 
 onUnmounted(cleanup)
@@ -429,23 +432,19 @@ function onPickModalSkip() {
 
 function onPickModalDone(_cardData: PendingPickCard) {
   if (!pendingPickCard.value) return
-  console.log('[morph] onPickModalDone START')
   const card = pendingPickCard.value
   const cardIndex = messages.value.length - 1
 
   // Clone modal results NOW while modal is still in DOM
-  const allModalResults = document.querySelectorAll('.rp-modal-results')
+  const allModalResults = document.querySelectorAll('.rp-results')
   const modalResults = allModalResults[allModalResults.length - 1] as HTMLElement | null
   const sourceRect = modalResults?.getBoundingClientRect() ?? null
-  console.log('[morph] source found:', !!sourceRect, '| modalResults exists:', !!modalResults)
 
   // Create flying clone BEFORE hiding modal
-  let clone: HTMLElement | null = null
   if (sourceRect && modalResults) {
-    clone = modalResults.cloneNode(true) as HTMLElement
-    clone.style.cssText = `position:fixed;left:${sourceRect.left}px;top:${sourceRect.top}px;width:${sourceRect.width}px;z-index:1001;pointer-events:none;`
-    document.body.appendChild(clone)
-    console.log('[morph] clone created and appended to body')
+    morphClone = modalResults.cloneNode(true) as HTMLElement
+    morphClone.style.cssText = `position:fixed;left:${sourceRect.left}px;top:${sourceRect.top}px;width:${sourceRect.width}px;z-index:1001;pointer-events:none;`
+    document.body.appendChild(morphClone)
   }
 
   // Insert compact card inline (hidden initially)
@@ -455,37 +454,28 @@ function onPickModalDone(_cardData: PendingPickCard) {
   pendingPickCard.value = null
 
   nextTick(() => {
-    console.log('[morph] nextTick', { hasClone: !!clone, hasSourceRect: !!sourceRect })
-
-    if (!clone || !sourceRect) {
-      console.log('[morph] abort: no clone or sourceRect')
+    if (!morphClone || !sourceRect) {
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
-      if (clone) clone.remove()
+      if (morphClone) { morphClone.remove(); morphClone = null }
       return
     }
 
     const cardMsgs = document.querySelectorAll('.card-msg')
-    console.log('[morph] cardMsgs count:', cardMsgs.length)
     const lastCard = cardMsgs[cardMsgs.length - 1]
     const targetEl = lastCard?.querySelector('.rp-results') as HTMLElement | null
-    console.log('[morph] targetEl:', !!targetEl)
     const targetRect = targetEl?.getBoundingClientRect() ?? null
-    console.log('[morph] sourceRect:', sourceRect.left, sourceRect.top, sourceRect.width, sourceRect.height)
-    console.log('[morph] targetRect:', targetRect?.left, targetRect?.top, targetRect?.width, targetRect?.height)
 
     if (!targetRect) {
-      console.log('[morph] abort: no targetRect')
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
-      clone.remove()
+      morphClone.remove(); morphClone = null
       return
     }
 
     const dx = targetRect.left - sourceRect.left
     const dy = targetRect.top - sourceRect.top
     const scaleX = targetRect.width / (sourceRect.width || 1)
-    console.log('[morph] animating dx:', dx, 'dy:', dy, 'scaleX:', scaleX)
 
-    clone.animate([
+    morphClone.animate([
       { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
       { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, 1)`, opacity: 0.5 }
     ], {
@@ -493,8 +483,8 @@ function onPickModalDone(_cardData: PendingPickCard) {
       easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       fill: 'forwards'
     }).onfinish = () => {
-      console.log('[morph] animation finished, revealing card')
-      clone!.remove()
+      morphClone?.remove()
+      morphClone = null
       messages.value[cardIndex] = { ...messages.value[cardIndex], _morphing: false } as any
     }
   })
@@ -832,19 +822,25 @@ async function continueGeneration() {
               }
             }
           } else if (data.type === 'tool_start') {
-            messages.value.splice(messages.value.length - 1, 0, { role: 'tool' as any, content: data.label, toolStatus: 'running' } as any)
+            if (currentConvId.value === convId) {
+              messages.value.splice(messages.value.length - 1, 0, { role: 'tool' as any, content: data.label, toolStatus: 'running' } as any)
+            }
           } else if (data.type === 'tool_result') {
-            for (let j = messages.value.length - 1; j >= 0; j--) {
-              const m = messages.value[j] as any
-              if (m.role === 'tool' && m.toolStatus === 'running') {
-                m.toolStatus = 'done'; break
+            if (currentConvId.value === convId) {
+              for (let j = messages.value.length - 1; j >= 0; j--) {
+                const m = messages.value[j] as any
+                if (m.role === 'tool' && m.toolStatus === 'running') {
+                  m.toolStatus = 'done'; break
+                }
               }
             }
           } else if (data.type === 'tool_card') {
-            if (data.card?.type === 'random_pick') {
-              pendingPickCard.value = data.card as PendingPickCard
-            } else {
-              messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+            if (currentConvId.value === convId) {
+              if (data.card?.type === 'random_pick') {
+                pendingPickCard.value = data.card as PendingPickCard
+              } else {
+                messages.value.splice(messages.value.length - 1, 0, { role: 'card' as any, card: data.card } as any)
+              }
             }
           } else if (data.type === 'error') {
             if (currentConvId.value === convId) {
