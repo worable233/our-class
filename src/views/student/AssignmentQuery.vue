@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import type { Assignment } from '@/types'
+import type { Assignment, SubmissionFile } from '@/types'
 import { NButton, NCard, NModal, NInput, NForm, NFormItem, NSpace, NTag, NSpin, NEmpty, NText } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Calendar, Upload, FolderOpen, X, File } from '@lucide/vue'
@@ -14,13 +14,16 @@ const loading = ref(true)
 const showSubmit = ref(false)
 const submittingId = ref<number | null>(null)
 const submitContent = ref('')
+const isResubmit = ref(false)
 
-// 文件上传
+// 已提交的文件（重新编辑时加载）
+const existingFiles = ref<SubmissionFile[]>([])
+// 新增的本地文件
 const selectedFiles = ref<{ file: File; name: string }[]>([])
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// 网盘文件选择器（使用 FilePicker 组件）
+// 网盘文件选择器
 const showDiskPicker = ref(false)
 const diskPickedFiles = ref<{ name: string; path: string; size: number; size_display: string }[]>([])
 
@@ -32,11 +35,24 @@ async function load() {
 
 useRefresh(load)
 
-function openSubmit(assignmentId: number) {
+async function openSubmit(assignmentId: number, resubmit: boolean) {
   submittingId.value = assignmentId
   submitContent.value = ''
   selectedFiles.value = []
   diskPickedFiles.value = []
+  existingFiles.value = []
+  isResubmit.value = resubmit
+
+  if (resubmit) {
+    try {
+      const sub = await api.get<{ content: string; files: SubmissionFile[] } | null>(`/assignments/${assignmentId}/my-submission`)
+      if (sub) {
+        submitContent.value = sub.content || ''
+        existingFiles.value = sub.files || []
+      }
+    } catch {}
+  }
+
   showSubmit.value = true
 }
 
@@ -46,6 +62,8 @@ function handleClose() {
   submitContent.value = ''
   selectedFiles.value = []
   diskPickedFiles.value = []
+  existingFiles.value = []
+  isResubmit.value = false
 }
 
 function handleFileSelected(e: Event) {
@@ -61,12 +79,15 @@ function removeFile(index: number) {
   selectedFiles.value.splice(index, 1)
 }
 
+function removeExistingFile(index: number) {
+  existingFiles.value.splice(index, 1)
+}
+
 function removeDiskFile(path: string) {
   diskPickedFiles.value = diskPickedFiles.value.filter(f => f.path !== path)
 }
 
 function onDiskPick(files: { name: string; path: string; size: number; size_display: string }[]) {
-  // Merge, dedup by path
   const existing = new Set(diskPickedFiles.value.map(f => f.path))
   for (const f of files) {
     if (!existing.has(f.path)) {
@@ -85,12 +106,17 @@ async function submit() {
     formData.append('student_id', String(auth.user?.id))
     formData.append('content', submitContent.value)
 
-    // 本地上传的文件
+    // 保留的已有文件
+    if (existingFiles.value.length > 0) {
+      formData.append('kept_files', JSON.stringify(existingFiles.value))
+    }
+
+    // 新增的本地文件
     for (const sf of selectedFiles.value) {
       formData.append('file', sf.file, sf.name)
     }
 
-    // 从网盘选择的文件
+    // 新增的网盘文件
     if (diskPickedFiles.value.length > 0) {
       formData.append('disk_files', JSON.stringify(
         diskPickedFiles.value.map(f => ({ name: f.name, disk_path: f.path }))
@@ -156,7 +182,7 @@ onMounted(load)
                 v-if="a.submit_status !== 'graded'"
                 type="primary"
                 size="small"
-                @click="openSubmit(a.id)"
+                @click="openSubmit(a.id, a.submit_status === 'pending')"
               >
                 {{ a.submit_status === 'pending' ? '重新提交' : '提交作业' }}
               </n-button>
@@ -170,7 +196,7 @@ onMounted(load)
     <n-modal
       v-model:show="showSubmit"
       preset="card"
-      title="提交作业"
+      :title="isResubmit ? '重新提交' : '提交作业'"
       style="width: 560px"
       :mask-closable="false"
       @update:show="(val) => { if (!val) handleClose() }"
@@ -180,8 +206,22 @@ onMounted(load)
           <n-input type="textarea" v-model:value="submitContent" placeholder="输入作业内容或备注..." :rows="3" />
         </n-form-item>
 
-        <!-- 文件上传区 -->
-        <n-form-item label="上传文件">
+        <!-- 已提交的文件（重新编辑时） -->
+        <n-form-item v-if="existingFiles.length > 0" label="已提交文件">
+          <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
+            <div v-for="(f, i) in existingFiles" :key="'exist'+f.path"
+              style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-radius:4px;font-size:12px;"
+            >
+              <File :size="14" style="color:var(--accent);flex-shrink:0;" />
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.name }}</span>
+              <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">{{ f.size_display }}</span>
+              <X :size="14" style="cursor:pointer;color:var(--text-muted);flex-shrink:0;" @click="removeExistingFile(i)" />
+            </div>
+          </div>
+        </n-form-item>
+
+        <!-- 新增文件上传区 -->
+        <n-form-item label="添加文件">
           <div style="width:100%;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;gap:8px;">
               <NButton size="small" secondary @click="fileInput?.click()">
@@ -195,7 +235,7 @@ onMounted(load)
             </div>
             <input ref="fileInput" type="file" multiple style="display:none" @change="handleFileSelected" @click="(e: any) => e.target.value = null" />
 
-            <!-- 已选文件列表 -->
+            <!-- 新增文件列表 -->
             <div v-if="selectedFiles.length > 0 || diskPickedFiles.length > 0" style="display:flex;flex-direction:column;gap:4px;">
               <div v-for="(f, i) in selectedFiles" :key="'local'+i"
                 style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-radius:4px;font-size:12px;"
@@ -220,8 +260,8 @@ onMounted(load)
       <template #footer>
         <div style="display: flex; gap: 8px; justify-content: flex-end">
           <n-button @click="handleClose">取消</n-button>
-          <n-button type="primary" @click="submit" :loading="uploading" :disabled="!submitContent && selectedFiles.length === 0 && diskPickedFiles.length === 0">
-            提交
+          <n-button type="primary" @click="submit" :loading="uploading" :disabled="!submitContent && existingFiles.length === 0 && selectedFiles.length === 0 && diskPickedFiles.length === 0">
+            {{ isResubmit ? '重新提交' : '提交' }}
           </n-button>
         </div>
       </template>

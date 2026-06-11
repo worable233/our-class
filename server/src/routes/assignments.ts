@@ -260,6 +260,38 @@ router.post('/:id/submit', requirePermission('assignments.submit'), (req: Reques
   }
 })
 
+// ---------------------------------------------------------------------------
+// GET /api/assignments/:id/my-submission — 学生获取自己的提交
+// ---------------------------------------------------------------------------
+
+router.get('/:id/my-submission', (req: Request, res: Response) => {
+  const db = getDb()
+  const assignmentId = Number(req.params.id)
+  const studentId = req.user!.id
+
+  const sub = db.prepare(
+    'SELECT content, files, status, score, feedback, submitted_at FROM submissions WHERE assignment_id = ? AND student_id = ?',
+  ).get(assignmentId, studentId) as any
+
+  if (!sub) return ok(res, null)
+
+  let files: any[] = []
+  try { files = JSON.parse(sub.files || '[]') } catch {}
+
+  ok(res, {
+    content: sub.content || '',
+    files,
+    status: sub.status,
+    score: sub.score,
+    feedback: sub.feedback,
+    submitted_at: sub.submitted_at,
+  })
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/assignments/:id/submit — 提交/重新提交作业
+// ---------------------------------------------------------------------------
+
 async function doSubmit(req: Request, res: Response) {
   const db = getDb()
   const assignmentId = Number(req.params.id)
@@ -358,22 +390,40 @@ async function doSubmit(req: Request, res: Response) {
 
   const filesJson = JSON.stringify(savedFiles)
 
+  // ── 解析 kept_files（学生保留的文件列表） ────────────────────────
+  let keptFiles: { name: string; size: number; path: string; size_display: string }[] = []
+  try {
+    const raw = req.body.kept_files
+    if (raw) keptFiles = JSON.parse(raw)
+  } catch {}
+
   // ── 写入数据库 ────────────────────────────────────────────────────
   const existing = db
-    .prepare('SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ?')
-    .get(assignmentId, studentId) as { id: number } | undefined
+    .prepare('SELECT id, files FROM submissions WHERE assignment_id = ? AND student_id = ?')
+    .get(assignmentId, studentId) as { id: number; files: string } | undefined
 
   if (existing) {
-    // 合并已存文件和新文件
-    const existingSub = db.prepare('SELECT files FROM submissions WHERE id = ?').get(existing.id) as any
+    // 解析已有文件，找出被删除的文件并物理删除
     let existingFiles: any[] = []
-    try { existingFiles = JSON.parse(existingSub.files || '[]') } catch {}
-    const mergedFiles = JSON.stringify([...existingFiles, ...savedFiles])
+    try { existingFiles = JSON.parse(existing.files || '[]') } catch {}
+
+    const keptPaths = new Set(keptFiles.map(f => f.path))
+    const newPaths = new Set(savedFiles.map(f => f.path))
+    const removedFiles = existingFiles.filter(f => !keptPaths.has(f.path) && !newPaths.has(f.path))
+
+    for (const rf of removedFiles) {
+      try {
+        const fullPath = resolveSafePath(teacherId, rf.path)
+        if (existsSync(fullPath)) unlinkSync(fullPath)
+      } catch {}
+    }
+
+    const finalFiles = JSON.stringify([...keptFiles, ...savedFiles])
 
     db.prepare(
       'UPDATE submissions SET content = ?, files = ?, submitted_at = CURRENT_TIMESTAMP, status = ? WHERE id = ?',
-    ).run(content, mergedFiles, 'pending', existing.id)
-    ok(res, { success: true, updated: true, files: mergedFiles })
+    ).run(content, finalFiles, 'pending', existing.id)
+    ok(res, { success: true, updated: true, files: finalFiles })
     return
   }
 
