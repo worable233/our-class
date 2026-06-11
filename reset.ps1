@@ -152,7 +152,7 @@ Remove-Safe -Path "server\.env" -Label "环境配置 (server\.env)"
 if (Test-Path "server\uploads") {
     $uploadItems = Get-ChildItem "server\uploads" -Force -ErrorAction SilentlyContinue
     if ($uploadItems) {
-        Remove-Safe -Path "server\uploads\*" -Label "上传文件 (server\uploads\)"
+        Remove-Safe -Path "server\uploads\*" -Label "上传文件 (server\uploads\)" -Recurse
     }
     else {
         Write-Info "上传目录为空，跳过"
