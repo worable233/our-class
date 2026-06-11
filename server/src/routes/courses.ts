@@ -142,7 +142,7 @@ router.put('/:id', requirePermission('points.read'), validate(updateSchema), (re
 })
 
 // POST /api/courses/:id/cover — 上传封面图（本地上传）
-router.post('/:id/cover', (req: Request, res: Response) => {
+router.post('/:id/cover', requirePermission('points.read'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')
@@ -171,7 +171,7 @@ router.post('/:id/cover', (req: Request, res: Response) => {
 })
 
 // POST /api/courses/:id/cover-from-disk — 从用户网盘选择封面图
-router.post('/:id/cover-from-disk', (req: Request, res: Response) => {
+router.post('/:id/cover-from-disk', requirePermission('points.read'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效 ID')

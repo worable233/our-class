@@ -103,9 +103,18 @@ router.get('/:id', requirePermission('students.write'), (req: Request, res: Resp
     .prepare(
       `SELECT id, username, display_name, class, avatar, student_no, nickname, group_id, role_id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`,
     )
-    .get(req.params.id)
+    .get(req.params.id) as any
 
   if (!student) throw new NotFoundError('学生不存在')
+
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(student.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权查看其他班级学生')
+    }
+  }
+
   ok(res, student)
 })
 
@@ -138,8 +147,8 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   }
 
   if (req.body.group_id !== undefined) {
-    // 权限提升防护：非教师用户不能修改 group_id
-    if (req.user?.role !== 'teacher') {
+    // 权限提升防护：需要 roles.manage 权限才能修改权限组
+    if (!req.user?.permissions?.includes('roles.manage')) {
       return fail(res, 403, 'FORBIDDEN', '无权限修改权限组')
     }
     fields.push('group_id = ?')
@@ -155,8 +164,8 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   }
 
   if (req.body.role_id !== undefined) {
-    // 权限提升防护：非教师用户不能修改 role_id
-    if (req.user?.role !== 'teacher') {
+    // 权限提升防护：需要 roles.manage 权限才能修改职位
+    if (!req.user?.permissions?.includes('roles.manage')) {
       return fail(res, 403, 'FORBIDDEN', '无权限修改角色')
     }
     fields.push('role_id = ?')
@@ -193,8 +202,16 @@ router.delete('/:id', requirePermission('students.write'), (req: Request, res: R
   const id = req.params.id
 
   // Check student exists
-  const student = db.prepare(`SELECT id FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).get(id)
+  const student = db.prepare(`SELECT id, class FROM users WHERE id = ? AND group_id = ${STUDENT_GROUP_SUBQUERY}`).get(id) as any
   if (!student) throw new NotFoundError('学生不存在')
+
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(student.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权删除其他班级学生')
+    }
+  }
 
   // Cascade delete all related data
   db.prepare('DELETE FROM comments WHERE author_id = ?').run(id)

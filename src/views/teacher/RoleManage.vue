@@ -26,8 +26,9 @@ const showModal = ref(false)
 const editing = ref<number | null>(null)
 const form = ref({ name: '', description: '', class: '', parent_id: null as number | null, group_type: 'custom' as string, permissions: [] as string[], storage_limit: 100 })
 const saving = ref(false)
-const activeTab = ref('identities')
+const activeTab = ref('roles')
 const currentUserPerms = computed(() => auth.permissions || [])
+const hasViewAll = computed(() => currentUserPerms.value.includes('classes.view_all'))
 const filterClass = ref('')
 const allClassList = ref<string[]>([])
 
@@ -75,10 +76,7 @@ function tagType(count: number) {
 }
 
 function canManageRoleGroup(g: PermissionGroup): boolean {
-  if (currentUserPerms.value.includes('roles.manage')) return true
-  if (currentUserPerms.value.includes('classes.view_all')) return true
-  const myClasses = (auth.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
-  return myClasses.includes(g.class)
+  return currentUserPerms.value.includes('roles.manage')
 }
 
 // ── Load ─────────────────────────────────────────────────────────
@@ -104,7 +102,10 @@ async function load() {
   finally { loading.value = false }
 }
 
-onMounted(load)
+onMounted(() => {
+  activeTab.value = hasViewAll.value ? 'identities' : 'roles'
+  load()
+})
 
 // ── Identity Group CRUD ─────────────────────────────────────────
 
@@ -196,7 +197,7 @@ async function deleteRole(id: number) {
 <template>
   <n-spin :show="loading">
     <n-tabs v-model:value="activeTab" type="line" animated style="margin-bottom: 12px">
-      <n-tab-pane name="identities" tab="身份管理">
+      <n-tab-pane v-if="hasViewAll" name="identities" tab="身份管理">
         <n-space vertical :size="12">
           <n-button v-if="currentUserPerms.includes('roles.manage')" @click="openIdentityNew" secondary>新建身份组</n-button>
 

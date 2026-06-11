@@ -24,8 +24,18 @@ const updateScoreSchema = z.object({
 router.get('/', requirePermission('scores.write'), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, course } = req.query
-  let sql = `SELECT s.*, u.display_name as student_name FROM scores s JOIN users u ON s.student_id = u.id WHERE 1=1`
+  let sql = `SELECT s.*, u.display_name as student_name, u.class FROM scores s JOIN users u ON s.student_id = u.id WHERE 1=1`
   const params: any[] = []
+
+  // 班级限制：无 classes.view_all 权限时只返回自己班级的数据
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      const placeholders = myClasses.map(() => '?').join(',')
+      sql += ` AND u.class IN (${placeholders})`
+      params.push(...myClasses)
+    }
+  }
 
   if (student_id) {
     sql += ` AND s.student_id = ?`
@@ -52,6 +62,16 @@ router.get('/rankings', requirePermission('scores.write'), (req: Request, res: R
     WHERE 1=1`
   const params: any[] = []
 
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      const placeholders = myClasses.map(() => '?').join(',')
+      sql += ` AND u.class IN (${placeholders})`
+      params.push(...myClasses)
+    }
+  }
+
   if (course) {
     sql += ` AND s.course = ?`
     params.push(course)
@@ -72,6 +92,17 @@ router.get('/rankings', requirePermission('scores.write'), (req: Request, res: R
 router.post('/', requirePermission('scores.write'), validate(createScoreSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, course, exam_name, score, date } = req.body
+
+  // 班级限制：验证学生在自己班级内
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const student = db.prepare('SELECT class FROM users WHERE id = ?').get(student_id) as any
+    if (!student) return fail(res, 404, 'NOT_FOUND', '学生不存在')
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(student.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权为其他班级学生录入成绩')
+    }
+  }
+
   const result = db.prepare(
     `INSERT INTO scores (student_id, course, exam_name, score, date) VALUES (?, ?, ?, ?, ?)`,
   ).run(student_id, course, exam_name, score, date || new Date().toISOString().split('T')[0])
@@ -81,8 +112,17 @@ router.post('/', requirePermission('scores.write'), validate(createScoreSchema),
 // PUT /api/scores/:id
 router.put('/:id', requirePermission('scores.write'), validate(updateScoreSchema), (req: Request, res: Response) => {
   const db = getDb()
-  const existing = db.prepare('SELECT id FROM scores WHERE id = ?').get(req.params.id)
+  const existing = db.prepare('SELECT s.*, u.class FROM scores s JOIN users u ON s.student_id = u.id WHERE s.id = ?').get(req.params.id) as any
   if (!existing) throw new NotFoundError('成绩记录不存在')
+
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(existing.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权修改其他班级学生的成绩')
+    }
+  }
+
   const { score } = req.body
   db.prepare('UPDATE scores SET score = ? WHERE id = ?').run(score, req.params.id)
   ok(res, { success: true })
@@ -91,8 +131,17 @@ router.put('/:id', requirePermission('scores.write'), validate(updateScoreSchema
 // DELETE /api/scores/:id
 router.delete('/:id', requirePermission('scores.write'), (req: Request, res: Response) => {
   const db = getDb()
-  const existing = db.prepare('SELECT id FROM scores WHERE id = ?').get(req.params.id)
+  const existing = db.prepare('SELECT s.*, u.class FROM scores s JOIN users u ON s.student_id = u.id WHERE s.id = ?').get(req.params.id) as any
   if (!existing) throw new NotFoundError('成绩记录不存在')
+
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(existing.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权删除其他班级学生的成绩')
+    }
+  }
+
   db.prepare('DELETE FROM scores WHERE id = ?').run(req.params.id)
   ok(res, { success: true })
 })

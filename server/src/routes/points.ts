@@ -30,6 +30,16 @@ router.get('/', requirePermission('points.read'), (req: Request, res: Response) 
     WHERE 1=1`
   const params: (string | number)[] = []
 
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      const placeholders = myClasses.map(() => '?').join(',')
+      sql += ` AND u.class IN (${placeholders})`
+      params.push(...myClasses)
+    }
+  }
+
   if (student_id) {
     sql += ` AND p.student_id = ?`
     params.push(Number(student_id))
@@ -58,6 +68,16 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
     WHERE u.group_id = pg.id`
   const params: (string | number)[] = []
 
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      const placeholders = myClasses.map(() => '?').join(',')
+      sql += ` AND u.class IN (${placeholders})`
+      params.push(...myClasses)
+    }
+  }
+
   if (className) {
     sql += ` AND u.class = ?`
     params.push(className as string)
@@ -71,25 +91,45 @@ router.get('/summary', requirePermission('points.read'), (req: Request, res: Res
 router.get('/top', requirePermission('points.read'), (req: Request, res: Response) => {
   const db = getDb()
   const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 365)
-  const rows = db.prepare(`
+  let sql = `
     SELECT u.id, u.display_name, u.class,
       SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE 0 END) as total_added,
       SUM(CASE WHEN p.type = 'deduct' THEN p.amount ELSE 0 END) as total_deducted,
       SUM(CASE WHEN p.type = 'add' THEN p.amount ELSE -p.amount END) as total
     FROM point_records p
     JOIN users u ON p.student_id = u.id
-    WHERE p.date >= date('now', '-' || ? || ' days')
-    GROUP BY u.id
-    ORDER BY total DESC
-    LIMIT 10
-  `).all(days)
-  ok(res, rows)
+    WHERE p.date >= date('now', '-' || ? || ' days')`
+  const params: any[] = [days]
+
+  // 班级限制
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (myClasses.length > 0) {
+      const placeholders = myClasses.map(() => '?').join(',')
+      sql += ` AND u.class IN (${placeholders})`
+      params.push(...myClasses)
+    }
+  }
+
+  sql += ` GROUP BY u.id ORDER BY total DESC LIMIT 10`
+  ok(res, db.prepare(sql).all(...params))
 })
 
 // POST /api/points
 router.post('/', requirePermission('points.write'), validate(createPointSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { student_id, reason, type, amount, date, review_type_id } = req.body
+
+  // 班级限制：验证学生在自己班级内
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const student = db.prepare('SELECT class FROM users WHERE id = ?').get(student_id) as any
+    if (!student) return fail(res, 404, 'NOT_FOUND', '学生不存在')
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(student.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权为其他班级学生加减分')
+    }
+  }
+
   const result = db.prepare(
     `INSERT INTO point_records (student_id, reason, type, amount, created_by, date, review_type_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(student_id, reason, type, amount, req.user?.id ?? 1, date ?? new Date().toISOString().split('T')[0], review_type_id || null)

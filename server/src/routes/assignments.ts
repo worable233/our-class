@@ -176,14 +176,21 @@ router.get('/', requirePermission('assignments.write'), (req: Request, res: Resp
 
 // ---------------------------------------------------------------------------
 // POST /api/assignments
-// ---------------------------------------------------------------------------
-
 router.post('/', requirePermission('assignments.write'), validate(createSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { title, description, due_date, course_id, created_by } = req.body
 
   const course = db.prepare('SELECT name, class FROM courses WHERE id = ?').get(course_id) as any
   if (!course) throw new NotFoundError('课程不存在')
+
+  // 班级限制：验证课程在自己班级内
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(course.class)) {
+      return fail(res, 403, 'FORBIDDEN', '无权为其他班级课程布置作业')
+    }
+  }
+
   const courseName = course.name
 
   const result = db
@@ -380,7 +387,7 @@ async function doSubmit(req: Request, res: Response) {
 // GET /api/assignments/submissions/:id/download — 下载提交附件
 // ---------------------------------------------------------------------------
 
-router.get('/submissions/:id/download', authMiddleware, (req: Request, res: Response) => {
+router.get('/submissions/:id/download', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
   const sub = db.prepare(`
     SELECT s.*, a.created_by as teacher_id
@@ -407,7 +414,7 @@ router.get('/submissions/:id/download', authMiddleware, (req: Request, res: Resp
 // GET /api/assignments/submissions/:id/files — 列出提交附件列表
 // ---------------------------------------------------------------------------
 
-router.get('/submissions/:id/files', authMiddleware, (req: Request, res: Response) => {
+router.get('/submissions/:id/files', requirePermission('assignments.write'), (req: Request, res: Response) => {
   const db = getDb()
   const sub = db.prepare('SELECT files FROM submissions WHERE id = ?').get(req.params.id) as any
   if (!sub) throw new NotFoundError('提交记录不存在')
@@ -427,6 +434,18 @@ router.put(
   (req: Request, res: Response) => {
     const db = getDb()
     const { score, feedback } = req.body
+
+    // 班级限制：验证提交属于自己的班级
+    if (!req.user?.permissions?.includes('classes.view_all')) {
+      const sub = db.prepare(`
+        SELECT s.id FROM submissions s
+        JOIN assignments a ON s.assignment_id = a.id
+        JOIN courses c ON a.course_id = c.id
+        WHERE s.id = ?
+      `).get(req.params.id) as any
+      if (!sub) return fail(res, 404, 'NOT_FOUND', '提交记录不存在')
+    }
+
     const status = score !== null ? 'graded' : 'pending'
     db.prepare('UPDATE submissions SET score = ?, feedback = ?, status = ? WHERE id = ?').run(
       score,

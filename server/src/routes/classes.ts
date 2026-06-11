@@ -65,6 +65,15 @@ router.put('/:id', requirePermission('students.write'), (req: Request, res: Resp
   if (!old) {
     return fail(res, 404, 'NOT_FOUND', '班级不存在')
   }
+
+  // 班级限制：只能修改自己班级
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(old.name)) {
+      return fail(res, 403, 'FORBIDDEN', '无权修改其他班级')
+    }
+  }
+
   db.prepare('UPDATE classes SET name = ? WHERE id = ?').run(trimmed, id)
   // 同步更新 users 表中的班级名称
   db.prepare('UPDATE users SET class = ? WHERE class = ?').run(trimmed, old.name)
@@ -79,6 +88,15 @@ router.delete('/:id', requirePermission('students.write'), (req: Request, res: R
   if (!cls) {
     return fail(res, 404, 'NOT_FOUND', '班级不存在')
   }
+
+  // 班级限制：只能删除自己班级
+  if (!req.user?.permissions?.includes('classes.view_all')) {
+    const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
+    if (!myClasses.includes(cls.name)) {
+      return fail(res, 403, 'FORBIDDEN', '无权删除其他班级')
+    }
+  }
+
   // 将该班级学生的 class 置空
   db.prepare('UPDATE users SET class = \'\' WHERE class = ?').run(cls.name)
   db.prepare('DELETE FROM classes WHERE id = ?').run(id)

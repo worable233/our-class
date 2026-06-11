@@ -75,14 +75,18 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
   const role = groupType === 'student' ? ('student' as const) : ('teacher' as const)
   const token = signToken({ id: user.id, role })
 
-  // Load user permissions from group
+  // Load user permissions from both group_id and role_id
   const db2 = getDb()
   const permRows = db2.prepare(`
     SELECT DISTINCT gp.permission_code
     FROM group_permissions gp
-    JOIN users u ON u.group_id = gp.group_id
-    WHERE u.id = ?
-  `).all(user.id) as { permission_code: string }[]
+    WHERE gp.group_id = (
+      SELECT group_id FROM users WHERE id = ?
+    )
+    OR gp.group_id = (
+      SELECT role_id FROM users WHERE id = ? AND role_id IS NOT NULL
+    )
+  `).all(user.id, user.id) as { permission_code: string }[]
   const permissions = permRows.map(r => r.permission_code)
 
   ok(res, {

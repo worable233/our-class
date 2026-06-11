@@ -289,16 +289,20 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'manage_roles',
-    description: '管理权限组。可创建/更新/删除权限组、查询权限组列表、分配权限组给用户。仅拥有 roles.manage 权限的教师可用。',
+    description: '管理权限组（身份组和职位）。创建班长等职位时需要指定 parent_id 和 class；创建身份组需要 roles.manage + classes.view_all 权限。',
     input_schema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['list', 'create', 'update', 'delete', 'assign'], description: '操作类型：list=查询权限组列表, create=创建权限组, update=更新权限组, delete=删除权限组, assign=分配权限组给用户' },
-        group_id: { type: 'integer', description: '权限组 ID（update/delete 时需要）' },
+        action: { type: 'string', enum: ['list', 'create', 'update', 'delete', 'assign'], description: '操作类型：list=查询, create=创建, update=更新, delete=删除, assign=分配给用户' },
+        group_id: { type: 'integer', description: '权限组 ID（update/delete/assign 时需要）' },
         name: { type: 'string', description: '权限组名称（create/update 时需要）' },
         description: { type: 'string', description: '权限组描述（create/update 时可选）' },
-        permissions: { type: 'array', items: { type: 'string' }, description: '权限 code 列表，如["students.read","points.read"]（create/update 时需要）' },
-        user_ids: { type: 'array', items: { type: 'integer' }, description: '要分配权限组的用户 ID 列表（assign 时需要）' },
+        permissions: { type: 'array', items: { type: 'string' }, description: '权限 code 列表（create/update 时可选）' },
+        user_ids: { type: 'array', items: { type: 'integer' }, description: '要分配的用户 ID 列表（assign 时需要）' },
+        parent_id: { type: 'integer', description: '父身份组 ID（创建职位时必填，表示继承哪个身份组的权限）' },
+        class: { type: 'string', description: '班级名称（创建/更新职位时必填，如"高三(1)班"）' },
+        group_type: { type: 'string', enum: ['admin', 'teacher', 'student', 'custom'], description: '权限组类型（创建身份组时可选，默认 custom）' },
+        assign_role_id: { type: 'boolean', description: 'assign 时是否设置职位（role_id）而非身份（group_id），默认 false' },
       },
       required: ['action'],
     },
@@ -341,6 +345,28 @@ const TOOLS: ToolDef[] = [
 
 // ── Tool execution ────────────────────────────────────────────────────────
 
+// Tool -> permission code mapping (grouped permissions)
+const TOOL_PERM_MAP: Record<string, string> = {
+  'list_students': 'tool.student.read',
+  'get_student_points': 'tool.student.read',
+  'create_students': 'tool.student.write',
+  'update_student': 'tool.student.write',
+  'delete_students': 'tool.student.write',
+  'get_score_rankings': 'tool.score.read',
+  'get_point_details': 'tool.score.read',
+  'add_points': 'tool.score.write',
+  'list_assignments': 'tool.assignment',
+  'get_submissions': 'tool.assignment',
+  'get_weather': 'tool.utility',
+  'web_search': 'tool.utility',
+  'random_pick': 'tool.utility',
+  'get_current_time': 'tool.utility',
+  'get_class_list': 'tool.utility',
+  'view_file': 'tool.utility',
+  'manage_roles': 'roles.manage',
+  'search_articles': 'tool.article',
+}
+
 /** 获取权限范围内的班级 SQL 条件（空字符串表示无限制） */
 function getClassFilter(userClass: string, userPermissions: string[]): { sql: string; params: string[] } {
   if (userPermissions.includes('classes.view_all')) return { sql: '', params: [] }
@@ -361,28 +387,6 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
   // Look up current user name for audit logging
   const curUser = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId) as any
   const userName = curUser?.display_name || ''
-
-  // Tool -> permission code mapping (grouped permissions)
-  const TOOL_PERM_MAP: Record<string, string> = {
-    'list_students': 'tool.student.read',
-    'get_student_points': 'tool.student.read',
-    'create_students': 'tool.student.write',
-    'update_student': 'tool.student.write',
-    'delete_students': 'tool.student.write',
-    'get_score_rankings': 'tool.score.read',
-    'get_point_details': 'tool.score.read',
-    'add_points': 'tool.score.write',
-    'list_assignments': 'tool.assignment',
-    'get_submissions': 'tool.assignment',
-    'get_weather': 'tool.utility',
-    'web_search': 'tool.utility',
-    'random_pick': 'tool.utility',
-    'get_current_time': 'tool.utility',
-    'get_class_list': 'tool.utility',
-    'view_file': 'tool.utility',
-    'manage_roles': 'roles.manage',
-    'search_articles': 'tool.article',
-  }
 
   // Load tool config for max_result_length (全局，所有用户共享)
   const config = db.prepare('SELECT config_json, max_result_length FROM tool_configs WHERE tool_name = ? ORDER BY id ASC LIMIT 1').get(name) as any
@@ -895,71 +899,220 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'manage_roles': {
-      if (!userPermissions.includes('roles.manage')) return JSON.stringify({ error: '您没有管理权限组的权限' })
+      const hasManage = userPermissions.includes('roles.manage')
+      const hasViewAll = userPermissions.includes('classes.view_all')
+      if (!hasManage) return JSON.stringify({ error: '您没有管理权限组的权限' })
+
       const action = input.action as string
+
+      // ── Helper: 权限委托检查（只能授予自己拥有的权限） ──
+      function checkDelegation(perms: string[]): string | null {
+        for (const code of perms) {
+          if (!userPermissions.includes(code)) return `您没有权限「${code}」，无法授予他人`
+        }
+        return null
+      }
+
+      // ── Helper: 验证权限码有效性 ──
+      function validatePermCodes(perms: string[]): string | null {
+        if (perms.length === 0) return null
+        const validCodes = db.prepare('SELECT code FROM permissions').all() as any[]
+        const validSet = new Set(validCodes.map(c => c.code))
+        const invalid = perms.filter(code => !validSet.has(code))
+        if (invalid.length > 0) return `无效的权限码: ${invalid.join(', ')}`
+        return null
+      }
+
+      // ── Helper: 班级限制检查 ──
+      function checkClassScope(targetClass: string): string | null {
+        if (hasViewAll) return null
+        const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+        if (!myClasses.includes(targetClass)) return `您只能管理自己班级（${userClass}）的职位`
+        return null
+      }
+
       if (action === 'list') {
-        const groups = db.prepare('SELECT * FROM permission_groups ORDER BY id').all() as any[]
+        let groups: any[]
+        if (hasViewAll) {
+          groups = db.prepare('SELECT * FROM permission_groups ORDER BY id').all() as any[]
+        } else {
+          // 无 view_all：返回所有身份组 + 自己班级的职位
+          const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
+          if (myClasses.length > 0) {
+            const placeholders = myClasses.map(() => '?').join(',')
+            groups = db.prepare(`SELECT * FROM permission_groups WHERE parent_id IS NULL OR class IN (${placeholders}) ORDER BY id`).all(...myClasses) as any[]
+          } else {
+            groups = db.prepare('SELECT * FROM permission_groups WHERE parent_id IS NULL ORDER BY id').all() as any[]
+          }
+        }
         const result = groups.map((g: any) => {
           const perms = db.prepare('SELECT permission_code FROM group_permissions WHERE group_id = ?').all(g.id) as any[]
           return { ...g, permissions: perms.map((p: any) => p.permission_code) }
         })
         return JSON.stringify({ groups: result })
       }
+
       if (action === 'create') {
         const name = input.name as string
         const desc = (input.description as string) || ''
         const permissions = (input.permissions as string[]) || []
+        const parentId = input.parent_id as number | undefined
+        const cls = (input.class as string) || ''
+
         if (!name) return JSON.stringify({ error: '请提供权限组名称' })
-        const dup = db.prepare('SELECT id FROM permission_groups WHERE name = ?').get(name)
-        if (dup) return JSON.stringify({ error: '权限组名称已存在' })
-        const result = db.prepare('INSERT INTO permission_groups (name, description) VALUES (?,?)').run(name, desc)
-        const gid = result.lastInsertRowid
-        const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
-        for (const code of permissions) insert.run(gid, code)
-        writeAuditLog(userId, userName, 'create_role', 'role', gid, { name, permissions })
-        return JSON.stringify({ success: true, id: gid, name, message: '权限组已创建' })
+
+        // 验证权限码有效性
+        if (permissions.length > 0) {
+          const permErr = validatePermCodes(permissions)
+          if (permErr) return JSON.stringify({ error: permErr })
+        }
+
+        if (parentId) {
+          // ── 创建职位（子权限组）──
+          const parent = db.prepare('SELECT id, name FROM permission_groups WHERE id = ? AND parent_id IS NULL').get(parentId) as any
+          if (!parent) return JSON.stringify({ error: '父身份组不存在' })
+          if (!cls) return JSON.stringify({ error: '创建职位时必须指定班级' })
+          const classErr = checkClassScope(cls)
+          if (classErr) return JSON.stringify({ error: classErr })
+          const permErr = checkDelegation(permissions)
+          if (permErr) return JSON.stringify({ error: permErr })
+
+          const result = db.prepare('INSERT INTO permission_groups (name, description, parent_id, class) VALUES (?,?,?,?)').run(name, desc, parentId, cls)
+          const gid = result.lastInsertRowid
+          const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
+          for (const code of permissions) insert.run(gid, code)
+          writeAuditLog(userId, userName, 'create_role', 'role', gid, { name, parent_id: parentId, class: cls, permissions })
+          return JSON.stringify({ success: true, id: gid, name, parent: parent.name, class: cls, message: `职位「${name}」已创建，继承自「${parent.name}」` })
+        } else {
+          // ── 创建身份组 ──
+          if (!hasViewAll) return JSON.stringify({ error: '创建身份组需要 classes.view_all 权限' })
+          const groupType = (input.group_type as string) || 'custom'
+          const dup = db.prepare('SELECT id FROM permission_groups WHERE name = ? AND parent_id IS NULL').get(name)
+          if (dup) return JSON.stringify({ error: '身份组名称已存在' })
+
+          const result = db.prepare('INSERT INTO permission_groups (name, description, group_type) VALUES (?,?,?)').run(name, desc, groupType)
+          const gid = result.lastInsertRowid
+          const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
+          for (const code of permissions) insert.run(gid, code)
+          writeAuditLog(userId, userName, 'create_identity', 'identity', gid, { name, group_type: groupType, permissions })
+          return JSON.stringify({ success: true, id: gid, name, group_type: groupType, message: `身份组「${name}」已创建` })
+        }
       }
+
       if (action === 'update') {
         const gid = input.group_id as number
         if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
-        const existing = db.prepare('SELECT id FROM permission_groups WHERE id = ?').get(gid)
+        const existing = db.prepare('SELECT * FROM permission_groups WHERE id = ?').get(gid) as any
         if (!existing) return JSON.stringify({ error: '权限组不存在' })
-        if (input.name) { db.prepare('UPDATE permission_groups SET name = ? WHERE id = ?').run(input.name, gid) }
-        if (input.description !== undefined) { db.prepare('UPDATE permission_groups SET description = ? WHERE id = ?').run(input.description, gid) }
+
+        if (existing.parent_id) {
+          // ── 更新职位 ──
+          if (existing.class) {
+            const classErr = checkClassScope(existing.class)
+            if (classErr) return JSON.stringify({ error: classErr })
+          }
+          if (input.permissions) {
+            const permErr = checkDelegation(input.permissions as string[])
+            if (permErr) return JSON.stringify({ error: permErr })
+          }
+        } else {
+          // ── 更新身份组 ──
+          if (!hasViewAll) return JSON.stringify({ error: '更新身份组需要 classes.view_all 权限' })
+        }
+
+        // 验证权限码有效性
+        if (input.permissions) {
+          const permErr = validatePermCodes(input.permissions as string[])
+          if (permErr) return JSON.stringify({ error: permErr })
+        }
+
+        if (input.name) db.prepare('UPDATE permission_groups SET name = ? WHERE id = ?').run(input.name, gid)
+        if (input.description !== undefined) db.prepare('UPDATE permission_groups SET description = ? WHERE id = ?').run(input.description, gid)
+        if (input.class !== undefined && existing.parent_id) {
+          // 修改班级时需要对新值做权限检查
+          const newClass = (input.class as string) || ''
+          if (newClass) {
+            const classErr = checkClassScope(newClass)
+            if (classErr) return JSON.stringify({ error: classErr })
+          }
+          db.prepare('UPDATE permission_groups SET class = ? WHERE id = ?').run(newClass, gid)
+        }
         if (input.permissions) {
           db.prepare('DELETE FROM group_permissions WHERE group_id = ?').run(gid)
           const insert = db.prepare('INSERT INTO group_permissions (group_id, permission_code) VALUES (?,?)')
           for (const code of input.permissions as string[]) insert.run(gid, code)
         }
-        writeAuditLog(userId, userName, 'update_role', 'role', gid, { name: input.name, permissions: input.permissions })
+        writeAuditLog(userId, userName, existing.parent_id ? 'update_role' : 'update_identity', existing.parent_id ? 'role' : 'identity', gid, { name: input.name, permissions: input.permissions })
         return JSON.stringify({ success: true, message: '权限组已更新' })
       }
+
       if (action === 'delete') {
         const gid = input.group_id as number
         if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
-        if (gid <= 2) return JSON.stringify({ error: '无法删除默认权限组' })
-        db.prepare('UPDATE users SET group_id = NULL WHERE group_id = ?').run(gid)
+        const existing = db.prepare('SELECT * FROM permission_groups WHERE id = ?').get(gid) as any
+        if (!existing) return JSON.stringify({ error: '权限组不存在' })
+
+        if (existing.parent_id) {
+          // ── 删除职位 ──
+          if (existing.class) {
+            const classErr = checkClassScope(existing.class)
+            if (classErr) return JSON.stringify({ error: classErr })
+          }
+          db.prepare('UPDATE users SET role_id = NULL WHERE role_id = ?').run(gid)
+        } else {
+          // ── 删除身份组 ──
+          if (!hasViewAll) return JSON.stringify({ error: '删除身份组需要 classes.view_all 权限' })
+          if (existing.group_type === 'admin' || existing.group_type === 'student') return JSON.stringify({ error: '无法删除系统内置身份组' })
+          // 级联删除子职位组
+          const children = db.prepare('SELECT id FROM permission_groups WHERE parent_id = ?').all(gid) as any[]
+          for (const child of children) {
+            db.prepare('UPDATE users SET role_id = NULL WHERE role_id = ?').run(child.id)
+            db.prepare('DELETE FROM group_permissions WHERE group_id = ?').run(child.id)
+            db.prepare('DELETE FROM permission_groups WHERE id = ?').run(child.id)
+          }
+          db.prepare('UPDATE users SET group_id = NULL WHERE group_id = ?').run(gid)
+          db.prepare('UPDATE users SET role_id = NULL WHERE role_id = ?').run(gid)
+        }
         db.prepare('DELETE FROM permission_groups WHERE id = ?').run(gid)
-        writeAuditLog(userId, userName, 'delete_role', 'role', gid, {})
+        writeAuditLog(userId, userName, existing.parent_id ? 'delete_role' : 'delete_identity', existing.parent_id ? 'role' : 'identity', gid, {})
         return JSON.stringify({ success: true, message: '权限组已删除' })
       }
+
       if (action === 'assign') {
         const gid = input.group_id as number
         const userIds = input.user_ids as number[] || []
+        const assignRoleId = input.assign_role_id === true
         if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
         if (userIds.length === 0) return JSON.stringify({ error: '请提供要分配的用户 ID 列表' })
-        const group = db.prepare('SELECT id FROM permission_groups WHERE id = ?').get(gid)
+
+        const group = db.prepare('SELECT id, parent_id, name FROM permission_groups WHERE id = ?').get(gid) as any
         if (!group) return JSON.stringify({ error: '权限组不存在' })
+
+        // 验证：role_id 只能指向职位，group_id 只能指向身份组
+        if (assignRoleId && !group.parent_id) return JSON.stringify({ error: 'assign_role_id=true 时只能分配职位（子权限组），不能分配身份组' })
+        if (!assignRoleId && group.parent_id) return JSON.stringify({ error: 'assign_role_id=false（默认）时只能分配身份组，不能分配职位。如需分配职位请设置 assign_role_id: true' })
+
+        // 职位分配需要班级限制检查
+        if (assignRoleId && group.parent_id) {
+          const roleGroup = db.prepare('SELECT class FROM permission_groups WHERE id = ?').get(gid) as any
+          if (roleGroup?.class) {
+            const classErr = checkClassScope(roleGroup.class)
+            if (classErr) return JSON.stringify({ error: classErr })
+          }
+        }
+
+        const column = assignRoleId ? 'role_id' : 'group_id'
         const results: any[] = []
         for (const uid of userIds) {
           const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(uid) as any
           if (!user) { results.push({ id: uid, error: '用户不存在' }); continue }
-          db.prepare('UPDATE users SET group_id = ? WHERE id = ?').run(gid, uid)
+          db.prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(gid, uid)
           results.push({ id: uid, display_name: user.display_name, success: true })
         }
-        writeAuditLog(userId, userName, 'assign_role', 'role', gid, { user_ids: userIds, assigned: results.filter((r: any) => r.success).length })
-        return JSON.stringify({ total: userIds.length, assigned: results.filter((r: any) => r.success).length, results })
+        writeAuditLog(userId, userName, 'assign_role', 'role', gid, { column, user_ids: userIds, assigned: results.filter((r: any) => r.success).length })
+        return JSON.stringify({ group: group.name, column, total: userIds.length, assigned: results.filter((r: any) => r.success).length, results })
       }
+
       return JSON.stringify({ error: '未知操作: ' + action })
     }
 
@@ -1395,7 +1548,12 @@ async function agentLoopOpenAI(
         const label = toolLabel(tc.function.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.function.name, label })}\n\n`)
 
-        const result = await executeTool(tc.function.name, parsed, userId, userRole, userPermissions, userClass)
+        let result: string
+        try {
+          result = await executeTool(tc.function.name, parsed, userId, userRole, userPermissions, userClass)
+        } catch (e: any) {
+          result = JSON.stringify({ error: `工具执行出错: ${e.message || e}` })
+        }
 
 
         // Save tool message (label + result) to DB

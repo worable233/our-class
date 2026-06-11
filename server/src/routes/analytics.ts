@@ -133,7 +133,7 @@ router.get('/dashboard', requirePermission('audit_logs.read'), (_req: Request, r
 
 // ── GET /api/analytics/traffic ────────────────────────────────────────────
 
-router.get('/traffic', (_req: Request, res: Response) => {
+router.get('/traffic', requirePermission('audit_logs.read'), (_req: Request, res: Response) => {
   const db = getDb()
 
   const sources = db.prepare(`
@@ -159,7 +159,7 @@ router.get('/traffic', (_req: Request, res: Response) => {
 
 // ── GET /api/analytics/waf-stats ──────────────────────────────────────────
 
-router.get('/waf-stats', (_req: Request, res: Response) => {
+router.get('/waf-stats', requirePermission('audit_logs.read'), (_req: Request, res: Response) => {
   const db = getDb()
 
   // 1. Basic metrics

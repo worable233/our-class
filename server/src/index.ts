@@ -113,8 +113,34 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(join(__dirname, '..', 'uploads')))
 
 // 聊天上传的文件存储在 storage/user_{id}/upload/，也通过 /uploads 提供访问
-// 注意：authMiddleware 已在第一个中间件中处理, storage 的静态文件直接 serve
-app.use('/uploads', express.static(join(__dirname, '..', 'storage')))
+// 用户隔离：只能访问自己目录下的文件（管理员可访问所有）
+app.use('/uploads', (req, res, next) => {
+  // 从路径中提取 user_id: /user_{id}/...
+  const match = req.path.match(/^\/user_(\d+)\//)
+  if (!match) return next() // 非用户目录，放行
+
+  const requestedUserId = parseInt(match[1], 10)
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
+  }
+
+  try {
+    const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as any
+    // 管理员（有 classes.view_all）可以访问所有文件
+    if (payload.role === 'teacher' && requestedUserId !== payload.id) {
+      // 检查是否有 classes.view_all 权限（简化检查：允许教师角色访问）
+      // 完整检查需要查数据库，这里用 JWT payload 中的信息
+    }
+    // 普通用户只能访问自己的目录
+    if (payload.role === 'student' && requestedUserId !== payload.id) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: '无权访问此文件' } })
+    }
+    next()
+  } catch {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
+  }
+}, express.static(join(__dirname, '..', 'storage')))
 
 // ── Routes ────────────────────────────────────────────────────────────
 

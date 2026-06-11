@@ -207,8 +207,8 @@ router.delete('/groups/:id', requirePermission('roles.manage'), (req: Request, r
 
 // ── Role Groups (子权限组) ─────────────────────────────────────────
 
-// POST /api/roles/role-groups — 创建子权限组（教师可操作，无需 roles.manage）
-router.post('/role-groups', authMiddleware, validate(createGroupSchema), (req: Request, res: Response) => {
+// POST /api/roles/role-groups — 创建子权限组（需要 roles.manage 权限）
+router.post('/role-groups', requirePermission('roles.manage'), validate(createGroupSchema), (req: Request, res: Response) => {
   const db = getDb()
   const { name, description, parent_id, class: roleClass, permissions } = req.body
   if (!parent_id) return fail(res, 400, 'VALIDATION', '请选择父权限组')
@@ -249,7 +249,7 @@ router.post('/role-groups', authMiddleware, validate(createGroupSchema), (req: R
 })
 
 // PUT /api/roles/role-groups/:id — 更新子权限组
-router.put('/role-groups/:id', authMiddleware, validate(updateGroupSchema), (req: Request, res: Response) => {
+router.put('/role-groups/:id', requirePermission('roles.manage'), validate(updateGroupSchema), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效ID')
@@ -289,7 +289,7 @@ router.put('/role-groups/:id', authMiddleware, validate(updateGroupSchema), (req
 })
 
 // DELETE /api/roles/role-groups/:id — 删除子权限组
-router.delete('/role-groups/:id', authMiddleware, (req: Request, res: Response) => {
+router.delete('/role-groups/:id', requirePermission('roles.manage'), (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION', '无效ID')

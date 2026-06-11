@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import bcrypt from 'bcrypt'
 import { getDb } from '../db/init.js'
 import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { NotFoundError } from '../lib/errors.js'
+
+const BCRYPT_ROUNDS = 10
 
 const router = Router()
 
@@ -70,7 +73,7 @@ router.get('/:id', requirePermission('students.write'), (req: Request, res: Resp
 })
 
 // PUT /api/teachers/:id — update teacher info
-router.put('/:id', requirePermission('students.write'), validate(updateSchema), (req: Request, res: Response) => {
+router.put('/:id', requirePermission('students.write'), validate(updateSchema), async (req: Request, res: Response) => {
   const db = getDb()
   const id = Number(req.params.id)
   if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的 ID')
@@ -83,17 +86,31 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
 
   if (req.body.display_name !== undefined) { fields.push('display_name = ?'); values.push(req.body.display_name) }
   if (req.body.username !== undefined) { fields.push('username = ?'); values.push(req.body.username) }
-  if (req.body.password !== undefined) { fields.push('password = ?'); values.push(req.body.password) }
+  if (req.body.password !== undefined) {
+    const hashedPw = await bcrypt.hash(req.body.password, BCRYPT_ROUNDS)
+    fields.push('password = ?')
+    values.push(hashedPw)
+  }
   if (req.body.class !== undefined) { fields.push('class = ?'); values.push(req.body.class) }
   if (req.body.nickname !== undefined) { fields.push('nickname = ?'); values.push(req.body.nickname) }
   if (req.body.avatar !== undefined) { fields.push('avatar = ?'); values.push(req.body.avatar) }
   if (req.body.group_id !== undefined) {
+    // 权限提升防护：需要 roles.manage 权限才能修改权限组
+    if (!req.user?.permissions?.includes('roles.manage')) {
+      return fail(res, 403, 'FORBIDDEN', '无权限修改权限组')
+    }
     fields.push('group_id = ?'); values.push(req.body.group_id)
     // 同步存储配额
     const quota = db.prepare('SELECT storage_limit FROM group_storage_quota WHERE group_id = ?').get(req.body.group_id) as any
     if (quota) db.prepare('UPDATE user_storage SET storage_limit = ? WHERE user_id = ?').run(quota.storage_limit, id)
   }
-  if (req.body.role_id !== undefined) { fields.push('role_id = ?'); values.push(req.body.role_id) }
+  if (req.body.role_id !== undefined) {
+    // 权限提升防护：需要 roles.manage 权限才能修改职位
+    if (!req.user?.permissions?.includes('roles.manage')) {
+      return fail(res, 403, 'FORBIDDEN', '无权限修改角色')
+    }
+    fields.push('role_id = ?'); values.push(req.body.role_id)
+  }
 
   if (fields.length === 0) return fail(res, 400, 'NO_CHANGES', '没有要修改的字段')
 
