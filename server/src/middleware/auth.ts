@@ -57,7 +57,7 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     if (!row) throw new AuthError()
 
     // 从权限组类型推导角色（高度自治：不再硬编码组名称）
-    const role = row.group_type === 'teacher' ? ('teacher' as const) : ('student' as const)
+    const role = (row.group_type === 'teacher' || row.group_type === 'admin') ? ('teacher' as const) : ('student' as const)
 
     let permissions: string[] = []
     if (row.group_id) {

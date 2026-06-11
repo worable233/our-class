@@ -72,7 +72,7 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
 
   // 从权限组类型推导角色（高度自治：不再硬编码组名称）
   const groupType = user.group_type || 'custom'
-  const role = groupType === 'teacher' ? ('teacher' as const) : ('student' as const)
+  const role = (groupType === 'teacher' || groupType === 'admin') ? ('teacher' as const) : ('student' as const)
   const token = signToken({ id: user.id, role })
 
   // Load user permissions from group
