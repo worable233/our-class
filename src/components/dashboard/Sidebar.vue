@@ -49,7 +49,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/users': ['students.write'],
   '/teacher/review-types': ['points.write'],
   '/teacher/point-details': ['points.read'],
-  '/teacher/roles': [],
+  '/teacher/roles': ['roles.manage'],
   '/teacher/settings': ['chat.config'],
   '/teacher/site-data': ['students.write'],
   '/teacher/site-general': ['chat.config'],
@@ -62,6 +62,7 @@ const ROUTE_PERMS: Record<string, string[]> = {
   '/teacher/grades': ['scores.read'],
   '/student/scores': ['scores.read'],
   '/student/grade-ranking': ['scores.read'],
+  '/student/points-manage': ['points.write'],
 }
 
 function hasRouteAccess(path: string): boolean {

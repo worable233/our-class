@@ -87,7 +87,7 @@ function ensurePermissionGroups(db: any) {
   const adminPermissions = [
     'students.write',
     'points.read', 'points.write',
-    'scores.write',
+    'scores.read', 'scores.write',
     'assignments.write', 'assignments.submit',
     'chat.access', 'chat.config', 'chat.unlimited',
     'roles.manage',
@@ -109,7 +109,7 @@ function ensurePermissionGroups(db: any) {
   const teacherPermissions = [
     'students.write',
     'points.read', 'points.write',
-    'scores.write',
+    'scores.read', 'scores.write',
     'assignments.write',
     'chat.access', 'chat.unlimited',
     'tool.student.read', 'tool.student.write',
@@ -127,6 +127,7 @@ function ensurePermissionGroups(db: any) {
 
   const studentPermissions = [
     'points.read',
+    'scores.read',
     'assignments.submit',
     'chat.access',
     'tool.student.read',
