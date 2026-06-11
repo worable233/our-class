@@ -162,7 +162,10 @@ else {
     Write-Info "上传目录不存在，跳过"
 }
 
-# ── 5. 删除前端构建产物 ─────────────────────────────────────────────
+# ── 5. 清理网盘存储目录 ─────────────────────────────────────────────
+Remove-Safe -Path "server\storage" -Label "网盘存储 (server\storage\)" -Recurse
+
+# ── 6. 删除前端构建产物 ─────────────────────────────────────────────
 Remove-Safe -Path "dist" -Label "前端构建 (dist\)" -Recurse
 
 Write-Host ""
@@ -171,7 +174,7 @@ Write-Host "   重置完成！" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-# ── 6. 启动配置向导 ─────────────────────────────────────────────────
+# ── 7. 启动配置向导 ─────────────────────────────────────────────────
 Write-Info "启动配置向导..."
 Set-Location "$ScriptDir\server"
 try {
