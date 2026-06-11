@@ -959,13 +959,6 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
                 </div>
               </div>
             </div>
-            <!-- 箭头（Naive UI 风格） -->
-            <button v-if="recentArticles.length > 1" class="carousel-arrow carousel-arrow-prev" @click.stop="carouselPrev" aria-label="上一张">
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M10.26 3.2a.75.75 0 0 1 .04 1.06L6.773 8l3.527 3.74a.75.75 0 1 1-1.1 1.02l-4-4.25a.75.75 0 0 1 0-1.02l4-4.25a.75.75 0 0 1 1.06-.04z"/></svg>
-            </button>
-            <button v-if="recentArticles.length > 1" class="carousel-arrow carousel-arrow-next" @click.stop="carouselNext" aria-label="下一张">
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M5.74 3.2a.75.75 0 0 0-.04 1.06L9.227 8 5.7 11.74a.75.75 0 1 0 1.1 1.02l4-4.25a.75.75 0 0 0 0-1.02l-4-4.25a.75.75 0 0 0-1.06-.04z"/></svg>
-            </button>
             <!-- 指示点（Naive UI 风格） -->
             <div v-if="recentArticles.length > 1" class="carousel-dots">
               <button v-for="(_, i) in recentArticles" :key="i"
@@ -1191,7 +1184,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 /* ═══ 公众号文章轮播（Naive UI 风格） ═══ */
 .article-carousel {
   position: relative;
-  margin-top: 28px;
+  margin: 28px 16px 8px;
   width: 100%;
   max-width: 500px;
   height: 240px;
@@ -1275,34 +1268,6 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   color: rgba(255,255,255,0.55);
   text-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
-/* ── 箭头（Naive UI 风格圆形按钮） ── */
-.carousel-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0,0,0,0.2);
-  color: rgba(255,255,255,0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .3s ease, background .25s ease, transform .25s ease;
-  padding: 0;
-  line-height: 0;
-}
-.article-carousel:hover .carousel-arrow { opacity: 1; }
-.carousel-arrow:hover {
-  background: rgba(0,0,0,0.45);
-  transform: translateY(-50%) scale(1.08);
-}
-.carousel-arrow:active { transform: translateY(-50%) scale(0.95); }
-.carousel-arrow-prev { left: 10px; }
-.carousel-arrow-next { right: 10px; }
 /* ── 指示点（Naive UI 风格右侧竖排） ── */
 .carousel-dots {
   position: absolute;
