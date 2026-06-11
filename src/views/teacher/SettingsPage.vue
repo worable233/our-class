@@ -327,73 +327,53 @@ onMounted(() => {
       <n-tabs type="line" animated>
         <!-- Tab 1: API Config -->
         <n-tab-pane name="api" tab="API 配置">
-          <div style="max-width: 800px; padding-top: 8px">
-            <!-- Header -->
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+          <div class="tab-content">
+            <div class="tab-header">
               <div>
-                <div style="font-size: 15px; font-weight: 600">模型管理</div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px">
-                  添加多个模型，选择一个启用。深度思考仅在 Anthropic 接口下可用（会禁用工具调用）。
-                </div>
+                <div class="tab-title">模型管理</div>
+                <div class="tab-desc">添加多个模型，选择一个启用。深度思考仅在 Anthropic 接口下可用（会禁用工具调用）。</div>
               </div>
               <n-button type="primary" size="small" @click="openAddModal">添加模型</n-button>
             </div>
 
-            <!-- Loading -->
-            <div v-if="modelsLoading" style="display: flex; flex-direction: column; gap: 12px">
+            <div v-if="modelsLoading" class="card-stack">
               <n-card v-for="i in 2" :key="i" size="small"><n-skeleton :repeat="2" /></n-card>
             </div>
 
-            <!-- Empty -->
             <n-empty v-else-if="models.length === 0" description="暂无配置的模型，点击上方「添加模型」开始" style="padding: 48px 0" />
 
-            <!-- Model list -->
-            <div v-else style="display: flex; flex-direction: column; gap: 12px">
+            <div v-else class="card-stack">
               <n-card
                 v-for="m in models"
                 :key="m.id"
                 size="small"
-                :style="m.is_active ? 'border-color: var(--primary-color); border-width: 1.5px;' : ''"
+                :class="{ 'model-card--active': m.is_active }"
               >
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-                  <!-- Active radio -->
+                <div class="model-row">
                   <n-radio
                     :checked="m.is_active"
                     :value="m.id"
                     @update:checked="() => activateModel(m.id)"
                     name="active-model"
                   />
-
-                  <!-- Provider tag -->
                   <n-tag :type="m.provider === 'anthropic' ? 'warning' : 'info'" size="small" :bordered="false">
                     {{ m.provider === 'anthropic' ? 'Anthropic' : 'OpenAI' }}
                   </n-tag>
-
-                  <!-- Model info -->
-                  <div style="flex: 1; min-width: 200px">
-                    <div style="font-size: 14px; font-weight: 500">{{ m.model || '未命名模型' }}</div>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px">
+                  <div class="model-info">
+                    <div class="model-name">{{ m.model || '未命名模型' }}</div>
+                    <div class="model-meta">
                       {{ m.api_url || (m.provider === 'anthropic' ? 'api.anthropic.com' : 'api.openai.com') }}
-                      <span v-if="m.has_key" style="color: #16a34a; margin-left: 8px">Key 已配置</span>
+                      <span v-if="m.has_key" class="key-ok">Key 已配置</span>
                     </div>
-                    <!-- Test result -->
-                    <div v-if="testResults[m.id]" style="margin-top: 4px">
+                    <div v-if="testResults[m.id]" class="test-result">
                       <n-tag v-if="testResults[m.id]!.ok" type="success" size="tiny">
                         连接成功 · {{ testResults[m.id]!.latency }}ms · {{ testResults[m.id]!.model }}
                       </n-tag>
-                      <n-tag v-else type="error" size="tiny">
-                        {{ testResults[m.id]!.error }}
-                      </n-tag>
+                      <n-tag v-else type="error" size="tiny">{{ testResults[m.id]!.error }}</n-tag>
                     </div>
                   </div>
-
-                  <!-- Actions -->
                   <n-space size="small" :wrap="false">
-                    <n-button
-                      size="tiny"
-                      :loading="testingId === m.id"
-                      @click="testModel(m.id)"
-                    >
+                    <n-button size="tiny" :loading="testingId === m.id" @click="testModel(m.id)">
                       {{ testingId === m.id ? '测试中' : '测试' }}
                     </n-button>
                     <n-button size="tiny" @click="openEditModal(m)">编辑</n-button>
@@ -408,13 +388,11 @@ onMounted(() => {
               </n-card>
             </div>
 
-            <!-- Active model summary -->
-            <div v-if="activeModel" style="margin-top: 16px; padding: 12px; background: var(--surface-2); border-radius: 8px; font-size: 13px; color: var(--text-secondary)">
+            <n-alert v-if="activeModel" type="success" :bordered="false" :show-icon="false" class="active-summary">
               当前使用：<strong>{{ activeModel.model }}</strong>（{{ activeModel.provider === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容' }}）
-            </div>
+            </n-alert>
           </div>
 
-          <!-- Add/Edit Modal -->
           <n-modal
             v-model:show="showModal"
             preset="card"
@@ -422,9 +400,8 @@ onMounted(() => {
             style="max-width: 520px"
             :segmented="{ content: true, footer: true }"
           >
-            <div style="display: flex; flex-direction: column; gap: 16px">
-              <div>
-                <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">接口格式</div>
+            <n-form label-placement="top">
+              <n-form-item label="接口格式">
                 <n-select
                   v-model:value="formProvider"
                   :options="[
@@ -432,23 +409,21 @@ onMounted(() => {
                     { label: 'OpenAI 兼容（DeepSeek / GPT / GLM）', value: 'openai' },
                   ]"
                 />
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">模型名称</div>
+              </n-form-item>
+              <n-form-item label="模型名称">
                 <n-input v-model:value="formModel" :placeholder="formProvider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'deepseek-chat'" />
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">API 地址</div>
+              </n-form-item>
+              <n-form-item label="API 地址">
                 <n-input v-model:value="formApiUrl" :placeholder="formProvider === 'anthropic' ? '留空使用默认 https://api.anthropic.com' : '留空使用默认 https://api.openai.com'" />
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary)">
+              </n-form-item>
+              <n-form-item>
+                <template #label>
                   API Key
-                  <span v-if="editingId" style="font-size: 11px; font-weight: 400; color: var(--text-muted)">（留空则保留原 Key）</span>
-                </div>
+                  <n-text v-if="editingId" depth="3" style="font-size: 12px; font-weight: 400">（留空则保留原 Key）</n-text>
+                </template>
                 <n-input v-model:value="formApiKey" type="password" show-password-on="click" placeholder="sk-ant-..." />
-              </div>
-            </div>
+              </n-form-item>
+            </n-form>
             <template #footer>
               <n-space justify="end">
                 <n-button @click="showModal = false">取消</n-button>
@@ -462,14 +437,14 @@ onMounted(() => {
 
         <!-- Tab 2: Feature Toggles -->
         <n-tab-pane name="features" tab="功能开关">
-          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 20px; padding-top: 8px">
+          <div class="tab-content">
             <n-card size="small" :bordered="true">
-              <div style="display: flex; align-items: center; justify-content: space-between">
+              <div class="toggle-row">
                 <div>
-                  <div style="font-weight: 600; font-size: 14px; color: var(--text-primary)">深度思考模式</div>
-                  <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px">
+                  <div class="toggle-title">深度思考模式</div>
+                  <div class="toggle-desc">
                     启用后前台聊天输入框将显示"深度思考"按钮<br />
-                    <span style="color: var(--warning-color)">注意：深度思考模式下 AI 无法使用工具查询数据（Anthropic API 限制）</span>
+                    <n-text type="warning">注意：深度思考模式下 AI 无法使用工具查询数据（Anthropic API 限制）</n-text>
                   </div>
                 </div>
                 <n-switch v-model:value="settings.enable_deep_think" />
@@ -477,53 +452,47 @@ onMounted(() => {
             </n-card>
 
             <n-card size="small" :bordered="true">
-              <div style="display: flex; align-items: center; justify-content: space-between">
+              <div class="toggle-row">
                 <div>
-                  <div style="font-weight: 600; font-size: 14px; color: var(--text-primary)">文件上传</div>
-                  <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px">
-                    启用后前台聊天输入框显示"上传文件"按钮
-                  </div>
+                  <div class="toggle-title">文件上传</div>
+                  <div class="toggle-desc">启用后前台聊天输入框显示"上传文件"按钮</div>
                 </div>
                 <n-switch v-model:value="settings.enable_file_upload" />
               </div>
             </n-card>
 
-            <template v-if="settings.enable_file_upload">
-              <n-card size="small" title="文件上传设置" :bordered="true">
-                <n-form label-placement="top" style="display: flex; flex-direction: column; gap: 14px">
-                  <n-form-item label="允许的文件类型">
-                    <n-checkbox-group v-model:value="selectedFileTypes">
-                      <n-grid :cols="3" :x-gap="12" :y-gap="6">
-                        <n-gi v-for="opt in fileTypeOptions" :key="opt.value">
-                          <n-checkbox :value="opt.value">{{ opt.label }}</n-checkbox>
-                        </n-gi>
-                      </n-grid>
-                    </n-checkbox-group>
-                  </n-form-item>
-                  <n-form-item label="单个文件最大大小">
-                    <n-input-number v-model:value="settings.max_file_size" :min="1048576" :max="52428800" :step="1048576" style="width: 200px">
-                      <template #suffix>字节</template>
-                    </n-input-number>
-                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px">
-                      ≈ {{ (settings.max_file_size / 1048576).toFixed(1) }} MB
-                    </span>
-                  </n-form-item>
-                  <n-form-item label="每对话最大文件数量">
-                    <n-input-number v-model:value="settings.max_files_per_conversation" :min="1" :max="50" style="width: 120px" />
-                  </n-form-item>
-                </n-form>
-              </n-card>
-            </template>
+            <n-card v-if="settings.enable_file_upload" size="small" title="文件上传设置" :bordered="true">
+              <n-form label-placement="top">
+                <n-form-item label="允许的文件类型">
+                  <n-checkbox-group v-model:value="selectedFileTypes">
+                    <n-grid :cols="3" :x-gap="12" :y-gap="6">
+                      <n-gi v-for="opt in fileTypeOptions" :key="opt.value">
+                        <n-checkbox :value="opt.value">{{ opt.label }}</n-checkbox>
+                      </n-gi>
+                    </n-grid>
+                  </n-checkbox-group>
+                </n-form-item>
+                <n-form-item label="单个文件最大大小">
+                  <n-input-number v-model:value="settings.max_file_size" :min="1048576" :max="52428800" :step="1048576" style="width: 200px">
+                    <template #suffix>字节</template>
+                  </n-input-number>
+                  <n-text depth="3" style="font-size: 12px; margin-left: 8px">
+                    ≈ {{ (settings.max_file_size / 1048576).toFixed(1) }} MB
+                  </n-text>
+                </n-form-item>
+                <n-form-item label="每对话最大文件数量">
+                  <n-input-number v-model:value="settings.max_files_per_conversation" :min="1" :max="50" style="width: 120px" />
+                </n-form-item>
+              </n-form>
+            </n-card>
 
-            <n-space>
-              <n-button type="primary" :loading="settingsSaving" @click="saveSettings">保存设置</n-button>
-            </n-space>
+            <n-button type="primary" :loading="settingsSaving" @click="saveSettings">保存设置</n-button>
           </div>
         </n-tab-pane>
 
         <!-- Tab 3: Tool Config -->
         <n-tab-pane name="tools" tab="工具管理">
-          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 12px; padding-top: 8px">
+          <div class="tab-content">
             <n-alert type="info" :bordered="false">
               配置每个 AI 工具的参数。工具权限在「职位管理」页面中为每个权限组独立配置。
             </n-alert>
@@ -532,21 +501,20 @@ onMounted(() => {
               :key="tc.tool_name"
               size="small"
               :bordered="true"
-              style="transition: opacity .2s"
-              :style="{ opacity: tc.enabled ? 1 : 0.5 }"
+              :style="{ opacity: tc.enabled ? 1 : 0.5, transition: 'opacity .2s' }"
             >
-              <div style="display: flex; align-items: flex-start; gap: 16px">
-                <div style="flex: 1; min-width: 0">
-                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-                    <span style="font-weight: 600; font-size: 14px; color: var(--text-primary)">{{ toolLabels[tc.tool_name] || tc.tool_name }}</span>
+              <div class="tool-row">
+                <div class="tool-body">
+                  <div class="tool-header">
+                    <span class="tool-name">{{ toolLabels[tc.tool_name] || tc.tool_name }}</span>
                     <n-switch v-model:value="tc.enabled" size="small" />
                     <n-tag v-if="tc.enabled" size="tiny" type="success" :bordered="false">已启用</n-tag>
                     <n-tag v-else size="tiny" type="warning" :bordered="false">已禁用</n-tag>
                   </div>
 
-                  <div v-if="toolFields[tc.tool_name]?.length" style="display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px">
-                    <div v-for="field in toolFields[tc.tool_name]" :key="field.key" style="display: flex; align-items: center; gap: 6px">
-                      <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap">{{ field.label }}:</span>
+                  <div v-if="toolFields[tc.tool_name]?.length" class="tool-fields">
+                    <div v-for="field in toolFields[tc.tool_name]" :key="field.key" class="tool-field">
+                      <n-text depth="3" style="font-size: 12px; white-space: nowrap">{{ field.label }}:</n-text>
                       <n-cascader
                         v-if="tc.tool_name === 'get_weather' && field.key === 'default_city'"
                         :value="getConfigData(tc)[field.key] || null"
@@ -577,28 +545,28 @@ onMounted(() => {
                     </div>
                   </div>
 
-                  <div style="display: flex; align-items: center; gap: 8px">
-                    <span style="font-size: 12px; color: var(--text-muted)">最大返回长度:</span>
+                  <div class="tool-field">
+                    <n-text depth="3" style="font-size: 12px">最大返回长度:</n-text>
                     <n-input-number v-model:value="tc.max_result_length" size="small" style="width: 100px" :min="100" :max="10000" :step="100" />
-                    <span style="font-size: 11px; color: var(--text-muted)">字符</span>
+                    <n-text depth="3" style="font-size: 12px">字符</n-text>
                   </div>
                 </div>
-                <n-button size="tiny" type="primary" quaternary @click="saveToolConfig(tc)" style="flex-shrink: 0; margin-top: 4px">保存</n-button>
+                <n-button size="small" type="primary" @click="saveToolConfig(tc)" class="tool-save">保存</n-button>
               </div>
             </n-card>
           </div>
         </n-tab-pane>
 
-        <!-- Tab 5: 调用限制 -->
+        <!-- Tab 4: Rate Limits -->
         <n-tab-pane name="limits" tab="调用限制">
-          <div style="max-width: 700px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px">
-            <n-alert type="info" :bordered="false" style="font-size: 12px">
+          <div class="tab-content">
+            <n-alert type="info" :bordered="false">
               配置 AI 对话的调用限制，包括对话轮数、上下文窗口、工具调用次数和防刷检测。
             </n-alert>
 
             <n-card size="small" :bordered="true">
-              <template #header><span style="font-weight: 600">对话限制</span></template>
-              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+              <template #header><span class="card-header">对话限制</span></template>
+              <n-form label-placement="left" label-width="auto" size="small">
                 <n-grid :cols="2" :x-gap="24">
                   <n-gi>
                     <n-form-item label="最大对话轮数">
@@ -611,13 +579,13 @@ onMounted(() => {
                     </n-form-item>
                   </n-gi>
                 </n-grid>
-                <n-text depth="3" style="font-size: 11px">最大对话轮数决定一次对话最多能来回多少次。上下文窗口决定发送给 AI 的最近几轮对话。</n-text>
+                <n-text depth="3" style="font-size: 12px">最大对话轮数决定一次对话最多能来回多少次。上下文窗口决定发送给 AI 的最近几轮对话。</n-text>
               </n-form>
             </n-card>
 
             <n-card size="small" :bordered="true">
-              <template #header><span style="font-weight: 600">工具调用限制</span></template>
-              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+              <template #header><span class="card-header">工具调用限制</span></template>
+              <n-form label-placement="left" label-width="auto" size="small">
                 <n-grid :cols="2" :x-gap="24">
                   <n-gi>
                     <n-form-item label="最大工具调用次数">
@@ -625,34 +593,32 @@ onMounted(() => {
                     </n-form-item>
                   </n-gi>
                 </n-grid>
-                <n-text depth="3" style="font-size: 11px">单次 AI 响应中最多能调用多少次工具（查积分、抽人、搜天气等）。</n-text>
+                <n-text depth="3" style="font-size: 12px">单次 AI 响应中最多能调用多少次工具（查积分、抽人、搜天气等）。</n-text>
               </n-form>
             </n-card>
 
             <n-card size="small" :bordered="true">
-              <template #header><span style="font-weight: 600">防刷检测</span></template>
-              <n-form label-placement="left" label-width="auto" size="small" style="margin-top: 4px">
+              <template #header><span class="card-header">防刷检测</span></template>
+              <n-form label-placement="left" label-width="auto" size="small">
                 <n-grid :cols="2" :x-gap="24">
                   <n-gi>
                     <n-form-item label="请求间隔">
                       <n-input-number v-model:value="rateLimits.rapid_gap_ms" :min="100" :max="30000" :step="100" style="width: 100%" />
-                      <span style="margin-left: 8px; font-size: 12px; color: var(--text-muted)">毫秒</span>
+                      <n-text depth="3" style="font-size: 12px; margin-left: 8px">毫秒</n-text>
                     </n-form-item>
                   </n-gi>
                   <n-gi>
                     <n-form-item label="惩罚延迟">
                       <n-input-number v-model:value="rateLimits.rapid_delay_ms" :min="100" :max="30000" :step="100" style="width: 100%" />
-                      <span style="margin-left: 8px; font-size: 12px; color: var(--text-muted)">毫秒</span>
+                      <n-text depth="3" style="font-size: 12px; margin-left: 8px">毫秒</n-text>
                     </n-form-item>
                   </n-gi>
                 </n-grid>
-                <n-text depth="3" style="font-size: 11px">请求间隔内多次发送消息会被延迟处理。惩罚延迟是检测到快速请求后等待的时间。</n-text>
+                <n-text depth="3" style="font-size: 12px">请求间隔内多次发送消息会被延迟处理。惩罚延迟是检测到快速请求后等待的时间。</n-text>
               </n-form>
             </n-card>
 
-            <n-button :loading="rateLimitsSaving" @click="saveRateLimits" secondary style="width: fit-content">
-              保存设置
-            </n-button>
+            <n-button type="primary" :loading="rateLimitsSaving" @click="saveRateLimits">保存设置</n-button>
           </div>
         </n-tab-pane>
 
@@ -662,4 +628,146 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* ── Tab layout ────────────────────────────────── */
+.tab-content {
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tab-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tab-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Tab 1: Model list ────────────────────────── */
+.model-card--active {
+  border-color: var(--primary-color) !important;
+  border-width: 1.5px !important;
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.model-info {
+  flex: 1;
+  min-width: 200px;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.model-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.key-ok {
+  color: var(--success-color);
+  margin-left: 8px;
+}
+
+.test-result {
+  margin-top: 4px;
+}
+
+.active-summary {
+  margin-top: 4px;
+}
+
+.active-summary :deep(strong) {
+  font-weight: 600;
+}
+
+/* ── Tab 2: Feature toggles ───────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.toggle-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Tab 3: Tool config ───────────────────────── */
+.tool-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.tool-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tool-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.tool-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-save {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Tab 4: Rate limits ───────────────────────── */
+.card-header {
+  font-weight: 600;
+}
 </style>
