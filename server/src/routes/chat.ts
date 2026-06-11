@@ -1262,10 +1262,13 @@ async function agentLoopAnthropic(
   let totalInput = 0
   let totalOutput = 0
 
+  // chat.unlimited 权限免除工具调用次数限制
+  const maxLoops = userPermissions.includes('chat.unlimited') ? 9999 : limits.max_agent_loops
+
   // Filter tools based on web_search
   const activeTools = webSearch ? [...TOOLS] : TOOLS.filter(t => t.name !== 'web_search')
 
-  for (let i = 0; i < limits.max_agent_loops; i++) {
+  for (let i = 0; i < maxLoops; i++) {
     let stream
     try {
       const apiParams: any = {
@@ -1499,7 +1502,10 @@ async function agentLoopOpenAI(
   let fullResponse = ''
   let totalTokens = 0
 
-  for (let i = 0; i < limits.max_agent_loops; i++) {
+  // chat.unlimited 权限免除工具调用次数限制
+  const maxLoops = userPermissions.includes('chat.unlimited') ? 9999 : limits.max_agent_loops
+
+  for (let i = 0; i < maxLoops; i++) {
     let data: any
     try {
       // Emit thinking indicator upfront
