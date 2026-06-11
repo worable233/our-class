@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { execSync, spawn } from 'child_process'
+import { execSync, spawn, type ChildProcess } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { ok, fail } from '../lib/response.js'
@@ -24,29 +24,45 @@ function getProxyEnv(): Record<string, string> {
   return env
 }
 
-function execOpts(extra: Record<string, any> = {}) {
-  return { ...extra, env: { ...process.env, ...getProxyEnv(), ...(extra.env || {}) } }
-}
-
 function sse(res: Response, type: string, data: any) {
   res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`)
 }
 
-function runCommand(cmd: string, args: string[], opts: any, onOutput: (chunk: string) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...opts, env: { ...process.env, ...getProxyEnv() } })
-    const timeout = opts.timeout || 0
-    let timer: NodeJS.Timeout | null = null
-    if (timeout) timer = setTimeout(() => { child.kill(); reject(new Error('Command timed out')) }, timeout)
-    child.stdout.on('data', (data: Buffer) => onOutput(data.toString()))
-    child.stderr.on('data', (data: Buffer) => onOutput(data.toString()))
+/** 杀掉整个进程组（包括子进程的子进程） */
+function killTree(child: ChildProcess) {
+  if (!child.pid) return
+  try { process.kill(-child.pid, 'SIGTERM') } catch {}
+  setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }, 3000)
+}
+
+/**
+ * 运行子命令，返回 child 引用（供 abort 时 kill）。
+ * 使用 detached + process group kill 确保 npm 子进程也被清理。
+ */
+function runCommand(
+  cmd: string, args: string[], opts: any, onOutput: (chunk: string) => void,
+): { promise: Promise<void>; child: ChildProcess } {
+  const child = spawn(cmd, args, {
+    ...opts,
+    env: { ...process.env, ...getProxyEnv() },
+    detached: true,  // 创建新进程组，方便整组 kill
+  })
+  const timeout = opts.timeout || 0
+  let timer: NodeJS.Timeout | null = null
+  let killed = false
+  if (timeout) timer = setTimeout(() => { killed = true; killTree(child) }, timeout)
+  child.stdout?.on('data', (data: Buffer) => onOutput(data.toString()))
+  child.stderr?.on('data', (data: Buffer) => onOutput(data.toString()))
+  const promise = new Promise<void>((resolve, reject) => {
     child.on('close', (code) => {
       if (timer) clearTimeout(timer)
-      if (code === 0) resolve()
-      else reject(new Error('command exited with code ' + code))
+      if (killed) reject(new Error('命令超时'))
+      else if (code === 0) resolve()
+      else reject(new Error('命令退出码 ' + code))
     })
     child.on('error', reject)
   })
+  return { promise, child }
 }
 
 router.use(authMiddleware)
@@ -187,11 +203,10 @@ router.post('/apply', async (req: Request, res: Response) => {
   res.flushHeaders()
 
   let aborted = false
-  let currentChild: { kill: () => void } | null = null
+  let currentChild: ChildProcess | null = null
   const onClose = () => {
     aborted = true
-    if (currentChild) { try { currentChild.kill() } catch {} }
-    res.end()
+    if (currentChild) killTree(currentChild)
   }
   req.on('close', onClose)
 
@@ -200,48 +215,57 @@ router.post('/apply', async (req: Request, res: Response) => {
   try {
     if (aborted) return
     emit('step', { message: '正在检查 Git...' })
-    try { execSync('git --version', execOpts({ encoding: 'utf-8', timeout: 3000 })) }
+    try { execSync('git --version', { encoding: 'utf-8', timeout: 3000, env: { ...process.env, ...getProxyEnv() } }) }
     catch { emit('error', { message: 'Git 未安装' }); return }
 
     if (aborted) return
     emit('success', { message: 'Git 可用' })
 
-    emit('step', { message: '正在连接 GitHub...' })
-    // 直接尝试拉取（跳过 ping — ICMP 无法通过 HTTP 代理）
+    const env = { ...process.env, ...getProxyEnv() }
+
     for (const [label, cmd, args, opts, critical] of [
-      ['拉取代码', 'git', ['fetch', 'origin', 'main'], { timeout: 30000 }, true],
-      ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000 }, true],
-      ['清理文件', 'git', ['clean', '-fd'], { timeout: 10000 }, false],
-      ['安装前端依赖', 'npm', ['install'], { timeout: 120000, cwd: FRONTEND_ROOT }, true],
+      ['拉取代码', 'git', ['fetch', 'origin', 'main'], { timeout: 30000, cwd: PROJECT_ROOT }, true],
+      ['同步代码', 'git', ['reset', '--hard', 'origin/main'], { timeout: 15000, cwd: PROJECT_ROOT }, true],
+      ['清理构建产物', 'git', ['clean', '-fd', '-e', '.env', '-e', 'server/data.db', '-e', 'server/storage', '-e', 'server/uploads', '-e', 'server/backups'], { timeout: 10000, cwd: PROJECT_ROOT }, false],
+      ['安装前端依赖', 'npm', ['install'], { timeout: 180000, cwd: FRONTEND_ROOT }, true],
       ['安装后端依赖', 'npm', ['install'], { timeout: 120000, cwd: PROJECT_ROOT }, true],
-      ['构建前端', 'npm', ['run', 'build-only'], { timeout: 120000, cwd: FRONTEND_ROOT }, false],
+      ['构建前端', 'npm', ['run', 'build-only'], { timeout: 180000, cwd: FRONTEND_ROOT }, false],
     ] as const) {
       if (aborted) return
       emit('step', { message: '正在' + label + '...' })
       try {
-        currentChild = null
-        await runCommand(cmd as string, args as string[], execOpts({ cwd: PROJECT_ROOT, ...opts }), (chunk) => emit('output', { text: chunk }))
+        const { promise, child } = runCommand(cmd, args as string[], { env, ...opts }, (chunk) => emit('output', { text: chunk }))
+        currentChild = child
+        await promise
       } catch (e: any) {
         if (aborted) return
         if (critical) { emit('error', { message: label + '失败' }); return }
+      } finally {
+        currentChild = null
       }
     }
 
     if (aborted) return
-    // 写入操作日志
-    writeAuditLog(req.user!.id, req.user!.display_name, 'update_apply', 'system', undefined, { message: '系统更新已应用' })
-    emit('done', { message: '更新成功，即将重启...' })
+    try { writeAuditLog(req.user!.id, req.user!.display_name, 'update_apply', 'system', undefined, { message: '系统更新已应用' }) } catch {}
+    emit('done', { message: '更新成功，2 秒后重启...' })
     res.end()
-    res.on('finish', () => {
-      setTimeout(() => {
+
+    // PM2 环境：直接 process.exit(0)，由 PM2 自动重启
+    // 非 PM2 环境：spawn 新进程后退出
+    setTimeout(() => {
+      if (process.env.pm_id) {
+        // PM2 管理的进程，直接退出让 PM2 重启
+        process.exit(0)
+      } else {
+        // 非 PM2，手动 spawn 新进程
         const child = spawn(process.argv[0], process.argv.slice(1), { cwd: PROJECT_ROOT, stdio: 'inherit', detached: true })
         child.unref()
         process.exit(0)
-      }, 1000)
-    })
+      }
+    }, 2000)
   } finally {
     req.removeListener('close', onClose)
-    if (!aborted) res.end()
+    if (!aborted) { try { res.end() } catch {} }
     updating = false
   }
 })
