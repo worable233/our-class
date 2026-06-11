@@ -254,6 +254,20 @@ function downloadFile(entry: FileEntry) {
   const a = document.createElement('a'); a.href = `/api/storage/download?path=${encodeURIComponent(entry.path)}&token=${token}`; a.download = entry.name; a.click()
 }
 
+async function batchDownload() {
+  const files = entries.value.filter(e => selectedPaths.has(e.path) && !e.is_dir)
+  if (files.length === 0) { message.warning('请至少选择一个文件（文件夹暂不支持批量下载）'); return }
+  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  message.info(`开始下载 ${files.length} 个文件`)
+  for (const f of files) {
+    const a = document.createElement('a')
+    a.href = `/api/storage/download?path=${encodeURIComponent(f.path)}&token=${token}`
+    a.download = f.name
+    a.click()
+    await new Promise(r => setTimeout(r, 300))
+  }
+}
+
 // ── Batch rename ──
 async function openBatchRename() {
   const paths = Array.from(selectedPaths.value)
@@ -389,6 +403,7 @@ onUnmounted(() => {
       <CheckSquare :size="15" style="color:var(--accent);" />
       <span style="color:var(--text-primary);font-weight:500;">已选 {{ selectedPaths.size }} 项</span>
       <div style="flex:1" />
+      <NButton size="tiny" secondary @click="batchDownload" round><template #icon><Download :size="13" /></template>批量下载</NButton>
       <NButton size="tiny" secondary @click="openBatchRename" round><template #icon><Replace :size="13" /></template>批量重命名</NButton>
       <NButton size="tiny" secondary @click="openMove" round><template #icon><MoveRight :size="13" /></template>移动到</NButton>
       <NButton size="tiny" secondary type="error" @click="batchDelete" round><template #icon><Trash2 :size="13" /></template>批量删除</NButton>

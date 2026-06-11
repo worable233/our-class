@@ -144,6 +144,18 @@ async function loadMoveDirs() { try { const r = await api.get<{ entries: FileEnt
 function enterMoveDir(name: string) { moveDir.value = moveDir.value ? `${moveDir.value}/${name}` : name; loadMoveDirs() }
 async function confirmMove() { try { const r = await api.post<{ moved: number }>('/storage/move', { paths: moveTargets.value, target: moveDir.value }); message.success(`已移动 ${r.moved} 个项目`); showMoveModal.value = false; selectedPaths.value = new Set(); await loadList(currentPath.value); await loadInfo() } catch (e: any) { message.error(e.message || '移动失败') } }
 function downloadFile(entry: FileEntry) { if (entry.is_dir) { message.warning('暂不支持直接下载文件夹'); return }; const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''; const a = document.createElement('a'); a.href = `/api/storage/download?path=${encodeURIComponent(entry.path)}&token=${token}`; a.download = entry.name; a.click() }
+async function batchDownload() {
+  const files = entries.value.filter(e => selectedPaths.has(e.path) && !e.is_dir)
+  if (files.length === 0) { message.warning('请至少选择一个文件（文件夹暂不支持批量下载）'); return }
+  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  message.info(`开始下载 ${files.length} 个文件`)
+  for (const f of files) {
+    const a = document.createElement('a')
+    a.href = `/api/storage/download?path=${encodeURIComponent(f.path)}&token=${token}`
+    a.download = f.name; a.click()
+    await new Promise(r => setTimeout(r, 300))
+  }
+}
 
 function fileIconComponent(icon: string) { const m: Record<string, any> = { folder: Folder, image: Image, video: Video, audio: Music, pdf: FileType, doc: FileText, excel: FileSpreadsheet, ppt: File, archive: Archive, text: FileText, code: File }; return m[icon] || File }
 function iconColor(icon: string): string { const m: Record<string, string> = { folder: '#f0a020', image: '#18a058', video: '#a050dc', audio: '#5E6AD2', pdf: '#d03050', doc: '#5E6AD2', excel: '#18a058', ppt: '#d03050', archive: '#f0a020', text: '#888', code: '#5E6AD2' }; return m[icon] || '#888' }
@@ -180,6 +192,7 @@ function fmtPercent(pct: number): 'default' | 'success' | 'warning' | 'error' { 
     <div v-if="selectedPaths.size > 0" style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface-2);border-radius:6px;font-size:13px;">
       <CheckSquare :size="15" style="color:var(--accent);" /><span style="color:var(--text-primary);font-weight:500;">已选 {{ selectedPaths.size }} 项</span>
       <div style="flex:1" />
+      <NButton size="tiny" secondary @click="batchDownload" round><template #icon><Download :size="13" /></template>批量下载</NButton>
       <NButton size="tiny" secondary @click="openBatchRename" round><template #icon><Replace :size="13" /></template>批量重命名</NButton>
       <NButton size="tiny" secondary @click="openMove" round><template #icon><MoveRight :size="13" /></template>移动到</NButton>
       <NButton size="tiny" secondary type="error" @click="batchDelete" round><template #icon><Trash2 :size="13" /></template>批量删除</NButton>
