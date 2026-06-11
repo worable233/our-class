@@ -8,7 +8,7 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ComponentPublicInstance } from 'vue'
-import { NCarousel, NCard, NEllipsis, NTag } from 'naive-ui'
+import { NCarousel, NEllipsis, NTag } from 'naive-ui'
 import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload, Newspaper } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
@@ -862,9 +862,9 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
 
           <!-- ═══ 最新公众号文章轮播 ═══ -->
           <div v-if="recentArticles.length > 0" class="article-carousel">
-            <n-carousel :interval="5000" dot-placement="bottom" show-arrow="hover" draggable effect="card">
+            <n-carousel :interval="5000" dot-placement="bottom" show-arrow="hover" draggable>
               <div v-for="art in recentArticles" :key="art.id" class="carousel-slide">
-                <n-card class="carousel-card" @click="openArticleChat(art)" :bordered="false">
+                <div class="carousel-card" @click="openArticleChat(art)">
                   <div class="carousel-cover-wrap">
                     <img v-if="art.cover_url" :src="art.cover_url" :alt="art.title" class="carousel-cover-img"
                       @error="($event.target as HTMLImageElement).style.display='none'" />
@@ -879,7 +879,7 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
                       <span class="carousel-date">{{ formatDate(art.created_at) }}</span>
                     </div>
                   </div>
-                </n-card>
+                </div>
               </div>
             </n-carousel>
           </div>
