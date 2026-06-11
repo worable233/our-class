@@ -8,7 +8,7 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ComponentPublicInstance } from 'vue'
-import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload, Newspaper } from '@lucide/vue'
+import { Star, BarChart3, FileText, MessageSquare, Shuffle, Trophy, Sun, Upload, Newspaper, User, Calendar } from '@lucide/vue'
 import SearchPanel from '@/components/chat/SearchPanel.vue'
 import RandomPickModal from '@/components/chat/RandomPickModal.vue'
 import { useSearchPanel } from '@/composables/useSearchPanel'
@@ -36,6 +36,7 @@ const carouselIndex = ref(0)
 const carouselTransition = ref(true)
 let carouselTimer: ReturnType<typeof setInterval> | null = null
 let dragState: { startY: number; startIdx: number; moved: boolean; offset: number } | null = null
+let lastWheelTime = 0
 
 function carouselGoTo(i: number) {
   const len = recentArticles.value.length
@@ -48,6 +49,9 @@ function carouselPrev() { carouselGoTo(carouselIndex.value - 1) }
 
 function carouselWheel(e: WheelEvent) {
   if (recentArticles.value.length < 2) return
+  const now = Date.now()
+  if (now - lastWheelTime < 280) return
+  lastWheelTime = now
   if (e.deltaY > 0) carouselNext()
   else carouselPrev()
 }
@@ -93,7 +97,7 @@ const carouselTrackStyle = computed(() => {
   const offset = dragState?.offset ?? 0
   return {
     transform: `translateY(${base + (carouselTransition.value ? 0 : offset)}px)`,
-    transition: carouselTransition.value ? 'transform .45s cubic-bezier(.25,.46,.45,.94)' : 'none',
+    transition: carouselTransition.value ? 'transform .5s cubic-bezier(.16,1,.3,1)' : 'none',
   }
 })
 
@@ -402,7 +406,7 @@ function formatDate(d: string) {
 function openArticleChat(art: ArticleItem) {
   if (!auth.isLoggedIn) { emit('login'); return }
   // Navigate to chat with article context
-  welcomeAction(`搜索公众号文章「${art.title}」的内容`)
+  welcomeAction(`搜索公众号文章「${art.title}」的内容，帮我总结`)
 }
 
 function welcomeAction(prompt: string) {
@@ -953,8 +957,8 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
                 <div class="carousel-overlay">
                   <div class="carousel-title carousel-clamp">{{ art.title }}</div>
                   <div class="carousel-meta">
-                    <span v-if="art.author" class="carousel-author">{{ art.author }}</span>
-                    <span class="carousel-date">{{ formatDate(art.created_at) }}</span>
+                    <span v-if="art.author" class="carousel-author"><User :size="11" />{{ art.author }}</span>
+                    <span class="carousel-date"><Calendar :size="11" />{{ formatDate(art.created_at) }}</span>
                   </div>
                 </div>
               </div>
@@ -1197,6 +1201,10 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   user-select: none;
   touch-action: none;
 }
+html.dark .article-carousel {
+  box-shadow: 0 2px 20px rgba(0,0,0,0.35);
+  border: 1px solid var(--hairline);
+}
 .carousel-track {
   display: flex;
   flex-direction: column;
@@ -1258,15 +1266,21 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   align-items: center;
   gap: 10px;
 }
+.carousel-author, .carousel-date {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  text-shadow: 0 1px 3px rgba(255,255,255,0.25);
+}
 .carousel-author {
-  font-size: 12px;
-  color: rgba(255,255,255,0.85);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.55);
 }
 .carousel-date {
-  font-size: 11px;
   color: rgba(255,255,255,0.55);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.carousel-author svg,
+.carousel-date svg {
+  margin-right: 3px;
 }
 /* ── 指示点（Naive UI 风格右侧竖排） ── */
 .carousel-dots {
@@ -1295,23 +1309,6 @@ watch(() => messages.value[messages.value.length - 1]?.content, scrollToBottom)
   background: #fff;
   transform: scale(1.3);
   box-shadow: 0 0 6px rgba(255,255,255,0.3);
-}
-.carousel-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.45;
-  margin-bottom: 6px;
-}
-.carousel-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.carousel-date {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
 }
 </style>
 

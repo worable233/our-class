@@ -740,11 +740,15 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const query = input.query as string
       if (!query?.trim()) return JSON.stringify({ error: '请输入搜索关键词' })
       try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 15000)
         const res = await fetch('https://uapis.cn/api/v1/search/aggregate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, count: (input.count as number) || 5 }),
+          signal: ctrl.signal,
         })
+        clearTimeout(timer)
         if (res.ok) {
           const data = await res.json() as any
           const items = (data.results || data.data || []).slice(0, 5).map((r: any) => ({
@@ -1209,63 +1213,64 @@ async function agentLoopAnthropic(
         const label = toolLabel(tc.name, parsed)
         res.write(`data: ${JSON.stringify({ type: 'tool_start', name: tc.name, label })}\n\n`)
 
-        const result = await executeTool(tc.name, parsed, userId, userRole, userPermissions, userClass)
-
-        // Save tool message (label + result) so it persists after refresh
-        // web_search needs full results for search panel, others can be truncated
-        const savedResult = tc.name === 'web_search' ? result : result.slice(0, 500)
-        const toolContent: any = { label, result: savedResult }
-
-        // Persist card data so it survives page refresh
-        if (tc.name === 'random_pick') {
-          const cardData = buildCard(tc.name, parsed, result)
-          if (cardData) toolContent.card = cardData
+        let result: string
+        try {
+          result = await executeTool(tc.name, parsed, userId, userRole, userPermissions, userClass)
+        } catch (e: any) {
+          result = JSON.stringify({ error: `工具执行出错: ${e.message || e}` })
         }
 
-        db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
-          .run(convId, 'tool', JSON.stringify(toolContent), 0)
+        try {
+          // Save tool message (label + result) so it persists after refresh
+          // web_search needs full results for search panel, others can be truncated
+          const savedResult = tc.name === 'web_search' ? result : result.slice(0, 500)
+          const toolContent: any = { label, result: savedResult }
 
-        const summaryText = tc.name === 'web_search' ? formatSearchSummary(result) : result.slice(0, 800)
-        res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.name, summary: summaryText })}\n\n`)
-
-        // Emit tool_card for visual card display
-        if (tc.name === 'random_pick') {
-          const cardData = buildCard(tc.name, parsed, result)
-          if (cardData) {
-            res.write(`data: ${JSON.stringify({ type: 'tool_card', card: cardData })}\n\n`)
+          // Persist card data so it survives page refresh
+          if (tc.name === 'random_pick') {
+            const cardData = buildCard(tc.name, parsed, result)
+            if (cardData) toolContent.card = cardData
           }
-        }
 
-        if (tc.name === 'web_search') {
+          db.prepare('INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?,?,?,?)')
+            .run(convId, 'tool', JSON.stringify(toolContent), 0)
+
+          const summaryText = tc.name === 'web_search' ? formatSearchSummary(result) : result.slice(0, 800)
+          res.write(`data: ${JSON.stringify({ type: 'tool_result', name: tc.name, summary: summaryText })}\n\n`)
+
+          if (tc.name === 'web_search') {
+            try {
+              const parsed = JSON.parse(result)
+              if (Array.isArray(parsed)) {
+                res.write(`data: ${JSON.stringify({ type: 'search_results', results: parsed })}\n\n`)
+              }
+            } catch {}
+          }
+
+          // ── 图片工具结果：base64 编码后以 image block 发送 ──
+          let resultContent: any = result
           try {
-            const parsed = JSON.parse(result)
-            if (Array.isArray(parsed)) {
-              res.write(`data: ${JSON.stringify({ type: 'search_results', results: parsed })}\n\n`)
+            const parsedResult = JSON.parse(result)
+            if (parsedResult._image) {
+              const imagePath = join(__dirname, '..', '..', 'uploads', parsedResult.file_path)
+              if (existsSync(imagePath)) {
+                const imgBuf = await import('fs/promises').then(m => m.readFile(imagePath))
+                const b64 = imgBuf.toString('base64')
+                resultContent = [
+                  { type: 'text', text: parsedResult.text },
+                  { type: 'image', source: { type: 'base64', media_type: parsedResult.mime_type, data: b64 } },
+                ]
+              }
             }
           } catch {}
+
+          loopMessages.push({
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: tc.id, content: resultContent }],
+          })
+        } catch (e: any) {
+          res.write(`data: ${JSON.stringify({ type: 'error', content: `工具处理出错: ${e.message || e}` })}\n\n`)
         }
-
-        // ── 图片工具结果：base64 编码后以 image block 发送 ──
-        let resultContent: any = result
-        try {
-          const parsedResult = JSON.parse(result)
-          if (parsedResult._image) {
-            const imagePath = join(__dirname, '..', '..', 'uploads', parsedResult.file_path)
-            if (existsSync(imagePath)) {
-              const imgBuf = await import('fs/promises').then(m => m.readFile(imagePath))
-              const b64 = imgBuf.toString('base64')
-              resultContent = [
-                { type: 'text', text: parsedResult.text },
-                { type: 'image', source: { type: 'base64', media_type: parsedResult.mime_type, data: b64 } },
-              ]
-            }
-          }
-        } catch {}
-
-        loopMessages.push({
-          role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: tc.id, content: resultContent }],
-        })
       }
     } else {
       // Final response — stream text now
