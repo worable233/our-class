@@ -22,6 +22,18 @@ echo "   OurClass 状态重置"
 echo "========================================"
 echo ""
 
+# ── 0. 停止运行中的 OurClass 进程 ────────────────────────────────
+info "检查运行中的 OurClass 进程..."
+stopped=0
+for port in 3000 3001; do
+  pid=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [ -n "$pid" ]; then
+    warn "检测到端口 $port 被占用 (PID: $pid)"
+    kill "$pid" 2>/dev/null && ok "已停止进程 (PID: $pid)" && stopped=$((stopped + 1))
+  fi
+done
+[ "$stopped" -gt 0 ] && sleep 1
+
 # ── 1. 删除数据库 ─────────────────────────────────────────────────
 if [ -f "server/data.db" ]; then
   rm -f "server/data.db"
@@ -54,12 +66,12 @@ else
   info "上传目录为空，跳过"
 fi
 
-# ── 5. 删除前端构建产物 ─────────────────────────────────────────────
-if [ -d "dist" ]; then
-  rm -rf "dist"
-  ok "已删除前端构建 (dist/)"
+# ── 5. 清理网盘存储 ─────────────────────────────────────────────────
+if [ -d "server/storage" ] && [ "$(ls -A server/storage 2>/dev/null)" ]; then
+  rm -rf server/storage/*
+  ok "已清理网盘存储 (server/storage/)"
 else
-  info "前端构建目录不存在，跳过"
+  info "网盘存储目录为空，跳过"
 fi
 
 echo ""
@@ -67,7 +79,27 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}   重置完成！${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "下一步："
-echo "  1. 启动后端: cd server && npm run dev"
-echo "  2. 访问安装向导: http://localhost:3001/setup"
+
+# ── 7. 启动配置向导 ─────────────────────────────────────────────────
+info "启动配置向导..."
+cd "$SCRIPT_DIR/server"
+nohup npx tsx src/setup/index.ts > /tmp/ourclass-setup.log 2>&1 &
+SETUP_PID=$!
+sleep 3
+if kill -0 "$SETUP_PID" 2>/dev/null; then
+  ok "配置向导已启动 (PID: $SETUP_PID)"
+else
+  warn "配置向导可能未正常启动，查看日志: cat /tmp/ourclass-setup.log"
+fi
+
+# 尝试打开浏览器
+SETUP_URL="http://localhost:3001/setup"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  open "$SETUP_URL" 2>/dev/null || true
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  xdg-open "$SETUP_URL" 2>/dev/null || true
+fi
+
+echo ""
+echo "  访问: $SETUP_URL"
 echo ""

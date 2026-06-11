@@ -165,9 +165,6 @@ else {
 # ── 5. 清理网盘存储目录 ─────────────────────────────────────────────
 Remove-Safe -Path "server\storage" -Label "网盘存储 (server\storage\)" -Recurse
 
-# ── 6. 删除前端构建产物 ─────────────────────────────────────────────
-Remove-Safe -Path "dist" -Label "前端构建 (dist\)" -Recurse
-
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "   重置完成！" -ForegroundColor Green

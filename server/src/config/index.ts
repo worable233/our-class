@@ -1,7 +1,7 @@
 import dotenv from 'dotenv'
 import { resolve } from 'path'
 
-dotenv.config({ path: resolve(import.meta.dirname, '..', '..', '.env') })
+dotenv.config({ path: resolve(import.meta.dirname, '..', '..', '..', '.env') })
 
 function envStr(key: string, fallback: string): string {
   return process.env[key] || fallback
