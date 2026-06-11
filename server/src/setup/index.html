@@ -646,7 +646,6 @@ const API = '/api/setup'
 // ── State ───────────────────────────────────────────────
 let currentStep = 0
 const stepsCompleted = new Set()
-let transitioning = false
 const TOTAL_STEPS = 6
 
 // ── Password toggle ────────────────────────────────────
@@ -667,10 +666,41 @@ function togglePassword(inputId, btn) {
 }
 
 // ── Step navigation ───────────────────────────────────
+const SVG = {
+  user: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>',
+  save: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+}
+const DEFAULT_BTN_STATE = {
+  createAdminBtn: { html: SVG.user + ' 创建管理员', onclick: 'createAdmin' },
+  saveConfigBtn:  { html: SVG.save + ' 保存配置',   onclick: 'saveConfig' },
+  applyBtn:       { html: SVG.check + ' 完成安装',   onclick: 'applySetup' },
+}
+function resetActionBtn(id) {
+  const el = document.getElementById(id)
+  const def = DEFAULT_BTN_STATE[id]
+  if (!el || !def) return
+  el.disabled = false
+  el.innerHTML = def.html
+  el.setAttribute('onclick', def.onclick + '()')
+}
+
 function goToStep(n) {
-  if (transitioning) return
   if (n > currentStep + 1 && !stepsCompleted.has(n - 1)) return
   if (n > currentStep && n > 0 && !stepsCompleted.has(currentStep)) return
+
+  // Going backward: reset action buttons + clear stale alerts
+  if (n < currentStep) {
+    resetActionBtn('createAdminBtn')
+    resetActionBtn('saveConfigBtn')
+    resetActionBtn('applyBtn')
+    const clear = id => { const el = document.getElementById(id); if (el) el.innerHTML = '' }
+    clear('adminAlert')
+    clear('configAlert')
+    clear('applyAlert')
+    const log = document.getElementById('applyLog')
+    if (log) { log.style.display = 'none'; log.innerHTML = '' }
+  }
 
   const cards = document.querySelectorAll('.step-card')
   const dots = document.querySelectorAll('.step-dot')
@@ -693,9 +723,11 @@ function goToStep(n) {
   }
 }
 
-function nextStep() {
+function nextStep(markCompleted) {
   if (currentStep < TOTAL_STEPS - 1) {
-    stepsCompleted.add(currentStep)
+    // Only mark step as completed when explicitly told to (informational steps)
+    // Action steps mark themselves completed on API success instead
+    if (markCompleted !== false) stepsCompleted.add(currentStep)
     goToStep(currentStep + 1)
   }
 }
@@ -784,14 +816,15 @@ async function createAdmin() {
     const data = await res.json()
     if (!res.ok) {
       alert.innerHTML = '<div class="alert alert-error">' + data.error + '</div>'
-      btn.disabled = false; btn.innerHTML = '创建管理员'; return
+      resetActionBtn('createAdminBtn'); return
     }
     alert.innerHTML = '<div class="alert alert-success">✅ 管理员账号已创建</div>'
-    setTimeout(nextStep, 600)
+    stepsCompleted.add(3)
+    setTimeout(() => goToStep(4), 600)
   } catch(e) {
     console.error('[setup] create admin error:', e)
     alert.innerHTML = '<div class="alert alert-error">❌ ' + e.message + '</div>'
-    btn.disabled = false; btn.innerHTML = '创建管理员'
+    resetActionBtn('createAdminBtn')
   }
 }
 
@@ -850,7 +883,7 @@ async function saveConfig() {
     const j = await res.json()
     if (!res.ok) {
       alert.innerHTML = '<div class="alert alert-error">' + j.error + '</div>'
-      btn.disabled = false; btn.innerHTML = '保存配置'; return
+      resetActionBtn('saveConfigBtn'); return
     }
     alert.innerHTML = '<div class="alert alert-success">✅ 配置已保存</div>'
 
@@ -861,11 +894,12 @@ async function saveConfig() {
       <div class="summary-row"><span class="summary-label">AI 模型</span><span class="summary-value">${data.model}</span></div>
       <div class="summary-row"><span class="summary-label">API Key</span><span class="summary-value" style="color:${data.api_key ? '#16a34a' : '#d97706'}">${data.api_key ? '✅ 已配置' : '⚠️ 留空可在设置页补配'}</span></div>
     `
-    setTimeout(nextStep, 500)
+    stepsCompleted.add(4)
+    setTimeout(() => goToStep(5), 500)
   } catch(e) {
     console.error('[setup] save config error:', e)
     alert.innerHTML = '<div class="alert alert-error">❌ ' + e.message + '</div>'
-    btn.disabled = false; btn.innerHTML = '保存配置'
+    resetActionBtn('saveConfigBtn')
   }
 }
 
