@@ -298,7 +298,7 @@ defineExpose({ input, addExternalFile })
         ref="textareaRef"
         v-model="input"
         rows="1"
-        placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+        placeholder="输入消息，Shift+Enter 发送，Enter 换行"
         :disabled="loading || disabled"
         class="input-area"
         @input="onInput"
