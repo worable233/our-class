@@ -13,6 +13,16 @@ const router = Router()
 
 const TEACHER_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE group_type = 'teacher' LIMIT 1)"
 
+const createSchema = z.object({
+  display_name: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string().optional(),
+  class: z.string().optional(),
+  nickname: z.string().nullable().optional(),
+  group_id: z.number().int().nullable().optional(),
+  role_id: z.number().int().nullable().optional(),
+})
+
 const updateSchema = z.object({
   display_name: z.string().min(1).optional(),
   username: z.string().optional(),
@@ -57,6 +67,35 @@ router.get('/', requirePermission('students.write'), (req: Request, res: Respons
   sql += ' ORDER BY u.id'
   const teachers = db.prepare(sql).all(...params)
   ok(res, teachers)
+})
+
+// POST /api/teachers — create teacher
+router.post('/', requirePermission('students.write'), validate(createSchema), async (req: Request, res: Response) => {
+  const db = getDb()
+  const { display_name, username, password, class: cls, nickname, group_id, role_id } = req.body
+
+  // Check if username already exists
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
+  if (existing) return fail(res, 409, 'DUPLICATE', '用户名已存在')
+
+  // Use teacher group if no group_id specified
+  const finalGroupId = group_id || (() => {
+    const g = db.prepare("SELECT id FROM permission_groups WHERE group_type = 'teacher' LIMIT 1").get() as any
+    return g?.id || null
+  })()
+
+  const hashedPw = await bcrypt.hash(password || '123456', BCRYPT_ROUNDS)
+
+  const result = db.prepare(
+    'INSERT INTO users (username, display_name, role, class, password, nickname, group_id, role_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(username, display_name, 'teacher', cls || '', hashedPw, nickname || null, finalGroupId, role_id || null)
+
+  const created = db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
+    FROM users u WHERE u.id = ?
+  `).get(result.lastInsertRowid)
+
+  ok(res, created)
 })
 
 // GET /api/teachers/:id

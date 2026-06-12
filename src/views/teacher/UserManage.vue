@@ -84,6 +84,20 @@ async function loadTeachers() {
   }
 }
 
+function openNewTeacher() {
+  editingTeacher.value = null
+  teacherForm.value = {
+    display_name: '',
+    username: '',
+    class: [],
+    nickname: '',
+    password: '',
+    group_id: null,
+    role_id: null,
+  }
+  showTeacherModal.value = true
+}
+
 function openEditTeacher(t: Teacher) {
   editingTeacher.value = t
   teacherForm.value = {
@@ -100,6 +114,7 @@ function openEditTeacher(t: Teacher) {
 
 async function saveTeacher() {
   if (!teacherForm.value.display_name) { message.error('请输入姓名'); return }
+  if (!editingTeacher.value && !teacherForm.value.username) { message.error('请输入用户名'); return }
   teacherSaving.value = true
   try {
     const payload: any = { display_name: teacherForm.value.display_name }
@@ -110,10 +125,14 @@ async function saveTeacher() {
     if (teacherForm.value.group_id) payload.group_id = teacherForm.value.group_id
     if (teacherForm.value.role_id) payload.role_id = teacherForm.value.role_id
 
-    await api.put(`/teachers/${editingTeacher.value!.id}`, payload)
+    if (editingTeacher.value) {
+      await api.put(`/teachers/${editingTeacher.value.id}`, payload)
+    } else {
+      await api.post('/teachers', payload)
+    }
     showTeacherModal.value = false
     await loadTeachers()
-    message.success('教师信息已更新')
+    message.success(editingTeacher.value ? '教师信息已更新' : '教师已创建')
   } catch (e: any) {
     message.error(e.message || '保存失败')
   } finally {
@@ -380,9 +399,15 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             <span>教师管理</span>
           </div>
         </template>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
-          <span style="font-size: 14px; color: var(--text-primary); font-weight: 600;">教师账号</span>
-          <span style="font-size: 12px; color: var(--text-muted);">共 {{ teachers.length }} 人</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px; color: var(--text-primary); font-weight: 600;">教师账号</span>
+            <span style="font-size: 12px; color: var(--text-muted);">共 {{ teachers.length }} 人</span>
+          </div>
+          <n-button type="primary" @click="openNewTeacher" round size="small">
+            <template #icon><Plus :size="16" /></template>
+            添加教师
+          </n-button>
         </div>
 
         <n-spin :show="teachersLoading" style="min-height: 200px">
@@ -577,11 +602,11 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
       </template>
     </n-modal>
 
-    <!-- ── 教师编辑 Modal ── -->
+    <!-- ── 教师编辑/创建 Modal ── -->
     <n-modal
       v-model:show="showTeacherModal"
       preset="card"
-      title="编辑教师"
+      :title="editingTeacher ? '编辑教师' : '添加教师'"
       style="width: 420px"
       :mask-closable="false"
       header-style="padding: 20px 24px 0; font-size: 18px; font-weight: 600"
@@ -593,7 +618,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
           <n-input v-model:value="teacherForm.display_name" placeholder="教师姓名" />
         </n-form-item>
         <n-form-item label="用户名" path="username">
-          <n-input v-model:value="teacherForm.username" placeholder="登录用户名" />
+          <n-input v-model:value="teacherForm.username" placeholder="登录用户名" :disabled="!!editingTeacher" />
         </n-form-item>
         <n-form-item label="昵称" path="nickname">
           <n-input v-model:value="teacherForm.nickname" placeholder="显示昵称（可选）" />
@@ -630,7 +655,9 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 10px">
           <n-button @click="showTeacherModal = false" quaternary>取消</n-button>
-          <n-button type="primary" @click="saveTeacher" :disabled="!teacherForm.display_name || !teacherForm.group_id" :loading="teacherSaving" round>保存</n-button>
+          <n-button type="primary" @click="saveTeacher" :disabled="!teacherForm.display_name || (!editingTeacher && !teacherForm.username) || !teacherForm.group_id" :loading="teacherSaving" round>
+            {{ editingTeacher ? '保存' : '创建' }}
+          </n-button>
         </div>
       </template>
     </n-modal>
