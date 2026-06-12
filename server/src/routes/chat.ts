@@ -408,11 +408,11 @@ const TOOL_PERM_MAP: Record<string, string> = {
   'search_articles': 'tool.article',
 }
 
-/** 获取权限范围内的班级 SQL 条件（空字符串表示无限制） */
-function getClassFilter(userClass: string, userPermissions: string[]): { sql: string; params: string[] } {
+/** 获取权限范围内的班级 SQL 条件。安全策略：无班级分配且无 view_all 权限 → 拒绝一切 */
+function getClassFilter(userClass: string, userPermissions: string[]): { sql: string; params: string[]; blocked?: boolean } {
   if (userPermissions.includes('classes.view_all')) return { sql: '', params: [] }
   const classes = userClass.split(',').filter(Boolean).map(c => c.trim())
-  if (classes.length === 0) return { sql: '', params: [] }
+  if (classes.length === 0) return { sql: 'AND 1=0', params: [], blocked: true }
   return { sql: `AND class IN (${classes.map(() => '?').join(',')})`, params: classes }
 }
 
@@ -444,6 +444,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const cls = input.class as string | undefined
       const names = input.names as string[] | undefined
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法查询学生' })
       const studentGroupSub = "(SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
       let sql = `SELECT id, display_name, class FROM users WHERE group_id = ${studentGroupSub}`
       const params: string[] = []
@@ -452,8 +453,18 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         sql += ` AND display_name IN (${placeholders})`
         params.push(...names)
       }
-      if (cls) { sql += ' AND class=?'; params.push(cls) }
-      else if (cf.sql) { sql += ' ' + cf.sql; params.push(...cf.params) }
+      if (cls) {
+        // 显式指定班级时，校验是否在教师权限范围内
+        if (!userPermissions.includes('classes.view_all')) {
+          const allowed = userClass.split(',').filter(Boolean).map(c => c.trim())
+          if (allowed.length > 0 && !allowed.includes(cls)) {
+            return JSON.stringify({ error: `无权查看班级「${cls}」` })
+          }
+        }
+        sql += ' AND class=?'; params.push(cls)
+      } else {
+        sql += ' ' + cf.sql; params.push(...cf.params)
+      }
       sql += ' ORDER BY id LIMIT 50'
       const rows = db.prepare(sql).all(...params)
       if (rows.length === 0) return JSON.stringify({ error: '暂无学生数据' })
@@ -463,8 +474,9 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'get_student_points': {
       const name = input.student_name as string
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法查询积分' })
       let stuSql = `SELECT id, display_name, class FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)`
-      if (cf.sql) stuSql += ' ' + cf.sql
+      stuSql += ' ' + cf.sql
       const student = db.prepare(stuSql).get(name, ...cf.params) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${name}」` })
       const summary = db.prepare(`
@@ -482,11 +494,14 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     case 'add_points': {
       // Only teachers can modify points
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法操作积分' })
       let stuSql = `SELECT id FROM users WHERE display_name=? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)`
-      if (cf.sql) stuSql += ' ' + cf.sql
+      stuSql += ' ' + cf.sql
       const student = db.prepare(stuSql).get(input.student_name as string, ...cf.params) as any
       if (!student) return JSON.stringify({ error: `未找到学生「${input.student_name}」` })
-      const amount = input.amount as number
+      const amount = Number(input.amount)
+      if (!Number.isFinite(amount) || amount === 0) return JSON.stringify({ error: '分值必须是非零有限数字' })
+      if (!Number.isInteger(amount)) return JSON.stringify({ error: '分值必须是整数' })
       // Sanity cap: ±100 per operation
       if (Math.abs(amount) > 100) return JSON.stringify({ error: '单次加减分不能超过 100' })
       const type = amount >= 0 ? 'add' : 'deduct'
@@ -603,11 +618,13 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'get_submissions': {
-      const aid = input.assignment_id as number
+      const aid = Number(input.assignment_id)
+      if (!Number.isInteger(aid) || aid <= 0) return JSON.stringify({ error: '无效的作业 ID' })
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法查看提交' })
       let subSql = `SELECT u.display_name as student_name, u.class, s.status, s.score
         FROM submissions s JOIN users u ON s.student_id = u.id WHERE s.assignment_id=?`
-      if (cf.sql) subSql += ' ' + cf.sql
+      subSql += ' ' + cf.sql
       subSql += ' ORDER BY s.id LIMIT 100'
       const rows = db.prepare(subSql).all(aid, ...cf.params)
       if (rows.length === 0) return JSON.stringify({ error: '暂无提交记录' })
@@ -616,18 +633,15 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
 
     case 'get_class_list': {
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify([])
       let sql = 'SELECT name FROM classes ORDER BY name'
-      if (cf.sql) {
+      if (!userPermissions.includes('classes.view_all')) {
         // classes 表没有 class 字段，改用 users 表获取用户有权限的班级
         sql = `SELECT DISTINCT u.class as name FROM users u WHERE u.class != '' AND u.class IS NOT NULL`
-        if (userPermissions.includes('classes.view_all')) {
-          sql = 'SELECT name FROM classes ORDER BY name'
-        } else {
-          sql += ` AND u.class IN (${cf.params.map(() => '?').join(',')})`
-          sql += ' ORDER BY u.class'
-        }
+        sql += ` AND u.class IN (${cf.params.map(() => '?').join(',')})`
+        sql += ' ORDER BY u.class'
       }
-      const rows = db.prepare(sql).all(...(cf.sql ? cf.params : [])) as any[]
+      const rows = db.prepare(sql).all(...(userPermissions.includes('classes.view_all') ? [] : cf.params)) as any[]
       return JSON.stringify(rows.map(r => r.name))
     }
 
@@ -637,8 +651,19 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       if (!file) return JSON.stringify({ error: '文件不存在' })
       if (file.user_id !== userId) return JSON.stringify({ error: '无权访问该文件' })
 
-      let filePath = join(__dirname, '..', '..', 'uploads', file.stored_path)
-      if (!existsSync(filePath)) filePath = join(__dirname, '..', '..', 'storage', file.stored_path)
+      const uploadsRoot = join(__dirname, '..', '..', 'uploads')
+      const storageRoot = join(__dirname, '..', '..', 'storage')
+      let filePath = join(uploadsRoot, file.stored_path)
+      // 路径穿越防护：解析后的路径必须在预期目录内
+      if (!filePath.startsWith(uploadsRoot + '/') && filePath !== uploadsRoot) {
+        return JSON.stringify({ error: '文件路径异常' })
+      }
+      if (!existsSync(filePath)) {
+        filePath = join(storageRoot, file.stored_path)
+        if (!filePath.startsWith(storageRoot + '/') && filePath !== storageRoot) {
+          return JSON.stringify({ error: '文件路径异常' })
+        }
+      }
       if (!existsSync(filePath)) return JSON.stringify({ error: '文件已被删除' })
 
       const ext = extname(file.original_name).toLowerCase()
@@ -814,8 +839,9 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         }
       } else {
         const cf = getClassFilter(userClass, userPermissions)
+        if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法抽取学生' })
         let sql = `SELECT display_name, class FROM users WHERE ${studentGroupSql}`
-        if (cf.sql) sql += ' ' + cf.sql
+        sql += ' ' + cf.sql
         sql += ' ORDER BY id'
         rows = db.prepare(sql).all(...cf.params)
       }
@@ -836,18 +862,21 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'search_articles': {
-      const query = input.query as string
-      if (!query?.trim()) return JSON.stringify({ error: '请输入搜索关键词' })
-      const maxResults = (configData.max_results as number) || 5
+      const query = String(input.query || '').trim()
+      if (!query) return JSON.stringify({ error: '请输入搜索关键词' })
+      if (query.length > 200) return JSON.stringify({ error: '搜索关键词过长' })
+      const maxResults = Math.max(1, Math.min((configData.max_results as number) || 5, 20))
+      // 转义 LIKE 通配符防止注入
+      const escaped = query.replace(/%/g, '\\%').replace(/_/g, '\\_')
       const rows = db.prepare(`
         SELECT id, title, author, created_at,
                substr(content_md, 1, 300) as snippet,
                LENGTH(content_md) as content_length
         FROM articles
-        WHERE title LIKE ? OR content_md LIKE ?
+        WHERE title LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\'
         ORDER BY updated_at DESC
         LIMIT ?
-      `).all(`%${query}%`, `%${query}%`, maxResults) as any[]
+      `).all(`%${escaped}%`, `%${escaped}%`, maxResults) as any[]
       if (rows.length === 0) return JSON.stringify({ message: '未找到相关文章' })
       return JSON.stringify(rows.map((r: any) => ({
         id: r.id,
@@ -860,15 +889,17 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
     }
 
     case 'web_search': {
-      const query = input.query as string
-      if (!query?.trim()) return JSON.stringify({ error: '请输入搜索关键词' })
+      const query = String(input.query || '').trim()
+      if (!query) return JSON.stringify({ error: '请输入搜索关键词' })
+      if (query.length > 500) return JSON.stringify({ error: '搜索关键词过长（最多 500 字符）' })
+      const searchCount = Math.max(1, Math.min(Number(input.count) || 5, 10))
       try {
         const ctrl = new AbortController()
         const timer = setTimeout(() => ctrl.abort(), 15000)
         const res = await fetch('https://uapis.cn/api/v1/search/aggregate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, count: (input.count as number) || 5 }),
+          body: JSON.stringify({ query, count: searchCount }),
           signal: ctrl.signal,
         })
         clearTimeout(timer)
@@ -942,11 +973,13 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       if (!input.confirm) return JSON.stringify({ error: '请将 confirm 设为 true 以确认删除操作' })
       const ids = input.student_ids as number[] || []
       if (ids.length === 0) return JSON.stringify({ error: '请提供要删除的学生 ID 列表' })
+      if (ids.length > 50) return JSON.stringify({ error: '单次删除不能超过 50 人' })
       const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法删除学生' })
       const results: any[] = []
       for (const id of ids) {
         let delSql = "SELECT id, display_name, class FROM users WHERE id = ? AND group_id = (SELECT id FROM permission_groups WHERE group_type = 'student' LIMIT 1)"
-        if (cf.sql) delSql += ' ' + cf.sql
+        delSql += ' ' + cf.sql
         const student = db.prepare(delSql).get(id, ...cf.params) as any
         if (!student) { results.push({ id, error: `未找到 ID 为 ${id} 的学生或无权操作` }); continue }
         // Cascade delete all related data
@@ -969,12 +1002,17 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const updates: string[] = []
       const params: any[] = []
       if (input.nickname !== undefined) {
+        const nick = String(input.nickname).slice(0, 50).replace(/[<>]/g, '')
         updates.push('nickname = ?')
-        params.push(input.nickname as string)
+        params.push(nick)
       }
       if (input.avatar_url !== undefined) {
+        const url = String(input.avatar_url).slice(0, 500)
+        if (url && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/')) {
+          return JSON.stringify({ error: '头像 URL 格式不正确，需以 http/https/ 开头' })
+        }
         updates.push('avatar = ?')
-        params.push(input.avatar_url as string)
+        params.push(url)
       }
       if (updates.length === 0) return JSON.stringify({ error: '请提供要修改的字段（昵称或头像）' })
       params.push(userId)
@@ -1212,6 +1250,7 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         const assignRoleId = input.assign_role_id === true
         if (!gid) return JSON.stringify({ error: '请提供权限组 ID' })
         if (userIds.length === 0) return JSON.stringify({ error: '请提供要分配的用户 ID 列表' })
+        if (userIds.length > 100) return JSON.stringify({ error: '单次分配不能超过 100 人' })
 
         const group = db.prepare('SELECT id, parent_id, name FROM permission_groups WHERE id = ?').get(gid) as any
         if (!group) return JSON.stringify({ error: '权限组不存在' })
@@ -1219,6 +1258,13 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
         // 验证：role_id 只能指向职位，group_id 只能指向身份组
         if (assignRoleId && !group.parent_id) return JSON.stringify({ error: 'assign_role_id=true 时只能分配职位（子权限组），不能分配身份组' })
         if (!assignRoleId && group.parent_id) return JSON.stringify({ error: 'assign_role_id=false（默认）时只能分配身份组，不能分配职位。如需分配职位请设置 assign_role_id: true' })
+
+        // 身份组分配：防提权 — 校验目标权限组的权限是操作者权限的子集
+        if (!assignRoleId && !group.parent_id) {
+          const targetPerms = db.prepare('SELECT permission_code FROM group_permissions WHERE group_id = ?').all(gid) as any[]
+          const permErr = checkDelegation(targetPerms.map(p => p.permission_code))
+          if (permErr) return JSON.stringify({ error: `无法分配该身份组: ${permErr}` })
+        }
 
         // 职位分配需要班级限制检查
         if (assignRoleId && group.parent_id) {
@@ -1231,9 +1277,14 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
 
         const column = assignRoleId ? 'role_id' : 'group_id'
         const results: any[] = []
+        const myClasses = hasViewAll ? null : userClass.split(',').filter(Boolean).map(c => c.trim())
         for (const uid of userIds) {
-          const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(uid) as any
+          const user = db.prepare('SELECT id, display_name, class FROM users WHERE id = ?').get(uid) as any
           if (!user) { results.push({ id: uid, error: '用户不存在' }); continue }
+          // 校验目标用户在班级权限范围内
+          if (myClasses && myClasses.length > 0 && !myClasses.includes(user.class)) {
+            results.push({ id: uid, error: `无权操作用户「${user.display_name}」（不属于您的班级）` }); continue
+          }
           db.prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(gid, uid)
           results.push({ id: uid, display_name: user.display_name, success: true })
         }
@@ -1248,15 +1299,15 @@ async function executeTool(name: string, input: Record<string, unknown>, userId:
       const sname = input.student_name as string | undefined
       const startDate = input.start_date as string | undefined
       const endDate = input.end_date as string | undefined
+      const cf = getClassFilter(userClass, userPermissions)
+      if (cf.blocked) return JSON.stringify({ error: '您未分配班级，无法查询积分明细' })
       let sql = `SELECT p.id, u.display_name as student_name, u.class, p.reason, p.type, p.amount, p.date
         FROM point_records p JOIN users u ON p.student_id = u.id WHERE 1=1`
       const params: any[] = []
       if (sname) { sql += ' AND u.display_name=?'; params.push(sname) }
       if (startDate) { sql += ' AND p.date>=?'; params.push(startDate) }
       if (endDate) { sql += ' AND p.date<=?'; params.push(endDate) }
-      // Class filter
-      const cf = getClassFilter(userClass, userPermissions)
-      if (cf.sql) { sql += ' ' + cf.sql; params.push(...cf.params) }
+      sql += ' ' + cf.sql; params.push(...cf.params)
       sql += ' ORDER BY p.id DESC LIMIT 100'
       const rows = db.prepare(sql).all(...params) as any[]
       if (rows.length === 0) return JSON.stringify({ error: '暂无匹配的积分记录' })
