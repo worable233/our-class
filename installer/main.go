@@ -49,33 +49,29 @@ func main() {
 	}
 
 	// Step 1: Check/Install Git + Node.js in parallel
-	printStep(1, 6, "检查环境（Git + Node.js 并行检测）")
+	printStep(1, 5, "检查环境（Git + Node.js 并行检测）")
 	ensureGitAndNode()
 
 	// Step 2: Clone or update project
-	printStep(2, 6, "获取项目代码")
+	printStep(2, 5, "获取项目代码")
 	projectRoot = ensureProject(projectRoot)
 
 	// Step 3: Set npm registry + install dependencies
-	printStep(3, 6, "安装项目依赖")
+	printStep(3, 5, "安装项目依赖")
 	ensureNpmRegistry()
 	installDependencies(projectRoot)
 
 	// Step 4: Build frontend (optional)
 	if !*skipBuild {
-		printStep(4, 6, "构建前端")
+		printStep(4, 5, "构建前端")
 		buildFrontend(projectRoot)
 	} else {
-		printStep(4, 6, "构建前端（已跳过）")
+		printStep(4, 5, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")
 	}
 
-	// Step 5: Install PM2 and start setup wizard
-	printStep(5, 6, "安装 PM2")
-	ensurePM2()
-
-	// Step 6: Start setup wizard
-	printStep(6, 6, "启动配置向导")
+	// Step 5: Start setup wizard
+	printStep(5, 5, "启动配置向导")
 	startSetupWizard(projectRoot, *port)
 
 	fmt.Printf("\n%s  🎉 安装完成！%s\n", ColorGreen, ColorReset)

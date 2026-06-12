@@ -64,7 +64,7 @@ func resetProject(projectRoot string) {
 func stopProcesses(projectRoot string) {
 	printInfo("正在停止运行中的服务...")
 
-	// Try PM2 first (graceful stop)
+	// Try PM2 first (if user installed it manually)
 	if commandExists("pm2") {
 		runCommandSilent("pm2", "delete", "ourclass")
 	}

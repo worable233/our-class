@@ -88,29 +88,6 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// ensurePM2 globally installs PM2 if not already present.
-func ensurePM2() {
-	if commandExists("pm2") {
-		printSuccess("PM2 已安装")
-		return
-	}
-
-	printInfo("正在安装 PM2...")
-	flags := npmFlags()
-	args := append([]string{"install", "-g", "pm2"}, flags...)
-	if err := runCommand("npm", args...); err != nil {
-		printWarning(fmt.Sprintf("PM2 安装失败: %v", err))
-		printInfo("将使用直接启动模式（不支持开机自启）")
-		return
-	}
-
-	if runtime.GOOS == "windows" {
-		args2 := append([]string{"install", "-g", "pm2-windows-startup"}, flags...)
-		runCommand("npm", args2...)
-	}
-
-	printSuccess("PM2 安装完成")
-}
 
 // buildFrontend runs npm run build-only to build the Vue frontend.
 func buildFrontend(projectRoot string) {
