@@ -35,20 +35,57 @@ func ensureNpmRegistry() {
 	}
 }
 
-// installDependencies runs npm install in both server/ and root directories.
-func installDependencies(projectRoot string) {
-	printInfo("安装前端依赖（可能需要 1-3 分钟）...")
-	if err := runCommandInDir(projectRoot, "npm", "install", "--registry", npmRegistry); err != nil {
-		exitWithError(fmt.Sprintf("前端依赖安装失败: %v", err))
+// npmFlags returns common flags to speed up npm operations.
+func npmFlags() []string {
+	return []string{
+		"--registry", npmRegistry,
+		"--prefer-offline", // Use cache when possible
+		"--no-audit",       // Skip security audit
+		"--no-fund",        // Skip funding messages
+		"--loglevel=error", // Reduce output noise
 	}
-	printSuccess("前端依赖安装完成")
+}
 
-	printInfo("安装后端依赖...")
+// installDependencies runs npm ci in both server/ and root directories concurrently.
+func installDependencies(projectRoot string) {
 	serverDir := filepath.Join(projectRoot, "server")
-	if err := runCommandInDir(serverDir, "npm", "install", "--registry", npmRegistry); err != nil {
-		exitWithError(fmt.Sprintf("后端依赖安装失败: %v", err))
+	flags := npmFlags()
+
+	// Check if lockfiles exist — use npm ci (faster) or npm install
+	useCI := fileExists(filepath.Join(projectRoot, "package-lock.json"))
+	cmdName := "install"
+	if useCI {
+		cmdName = "ci"
 	}
-	printSuccess("后端依赖安装完成")
+
+	printInfo(fmt.Sprintf("安装依赖（前后端并行，使用 npm %s）...", cmdName))
+
+	// Run both installs concurrently
+	errCh := make(chan error, 2)
+
+	go func() {
+		args := append([]string{cmdName}, flags...)
+		errCh <- runCommandInDir(projectRoot, "npm", args...)
+	}()
+
+	go func() {
+		args := append([]string{cmdName}, flags...)
+		errCh <- runCommandInDir(serverDir, "npm", args...)
+	}()
+
+	// Wait for both
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			exitWithError(fmt.Sprintf("依赖安装失败: %v", err))
+		}
+	}
+
+	printSuccess("前后端依赖安装完成")
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ensurePM2 globally installs PM2 if not already present.
@@ -59,14 +96,17 @@ func ensurePM2() {
 	}
 
 	printInfo("正在安装 PM2...")
-	if err := runCommand("npm", "install", "-g", "pm2", "--registry", npmRegistry); err != nil {
+	flags := npmFlags()
+	args := append([]string{"install", "-g", "pm2"}, flags...)
+	if err := runCommand("npm", args...); err != nil {
 		printWarning(fmt.Sprintf("PM2 安装失败: %v", err))
 		printInfo("将使用直接启动模式（不支持开机自启）")
 		return
 	}
 
 	if runtime.GOOS == "windows" {
-		runCommand("npm", "install", "-g", "pm2-windows-startup", "--registry", npmRegistry)
+		args2 := append([]string{"install", "-g", "pm2-windows-startup"}, flags...)
+		runCommand("npm", args2...)
 	}
 
 	printSuccess("PM2 安装完成")
