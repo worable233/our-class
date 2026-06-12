@@ -614,11 +614,11 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
       footer-style="padding: 16px 24px"
     >
       <n-form :model="teacherForm" label-placement="top">
-        <n-form-item label="姓名" path="display_name">
-          <n-input v-model:value="teacherForm.display_name" placeholder="教师姓名" />
+        <n-form-item label="姓名 *" path="display_name">
+          <n-input v-model:value="teacherForm.display_name" placeholder="教师真实姓名" />
         </n-form-item>
-        <n-form-item label="用户名" path="username">
-          <n-input v-model:value="teacherForm.username" placeholder="登录用户名" :disabled="!!editingTeacher" />
+        <n-form-item label="用户名 *" path="username">
+          <n-input v-model:value="teacherForm.username" placeholder="登录用户名（字母数字下划线）" :disabled="!!editingTeacher" />
         </n-form-item>
         <n-form-item label="昵称" path="nickname">
           <n-input v-model:value="teacherForm.nickname" placeholder="显示昵称（可选）" />
@@ -632,14 +632,14 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             style="width:100%"
           />
         </n-form-item>
-        <n-form-item label="身份（必选）" path="group_id">
+        <n-form-item label="身份 *" path="group_id">
           <n-select
             v-model:value="teacherForm.group_id"
             :options="identityGroups.map(g => ({ label: g.name, value: g.id }))"
             placeholder="选择身份组"
           />
         </n-form-item>
-        <n-form-item label="职位（可选）" path="role_id">
+        <n-form-item label="职位" path="role_id">
           <n-select
             v-model:value="teacherForm.role_id"
             :options="availableRoles.map(g => ({ label: g.name, value: g.id }))"
@@ -649,7 +649,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
           />
         </n-form-item>
         <n-form-item label="密码" path="password">
-          <n-input v-model:value="teacherForm.password" placeholder="留空则保持原密码" />
+          <n-input v-model:value="teacherForm.password" :placeholder="editingTeacher ? '留空则保持原密码' : '留空则默认 123456'" />
         </n-form-item>
       </n-form>
       <template #footer>

@@ -74,9 +74,26 @@ router.post('/', requirePermission('students.write'), validate(createSchema), as
   const db = getDb()
   const { display_name, username, password, class: cls, nickname, group_id, role_id } = req.body
 
+  // Validate username format
+  if (!/^[a-zA-Z0-9_]{2,32}$/.test(username)) {
+    return fail(res, 400, 'VALIDATION_ERROR', '用户名只能包含字母、数字、下划线，长度 2-32 位')
+  }
+
   // Check if username already exists
   const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
   if (existing) return fail(res, 409, 'DUPLICATE', '用户名已存在')
+
+  // Permission escalation check: can only assign groups you have permission for
+  if (group_id) {
+    const userPerms = req.user?.permissions || []
+    if (!userPerms.includes('roles.manage')) {
+      // Non-admin users can only assign teacher group
+      const targetGroup = db.prepare('SELECT group_type FROM permission_groups WHERE id = ?').get(group_id) as any
+      if (!targetGroup || targetGroup.group_type !== 'teacher') {
+        return fail(res, 403, 'FORBIDDEN', '无权限分配该身份组')
+      }
+    }
+  }
 
   // Use teacher group if no group_id specified
   const finalGroupId = group_id || (() => {
@@ -84,11 +101,23 @@ router.post('/', requirePermission('students.write'), validate(createSchema), as
     return g?.id || null
   })()
 
+  // Validate role_id if provided
+  if (role_id) {
+    const role = db.prepare('SELECT id FROM permission_groups WHERE id = ? AND parent_id IS NOT NULL').get(role_id)
+    if (!role) return fail(res, 400, 'VALIDATION_ERROR', '无效的职位 ID')
+  }
+
   const hashedPw = await bcrypt.hash(password || '123456', BCRYPT_ROUNDS)
 
   const result = db.prepare(
     'INSERT INTO users (username, display_name, role, class, password, nickname, group_id, role_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(username, display_name, 'teacher', cls || '', hashedPw, nickname || null, finalGroupId, role_id || null)
+
+  // Audit log
+  try {
+    const { writeAuditLog } = await import('./audit.js')
+    writeAuditLog(req.user!.id, req.user!.display_name, 'create_teacher', 'user', Number(result.lastInsertRowid), { username, display_name, class: cls })
+  } catch {}
 
   const created = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.class, u.avatar, u.student_no, u.nickname, u.group_id, u.role_id
