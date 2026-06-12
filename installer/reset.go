@@ -69,18 +69,13 @@ func resetProject(projectRoot string) {
 		printSuccess("代码已更新到最新版本")
 	}
 
-	// Step 4: Clean cache and install dependencies
-	printStep(4, 5, "清理缓存并安装依赖")
+	// Step 4: Install dependencies
+	printStep(4, 5, "安装依赖")
 	ensureNpmRegistry()
 
-	// Clean npm cache to avoid corrupted .mjs files on Windows
+	// Clean npm cache to fix corrupted .mjs files on Windows
 	printInfo("清理 npm 缓存...")
 	runCommandSilent("npm", "cache", "clean", "--force")
-
-	// Force reinstall by deleting node_modules
-	printInfo("清理 node_modules...")
-	os.RemoveAll(filepath.Join(projectRoot, "node_modules"))
-	os.RemoveAll(filepath.Join(projectRoot, "server", "node_modules"))
 
 	installDependencies(projectRoot)
 
