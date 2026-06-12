@@ -30,7 +30,10 @@ const loginSchema = z.object({
 
 const updateProfileSchema = z.object({
   nickname: z.string().max(50, '昵称最长 50 字符').optional(),
-  avatar: z.string().max(500, '头像 URL 过长').optional(),
+  avatar: z.string().max(500, '头像 URL 过长').refine(
+    (val) => !val || /^https?:\/\/.+/.test(val),
+    { message: '头像必须是有效的 HTTP/HTTPS 链接' }
+  ).optional(),
   password: z.string().min(6, '密码最少 6 位').max(100, '密码过长').optional(),
   old_password: z.string().optional(),
 })
@@ -129,12 +132,15 @@ router.put('/profile', authMiddleware, validate(updateProfileSchema), async (req
   const userId = req.user!.id
   const { nickname, avatar, password, old_password } = req.body
 
+  // Sanitize nickname: strip HTML tags
+  const sanitize = (s: string) => s.replace(/<[^>]*>/g, '').trim()
+
   const fields: string[] = []
   const values: any[] = []
 
   if (nickname !== undefined) {
     fields.push('nickname = ?')
-    values.push(nickname || null)
+    values.push(nickname ? sanitize(nickname) : null)
   }
 
   if (avatar !== undefined) {
@@ -169,6 +175,16 @@ router.put('/profile', authMiddleware, validate(updateProfileSchema), async (req
 
   values.push(userId)
   db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+
+  // Audit log
+  try {
+    const { writeAuditLog } = await import('./audit.js')
+    const changes: string[] = []
+    if (nickname !== undefined) changes.push('nickname')
+    if (avatar !== undefined) changes.push('avatar')
+    if (password !== undefined) changes.push('password')
+    writeAuditLog(userId, req.user!.display_name, 'update_profile', 'user', userId, { fields: changes })
+  } catch {}
 
   // Return updated user info
   const updated = db.prepare('SELECT id, username, display_name, class, avatar, student_no, nickname FROM users WHERE id = ?').get(userId) as any

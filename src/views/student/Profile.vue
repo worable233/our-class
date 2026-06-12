@@ -47,10 +47,19 @@ function openEditProfile() {
     nickname: auth.user?.nickname || '',
     avatar: auth.user?.avatar || '',
   }
+  avatarError.value = false
   showProfileModal.value = true
 }
 
+const avatarError = ref(false)
+
 async function saveProfile() {
+  // Validate avatar URL
+  if (profileForm.value.avatar && !/^https?:\/\/.+/.test(profileForm.value.avatar)) {
+    message.error('头像必须是有效的 HTTP/HTTPS 链接')
+    return
+  }
+
   saving.value = true
   try {
     const payload: any = {}
@@ -106,6 +115,7 @@ async function changePassword() {
       password: passwordForm.value.newPassword,
     })
     showPasswordModal.value = false
+    passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
     message.success('密码已修改')
   } catch (e: any) {
     message.error(e.message || '修改失败')
@@ -139,11 +149,13 @@ async function changePassword() {
             {{ auth.displayName.charAt(0) }}
           </n-avatar>
           <div
-            style="position: absolute; bottom: -2px; right: -2px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--hairline); display: flex; align-items: center; justify-content: center; cursor: pointer;"
+            style="position: absolute; bottom: -4px; right: -4px; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--hairline); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s;"
             @click="openEditProfile"
             title="编辑头像"
+            @mouseenter="($event.currentTarget as HTMLElement).style.background = 'var(--surface-3)'"
+            @mouseleave="($event.currentTarget as HTMLElement).style.background = 'var(--surface-1)'"
           >
-            <Camera :size="12" style="color: var(--text-muted);" />
+            <Camera :size="14" style="color: var(--text-muted);" />
           </div>
         </div>
         <div style="flex: 1;">
@@ -269,11 +281,22 @@ async function changePassword() {
           <n-input v-model:value="profileForm.nickname" placeholder="设置一个昵称（可选）" maxlength="50" show-count />
         </n-form-item>
         <n-form-item label="头像 URL">
-          <n-input v-model:value="profileForm.avatar" placeholder="输入头像图片链接（可选）" />
+          <n-input v-model:value="profileForm.avatar" placeholder="https://example.com/avatar.jpg" />
         </n-form-item>
         <div v-if="profileForm.avatar" style="margin-bottom: 16px; text-align: center;">
-          <n-avatar :size="80" round :src="profileForm.avatar" />
-          <n-text depth="3" style="display: block; font-size: 12px; margin-top: 8px;">头像预览</n-text>
+          <n-avatar
+            v-if="!avatarError"
+            :size="80"
+            round
+            :src="profileForm.avatar"
+            @error="avatarError = true"
+          />
+          <div v-else style="width: 80px; height: 80px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+            <n-text depth="3" style="font-size: 12px;">加载失败</n-text>
+          </div>
+          <n-text depth="3" style="display: block; font-size: 12px; margin-top: 8px;">
+            {{ avatarError ? '图片链接无效' : '头像预览' }}
+          </n-text>
         </div>
       </n-form>
       <template #footer>
