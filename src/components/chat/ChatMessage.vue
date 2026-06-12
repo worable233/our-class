@@ -210,13 +210,14 @@ function buildRenderToContentPos(text: string): number[] {
  * 遍历 DOM 文本节点，用 buildRenderToContentPos 映射找到每个渲染字符
  * 在原文中的位置，从而拿到正确的时间戳计算 age
  */
-function animateTextNodes(container: HTMLElement, text: string) {
+function animateTextNodes(container: HTMLElement, text: string, addCssAnimation = false) {
   const ts = props.streamTimestamps || []
   const now = performance.now()
   const glowMs = STREAM_CONFIG.GLOW_DURATION_MS
   const glowRgb = getGlowRgb()
   const isDark = document.documentElement.classList.contains('dark')
   const contentLen = text.length
+  const newCharStart = addCssAnimation ? prevContentLen : contentLen
 
   // 渲染位置 → 原文位置的映射
   const posMap = buildRenderToContentPos(text)
@@ -238,7 +239,7 @@ function animateTextNodes(container: HTMLElement, text: string) {
       const renderIdx = renderPos + i
 
       // 通过映射找到该渲染字符对应原文的位置
-      const contentPos = renderIdx < posMap.length ? posMap[renderIdx] : contentLen - 1
+      const contentPos = (renderIdx < posMap.length ? posMap[renderIdx] : contentLen - 1) ?? contentLen - 1
       const batchIdx = Math.floor(contentPos / STREAM_CONFIG.CHARS_PER_TICK)
       const batchTime = ts[batchIdx]
       const age = batchTime ? Math.min(now - batchTime, glowMs) : glowMs
@@ -252,8 +253,14 @@ function animateTextNodes(container: HTMLElement, text: string) {
       const ga = 0.9 * (1 - ge)
 
       const span = document.createElement('span')
-      span.textContent = str[i] === ' ' ? ' ' : str[i]
-      span.style.opacity = String(opacity)
+      span.textContent = (str[i] ?? '') === ' ' ? ' ' : (str[i] ?? '')
+      // 新增字符：CSS 动画渐入；已有字符：JS 计算 opacity（DOM 重建后瞬间恢复）
+      if (contentPos >= newCharStart) {
+        span.style.animation = `stream-char-in ${STREAM_CONFIG.ANIMATION_DURATION_MS}ms ease forwards`
+      } else {
+        span.style.opacity = String(opacity)
+      }
+
       span.style.textShadow = isDark && ga > 0.01
         ? `0 0 3px rgba(${glowRgb},${ga.toFixed(2)}), 0 0 8px rgba(${glowRgb},${(ga * 0.65).toFixed(2)}), 0 0 20px rgba(${glowRgb},${(ga * 0.35).toFixed(2)})`
         : 'none'
@@ -265,8 +272,11 @@ function animateTextNodes(container: HTMLElement, text: string) {
   }
 }
 
+// 记录上次内容长度，用于判断哪些字符是新增的（需要 CSS 动画）
+let prevContentLen = 0
+
 watch(
-  [() => props.content, () => props.streaming, () => props.streamTimestamps],
+  [() => props.content, () => props.streaming],
   () => {
     if (props.role !== 'assistant' || !props.content) return
     const el = streamEl.value
@@ -276,8 +286,11 @@ watch(
     el.innerHTML = render(props.content)
 
     if (props.streaming) {
-      // 用 requestAnimationFrame 确保在浏览器绘制前应用动画 span，避免闪烁
-      requestAnimationFrame(() => animateTextNodes(el, props.content!))
+      const isNewContent = props.content.length > prevContentLen
+      animateTextNodes(el, props.content!, isNewContent)
+      prevContentLen = props.content.length
+    } else {
+      prevContentLen = 0
     }
   },
   { flush: 'post' },
@@ -549,6 +562,11 @@ watch(
 @keyframes bounce {
   0%,60%,100% { opacity:.2; transform:translateY(0); }
   30% { opacity:1; transform:translateY(-4px); }
+}
+/* 新字符渐入动画：从半透明到完全不透明 */
+@keyframes stream-char-in {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
 }
 
 /* ═══════════════════════════════════════════

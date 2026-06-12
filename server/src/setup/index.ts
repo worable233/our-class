@@ -87,7 +87,7 @@ function ensurePermissionGroups(db: any) {
     'students.write',
     'points.read', 'points.write',
     'scores.read', 'scores.write',
-    'assignments.write', 'assignments.submit',
+    'assignments.write', 'assignments.read', 'assignments.submit',
     'chat.access', 'chat.config', 'chat.unlimited',
     'roles.manage',
     'audit_logs.read',
@@ -109,7 +109,7 @@ function ensurePermissionGroups(db: any) {
     'students.write',
     'points.read', 'points.write',
     'scores.read', 'scores.write',
-    'assignments.write',
+    'assignments.write', 'assignments.read',
     'chat.access', 'chat.unlimited',
     'tool.student.read', 'tool.student.write',
     'tool.score.read', 'tool.score.write',
@@ -127,11 +127,14 @@ function ensurePermissionGroups(db: any) {
   const studentPermissions = [
     'points.read',
     'scores.read',
+    'assignments.read',
     'assignments.submit',
     'chat.access',
     'tool.student.read',
     'tool.score.read',
     'tool.assignment',
+    'tool.utility',
+    'tool.article',
     'articles.read',
   ]
   for (const perm of studentPermissions) {

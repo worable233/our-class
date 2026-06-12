@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcrypt'
+import { rmSync } from 'fs'
+import { join } from 'path'
 import { getDb } from '../db/init.js'
 import { requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
@@ -191,6 +193,46 @@ router.put('/:id', requirePermission('students.write'), validate(updateSchema), 
   `).get(id)
 
   ok(res, updated)
+})
+
+// DELETE /api/teachers/:id — delete teacher
+router.delete('/:id', requirePermission('students.write'), async (req: Request, res: Response) => {
+  const db = getDb()
+  const id = Number(req.params.id)
+  if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的 ID')
+
+  // 确认是教师
+  const teacher = db.prepare(`SELECT id, username, display_name FROM users WHERE id = ? AND group_id = ${TEACHER_GROUP_SUBQUERY}`).get(id) as any
+  if (!teacher) throw new NotFoundError('教师不存在')
+
+  // 不能删除自己
+  if (id === req.user?.id) {
+    return fail(res, 400, 'CANNOT_DELETE_SELF', '不能删除自己的账号')
+  }
+
+  // 级联删除相关数据
+  db.prepare('DELETE FROM comments WHERE author_id = ?').run(id)
+  db.prepare('DELETE FROM posts WHERE author_id = ?').run(id)
+  db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(id)
+  db.prepare('DELETE FROM conversations WHERE user_id = ?').run(id)
+  db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(id)
+  db.prepare('DELETE FROM uploaded_files WHERE user_id = ?').run(id)
+
+  // 删除物理存储目录
+  try {
+    rmSync(join(process.cwd(), 'storage', `user_${id}`), { recursive: true, force: true })
+  } catch {}
+
+  // 删除用户
+  db.prepare('DELETE FROM users WHERE id = ?').run(id)
+
+  // 审计日志
+  try {
+    const { writeAuditLog } = await import('./audit.js')
+    writeAuditLog(req.user!.id, req.user!.display_name, 'delete_teacher', 'user', id, { username: teacher.username, display_name: teacher.display_name })
+  } catch {}
+
+  ok(res, { success: true })
 })
 
 export default router

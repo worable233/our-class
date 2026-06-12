@@ -8,8 +8,9 @@ import {
   NTag, NSpin, NEmpty, NText, NInputNumber, NAvatar, NList, NListItem, NGrid, NGi,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Plus, Download, File as FileIcon, BookOpen, GraduationCap } from '@lucide/vue'
+import { Plus, Download, File as FileIcon, BookOpen, GraduationCap, FileSpreadsheet } from '@lucide/vue'
 import { useMessage } from 'naive-ui'
+import * as XLSX from 'xlsx'
 const message = useMessage()
 
 const auth = useAuthStore()
@@ -146,6 +147,35 @@ async function grade(submissionId: number) {
   await api.put(`/submissions/${submissionId}/grade`, { score: g.score || 0, feedback: g.feedback || '' })
   delete gradeInputs[submissionId]
   if (selectedAssignment.value) selectAssignment(selectedAssignment.value)
+}
+
+function safeFilename(name: string): string {
+  return name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\s+/g, '_').slice(0, 50)
+}
+
+function exportSubmissions() {
+  if (submissions.value.length === 0) { message.warning('暂无提交数据'); return }
+  const assignment = filteredAssignments.value.find(a => a.id === selectedAssignment.value)
+  const title = assignment?.title || '作业提交'
+
+  const rows = [
+    ['学生姓名', '班级', '提交时间', '状态', '得分', '评语', '提交内容'],
+    ...submissions.value.map(s => [
+      s.student_name || '',
+      s.class || '',
+      s.submitted_at?.slice(0, 16) || '',
+      s.status === 'graded' ? '已批改' : '待批改',
+      s.score !== null && s.score !== undefined ? String(s.score) : '',
+      s.feedback || '',
+      s.content || '',
+    ]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 20 }, { wch: 40 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '提交列表')
+  XLSX.writeFile(wb, safeFilename(`${title}_提交情况_${new Date().toLocaleDateString('zh-CN')}.xlsx`))
+  message.success(`已导出 ${submissions.value.length} 条记录`)
 }
 
 useRefresh(load)
@@ -289,6 +319,12 @@ onMounted(() => { loadClasses(); load() })
                 <span style="font-weight:600;font-size:14px;color:var(--text-primary)">提交情况</span>
                 <span style="font-size:13px;color:var(--text-muted)">{{ assignments.find(a => a.id === selectedAssignment)?.title }}</span>
               </div>
+            </template>
+            <template #header-extra>
+              <n-button v-if="submissions.length > 0" size="tiny" quaternary @click="exportSubmissions" round>
+                <template #icon><FileSpreadsheet :size="14" /></template>
+                导出 xlsx
+              </n-button>
             </template>
             <n-empty v-if="submissions.length === 0" description="暂无学生提交" />
             <div v-else style="display:flex;flex-direction:column;gap:12px">

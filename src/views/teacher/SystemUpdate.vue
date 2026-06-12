@@ -73,7 +73,10 @@ async function loadHistory() {
   finally { historyLoaded.value = true }
 }
 async function loadUpdateSettings() {
-  try { updateSettings.value = await api.get('/system/update/settings') } catch {}
+  try {
+    updateSettings.value = await api.get('/system/update/settings')
+    startAutoCheck()  // 设置加载完成后再启动自动检测
+  } catch {}
 }
 async function saveUpdateSettings() {
   savingSettings.value = true
@@ -117,22 +120,27 @@ async function applyUpdate() {
   updateResult.value = '... 正在更新...'
   updateOutput.value = ''
   const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+  let finished = false
   try {
     const resp = await fetch('/api/system/update/apply', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     })
+    // 检查 HTTP 错误状态码（429 冲突、500 服务器错误等）
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err?.error?.message || `请求失败 (${resp.status})`)
+    }
     const reader = resp.body?.getReader()
     if (!reader) throw new Error('无法读取响应流')
     const decoder = new TextDecoder()
     let buf = ''
-    let done = false
     while (true) {
       const { done: d, value } = await reader.read()
       if (d) break
       buf += decoder.decode(value, { stream: true })
       const lines = buf.split('\n')
-      buf = lines.pop() || ''
+      buf = lines.pop() || ''  // 最后一行可能不完整，留到下次处理
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue
         try {
@@ -140,12 +148,20 @@ async function applyUpdate() {
           if (data.type === 'step') updateResult.value = '... ' + data.message
           else if (data.type === 'success') updateOutput.value += '[OK] ' + data.message + '\n'
           else if (data.type === 'output') updateOutput.value += data.text
-          else if (data.type === 'error') { updateResult.value = 'FAILED: ' + data.message; done = true }
-          else if (data.type === 'done') { updateResult.value = 'DONE: ' + data.message; done = true }
+          else if (data.type === 'error') { updateResult.value = 'FAILED: ' + data.message; finished = true; return }
+          else if (data.type === 'done') { updateResult.value = 'DONE: ' + data.message; finished = true }
         } catch {}
       }
     }
-    if (done && !updateResult.value.includes('FAILED')) {
+    // 处理缓冲区中剩余的数据
+    if (buf.startsWith('data: ')) {
+      try {
+        const data = JSON.parse(buf.slice(6))
+        if (data.type === 'error') { updateResult.value = 'FAILED: ' + data.message; finished = true }
+        else if (data.type === 'done') { updateResult.value = 'DONE: ' + data.message; finished = true }
+      } catch {}
+    }
+    if (finished && !updateResult.value.includes('FAILED')) {
       reloadCountdown.value = 5
       if (reloadTimer) clearInterval(reloadTimer)
       reloadTimer = setInterval(() => {

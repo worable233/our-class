@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { PointRecord, PointSummary } from '@/types'
-import { NCard, NGrid, NGi, NTag, NText, NSpace, NSpin, NEmpty, NAvatar } from 'naive-ui'
+import { NCard, NGrid, NGi, NTag, NText, NSpin, NEmpty, NAvatar } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { ThumbsUp, ThumbsDown, Trophy, BarChart3 } from '@lucide/vue'
 
@@ -44,112 +44,74 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 </script>
 
 <template>
-  <div style="width:100%;display:flex;flex-direction:column;gap:24px;padding:24px 0;">
+  <div class="page-container">
     <!-- Hero Points Display -->
-    <n-card
-      :bordered="true"
-      style="background:linear-gradient(135deg,var(--surface-2),var(--surface-1));border:1px solid var(--hairline-strong);"
-    >
-      <div style="display:flex;align-items:center;gap:24px;">
-        <n-avatar :size="52" round style="background:var(--accent);color:#fff;font-weight:700;font-size:22px;">
+    <n-card :bordered="true" class="hero-card">
+      <div class="hero-content">
+        <n-avatar :size="56" round class="hero-avatar">
           {{ auth.displayName.charAt(0) }}
         </n-avatar>
-        <div style="flex:1;min-width:0;">
-          <n-text style="font-weight:700;font-size:20px;letter-spacing:-0.02em;line-height:1.3;display:block;">
-            {{ auth.displayName }}
-          </n-text>
-          <n-text depth="3" style="font-size:13px;margin-top:2px;display:block;">
-            {{ auth.userClass }}
-          </n-text>
+        <div class="hero-info">
+          <div class="hero-name">{{ auth.displayName }}</div>
+          <div class="hero-class">{{ auth.userClass }}</div>
         </div>
-        <div style="text-align:right;">
-          <div :style="{ fontWeight: 800, fontSize: '42px', color: netPoints >= 0 ? '#d97706' : '#ef4444', letterSpacing: '-0.03em', lineHeight: 1 }">
+        <div class="hero-points">
+          <div class="points-number" :class="netPoints >= 0 ? 'positive' : 'negative'">
             {{ netPoints > 0 ? '+' : '' }}{{ netPoints }}
           </div>
-          <n-text depth="3" style="font-size:13px;margin-top:4px;display:block;">总积分</n-text>
+          <div class="points-label">总积分</div>
         </div>
       </div>
     </n-card>
 
     <!-- Stats Row -->
-    <n-grid :cols="4" :x-gap="16">
-      <n-gi>
-        <n-card size="small" :hoverable="true" style="text-align:center;">
-          <ThumbsUp :size="22" style="color:#22c55e;margin-bottom:8px;display:block;margin-inline:auto;" />
-          <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
-            +{{ totalAdded }}
-          </n-text>
-          <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">获得加分</n-text>
+    <n-grid :cols="4" :x-gap="12" :y-gap="12" responsive="screen" :item-responsive="true">
+      <n-gi span="4 m:1">
+        <n-card size="small" class="stat-card">
+          <div class="stat-icon green"><ThumbsUp :size="20" /></div>
+          <div class="stat-value">+{{ totalAdded }}</div>
+          <div class="stat-label">获得加分</div>
         </n-card>
       </n-gi>
-      <n-gi>
-        <n-card size="small" :hoverable="true" style="text-align:center;">
-          <ThumbsDown :size="22" style="color:#ef4444;margin-bottom:8px;display:block;margin-inline:auto;" />
-          <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
-            -{{ totalDeducted }}
-          </n-text>
-          <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">被扣分</n-text>
+      <n-gi span="4 m:1">
+        <n-card size="small" class="stat-card">
+          <div class="stat-icon red"><ThumbsDown :size="20" /></div>
+          <div class="stat-value">-{{ totalDeducted }}</div>
+          <div class="stat-label">被扣分</div>
         </n-card>
       </n-gi>
-      <n-gi>
-        <n-card size="small" :hoverable="true" style="text-align:center;">
-          <Trophy :size="22" style="color:var(--accent-text);margin-bottom:8px;display:block;margin-inline:auto;" />
-          <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
-            {{ myRank ? `#${myRank}` : '—' }}
-          </n-text>
-          <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">班级排名</n-text>
+      <n-gi span="4 m:1">
+        <n-card size="small" class="stat-card">
+          <div class="stat-icon accent"><Trophy :size="20" /></div>
+          <div class="stat-value">{{ myRank ? `#${myRank}` : '—' }}</div>
+          <div class="stat-label">班级排名</div>
         </n-card>
       </n-gi>
-      <n-gi>
-        <n-card size="small" :hoverable="true" style="text-align:center;">
-          <BarChart3 :size="22" style="color:var(--text-muted);margin-bottom:8px;display:block;margin-inline:auto;" />
-          <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
-            {{ records.length }}
-          </n-text>
-          <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">评价次数</n-text>
+      <n-gi span="4 m:1">
+        <n-card size="small" class="stat-card">
+          <div class="stat-icon muted"><BarChart3 :size="20" /></div>
+          <div class="stat-value">{{ records.length }}</div>
+          <div class="stat-label">评价次数</div>
         </n-card>
       </n-gi>
     </n-grid>
 
     <!-- Points Timeline -->
-    <n-card>
+    <n-card class="timeline-card">
       <template #header>
-        <n-text strong style="font-size:15px;letter-spacing:-0.01em;">积分记录</n-text>
+        <span class="card-title">积分记录</span>
       </template>
       <n-spin :show="loading">
-        <div style="display:flex;flex-direction:column;">
-          <div
-            v-for="r in records"
-            :key="r.id"
-            style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:1px solid var(--hairline);"
-          >
-            <div
-              :style="{
-                width:'8px',
-                height:'8px',
-                borderRadius:'50%',
-                flexShrink:0,
-                background: r.type === 'add' ? '#22c55e' : '#ef4444'
-              }"
-            />
-            <div style="flex:1;min-width:0;">
-              <n-text style="font-size:14px;font-weight:500;line-height:1.4;display:block;">
-                {{ r.reason }}
-              </n-text>
-              <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">
-                {{ r.teacher_name }} &middot; {{ r.date }}
-              </n-text>
+        <div class="timeline">
+          <div v-for="r in records" :key="r.id" class="timeline-item">
+            <div class="timeline-dot" :class="r.type === 'add' ? 'green' : 'red'" />
+            <div class="timeline-content">
+              <div class="timeline-reason">{{ r.reason }}</div>
+              <div class="timeline-meta">{{ r.teacher_name }} · {{ r.date }}</div>
             </div>
-            <span
-              :style="{
-                fontWeight:700,
-                fontSize:'15px',
-                flexShrink:0,
-                color: r.type === 'add' ? '#22c55e' : '#ef4444'
-              }"
-            >
+            <div class="timeline-amount" :class="r.type === 'add' ? 'positive' : 'negative'">
               {{ r.type === 'add' ? '+' : '-' }}{{ r.amount }}
-            </span>
+            </div>
           </div>
           <n-empty v-if="!loading && records.length === 0" description="暂无积分记录" />
         </div>
@@ -159,7 +121,208 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 </template>
 
 <style scoped>
+.page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 0;
+}
+
+/* Hero Card */
+.hero-card {
+  background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  border: 1px solid var(--hairline-strong);
+}
+
+.hero-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.hero-avatar {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.hero-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-name {
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.hero-class {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.hero-points {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.points-number {
+  font-weight: 800;
+  font-size: 42px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.points-number.positive { color: #d97706; }
+.points-number.negative { color: #ef4444; }
+
+.points-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Stat Cards */
+.stat-card {
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 10px;
+}
+
+.stat-icon.green { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+.stat-icon.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.stat-icon.accent { background: rgba(94, 106, 210, 0.1); color: var(--accent-text); }
+.stat-icon.muted { background: var(--surface-2); color: var(--text-muted); }
+
+.stat-value {
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Timeline */
+.timeline-card {
+  border: 1px solid var(--hairline);
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hairline);
+  transition: background 0.15s;
+}
+
+.timeline-item:last-child {
+  border-bottom: none;
+}
+
+.timeline-item:hover {
+  background: var(--surface-2);
+  margin: 0 -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  border-radius: 8px;
+}
+
+.timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.timeline-dot.green { background: #22c55e; }
+.timeline-dot.red { background: #ef4444; }
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-reason {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.timeline-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.timeline-amount {
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.timeline-amount.positive { color: #22c55e; }
+.timeline-amount.negative { color: #ef4444; }
+
+/* Mobile */
 @media (max-width: 768px) {
-  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .page-container {
+    padding: 16px 0;
+    gap: 16px;
+  }
+
+  .hero-content {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .hero-points {
+    width: 100%;
+    text-align: left;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .points-number {
+    font-size: 36px;
+  }
 }
 </style>

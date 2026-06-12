@@ -542,7 +542,8 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
 
   let queue = ''
   let done = false
-
+  // 按 SSE chunk 记录时间戳边界：{ pos, time } 表示从 pos 开始的字符属于该 chunk
+  const chunkTimes: { pos: number; time: number }[] = []
   function tick() {
     if (currentConvId.value !== convId) return
     if (!queue) {
@@ -563,8 +564,20 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
         if (messages.value[j]!.role === 'assistant') {
           const msg = messages.value[j] as any
           msg.content += chars
+          // 按 chunk 边界生成时间戳数组
           if (!msg._streamTimestamps) msg._streamTimestamps = []
-          msg._streamTimestamps.push(performance.now())
+          msg._streamTimestamps.length = 0
+          for (let c = 0; c < msg.content.length; c++) {
+            // 二分查找 c 属于哪个 chunk
+            let lo = 0, hi = chunkTimes.length - 1, idx = 0
+            while (lo <= hi) {
+              const mid = (lo + hi) >> 1
+              const entry = chunkTimes[mid]
+              if (entry && entry.pos <= c) { idx = mid; lo = mid + 1 } else { hi = mid - 1 }
+            }
+            const chunk = chunkTimes[idx]
+            msg._streamTimestamps.push(chunk ? chunk.time : performance.now())
+          }
           break
         }
       }
@@ -609,6 +622,7 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
         try {
           const data = JSON.parse(line.slice(6))
           if (data.type === 'text') {
+            chunkTimes.push({ pos: queue.length, time: performance.now() })
             queue += data.content
             if (!streamTimer) tick()
           } else if (data.type === 'thinking_start') {
@@ -735,6 +749,8 @@ async function continueGeneration() {
   let queue = ''
   let done = false
   let _thinkingAccum = ''
+  // 按 SSE chunk 记录时间戳边界
+  const chunkTimes: { pos: number; time: number }[] = []
 
   // Reuse tick for character animation
   const tick = () => {
@@ -756,8 +772,19 @@ async function continueGeneration() {
         if (messages.value[j]!.role === 'assistant') {
           const msg = messages.value[j] as any
           msg.content += chars
+          // 按 chunk 边界生成时间戳数组
           if (!msg._streamTimestamps) msg._streamTimestamps = []
-          msg._streamTimestamps.push(performance.now())
+          msg._streamTimestamps.length = 0
+          for (let c = 0; c < msg.content.length; c++) {
+            let lo = 0, hi = chunkTimes.length - 1, idx = 0
+            while (lo <= hi) {
+              const mid = (lo + hi) >> 1
+              const entry = chunkTimes[mid]
+              if (entry && entry.pos <= c) { idx = mid; lo = mid + 1 } else { hi = mid - 1 }
+            }
+            const chunk = chunkTimes[idx]
+            msg._streamTimestamps.push(chunk ? chunk.time : performance.now())
+          }
           break
         }
       }
@@ -792,6 +819,7 @@ async function continueGeneration() {
         try {
           const data = JSON.parse(line.slice(6))
           if (data.type === 'text') {
+            chunkTimes.push({ pos: queue.length, time: performance.now() })
             queue += data.content
             if (!streamTimer) tick()
           } else if (data.type === 'thinking_start') {

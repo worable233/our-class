@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Pencil, Trash2, Filter, School, Users, GraduationCap, Tag } from '@lucide/vue'
+import { Plus, Pencil, Trash2, Filter, School, Users, GraduationCap, Tag, Download, CheckSquare, Square, MinusSquare } from '@lucide/vue'
 import { api } from '@/api/client'
 import type { Student, PermissionGroup } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useDialog, useMessage } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { NButton, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty, NList, NListItem, NThing, NScrollbar, NIcon, NTabs, NTabPane, NCard, NButtonGroup, NPopconfirm } from 'naive-ui'
+import { NButton, NModal, NForm, NFormItem, NInput, NSelect, NSpace, NTag, NAvatar, NSpin, NEmpty, NList, NListItem, NThing, NScrollbar, NIcon, NTabs, NTabPane, NCard, NButtonGroup, NPopconfirm, NCheckbox } from 'naive-ui'
+import * as XLSX from 'xlsx'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -51,6 +52,207 @@ const filteredStudents = computed(() =>
     ? students.value.filter(s => s.class === filterClass.value)
     : students.value,
 )
+
+// ── 多选状态 ──
+const selectedStudentIds = ref<Set<number>>(new Set())
+const selectedTeacherIds = ref<Set<number>>(new Set())
+const selectedClassIds = ref<Set<number>>(new Set())
+
+function toggleStudent(id: number) {
+  const next = new Set(selectedStudentIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedStudentIds.value = next
+}
+function toggleTeacher(id: number) {
+  const next = new Set(selectedTeacherIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedTeacherIds.value = next
+}
+function toggleClass(id: number) {
+  const next = new Set(selectedClassIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedClassIds.value = next
+}
+
+function toggleAllStudents() {
+  if (selectedStudentIds.value.size === filteredStudents.value.length) {
+    selectedStudentIds.value.clear()
+  } else {
+    selectedStudentIds.value = new Set(filteredStudents.value.map(s => s.id))
+  }
+}
+function toggleAllTeachers() {
+  if (selectedTeacherIds.value.size === teachers.value.length) {
+    selectedTeacherIds.value.clear()
+  } else {
+    selectedTeacherIds.value = new Set(teachers.value.map(t => t.id))
+  }
+}
+function toggleAllClasses() {
+  if (selectedClassIds.value.size === classData.value.length) {
+    selectedClassIds.value.clear()
+  } else {
+    selectedClassIds.value = new Set(classData.value.map(c => c.id))
+  }
+}
+
+const allStudentsSelected = computed(() => filteredStudents.value.length > 0 && selectedStudentIds.value.size === filteredStudents.value.length)
+const someStudentsSelected = computed(() => selectedStudentIds.value.size > 0 && !allStudentsSelected.value)
+const allTeachersSelected = computed(() => teachers.value.length > 0 && selectedTeacherIds.value.size === teachers.value.length)
+const someTeachersSelected = computed(() => selectedTeacherIds.value.size > 0 && !allTeachersSelected.value)
+const allClassesSelected = computed(() => classData.value.length > 0 && selectedClassIds.value.size === classData.value.length)
+const someClassesSelected = computed(() => selectedClassIds.value.size > 0 && !allClassesSelected.value)
+
+// ── 批量删除 ──
+async function batchDeleteStudents() {
+  const ids = Array.from(selectedStudentIds.value)
+  if (ids.length === 0) return
+  const names = filteredStudents.value.filter(s => ids.includes(s.id)).map(s => s.display_name)
+  dialog.warning({
+    title: '批量删除学生',
+    content: `确定删除选中的 ${ids.length} 名学生（${names.slice(0, 3).join('、')}${names.length > 3 ? '...' : ''}）及其所有相关记录？此操作不可撤销。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      let success = 0
+      const errors: string[] = []
+      for (const id of ids) {
+        const s = filteredStudents.value.find(x => x.id === id)
+        try { await api.delete(`/students/${id}`); success++ } catch (e: any) { errors.push(s?.display_name || `#${id}`) }
+      }
+      selectedStudentIds.value = new Set()
+      await load()
+      if (errors.length === 0) message.success(`已删除 ${success} 名学生`)
+      else message.warning(`成功 ${success}，失败 ${errors.length}（${errors.join('、')}）`)
+    },
+  })
+}
+
+async function batchDeleteTeachers() {
+  const ids = Array.from(selectedTeacherIds.value)
+  if (ids.length === 0) return
+  const names = teachers.value.filter(t => ids.includes(t.id)).map(t => t.display_name)
+  dialog.warning({
+    title: '批量删除教师',
+    content: `确定删除选中的 ${ids.length} 名教师（${names.slice(0, 3).join('、')}${names.length > 3 ? '...' : ''}）？此操作不可撤销。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      let success = 0
+      const errors: string[] = []
+      for (const id of ids) {
+        const t = teachers.value.find(x => x.id === id)
+        try { await api.delete(`/teachers/${id}`); success++ } catch (e: any) { errors.push(t?.display_name || `#${id}`) }
+      }
+      selectedTeacherIds.value = new Set()
+      await loadTeachers()
+      if (errors.length === 0) message.success(`已删除 ${success} 名教师`)
+      else message.warning(`成功 ${success}，失败 ${errors.length}（${errors.join('、')}）`)
+    },
+  })
+}
+
+async function batchDeleteClasses() {
+  const ids = Array.from(selectedClassIds.value)
+  if (ids.length === 0) return
+  const names = classData.value.filter(c => ids.includes(c.id)).map(c => c.name)
+  dialog.warning({
+    title: '批量删除班级',
+    content: `确定删除选中的 ${ids.length} 个班级（${names.slice(0, 3).join('、')}${names.length > 3 ? '...' : ''}）？该班级所有学生的班级信息将被清空。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      let success = 0
+      const errors: string[] = []
+      for (const id of ids) {
+        const c = classData.value.find(x => x.id === id)
+        try { await api.delete(`/classes/${id}`); success++ } catch (e: any) { errors.push(c?.name || `#${id}`) }
+      }
+      selectedClassIds.value = new Set()
+      await loadClasses()
+      await load()
+      if (errors.length === 0) message.success(`已删除 ${success} 个班级`)
+      else message.warning(`成功 ${success}，失败 ${errors.length}（${errors.join('、')}）`)
+    },
+  })
+}
+
+// ── 导出 xlsx ──
+function safeFilename(name: string): string {
+  return name.replace(/[\/\\:*?"<>|]/g, '_').replace(/\s+/g, '_').slice(0, 50)
+}
+
+function exportStudents() {
+  const data = selectedStudentIds.value.size > 0
+    ? filteredStudents.value.filter(s => selectedStudentIds.value.has(s.id))
+    : filteredStudents.value
+  if (data.length === 0) { message.warning('没有可导出的数据'); return }
+
+  const rows = [
+    ['学号', '姓名', '昵称', '班级', '身份', '职位'],
+    ...data.map(s => [
+      s.student_no || '',
+      s.display_name,
+      s.nickname || '',
+      s.class || '',
+      groupName(s.group_id),
+      groupName(s.role_id),
+    ]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  // 设置列宽
+  ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 10 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '学生列表')
+  XLSX.writeFile(wb, safeFilename(`学生列表_${new Date().toLocaleDateString('zh-CN')}.xlsx`))
+  message.success(`已导出 ${data.length} 条记录`)
+}
+
+function exportTeachers() {
+  const data = selectedTeacherIds.value.size > 0
+    ? teachers.value.filter(t => selectedTeacherIds.value.has(t.id))
+    : teachers.value
+  if (data.length === 0) { message.warning('没有可导出的数据'); return }
+
+  const rows = [
+    ['用户名', '姓名', '昵称', '管理班级', '身份', '职位'],
+    ...data.map(t => [
+      t.username,
+      t.display_name,
+      t.nickname || '',
+      t.class || '',
+      groupName(t.group_id),
+      groupName(t.role_id),
+    ]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 10 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '教师列表')
+  XLSX.writeFile(wb, safeFilename(`教师列表_${new Date().toLocaleDateString('zh-CN')}.xlsx`))
+  message.success(`已导出 ${data.length} 条记录`)
+}
+
+function exportClasses() {
+  const data = selectedClassIds.value.size > 0
+    ? classData.value.filter(c => selectedClassIds.value.has(c.id))
+    : classData.value
+  if (data.length === 0) { message.warning('没有可导出的数据'); return }
+
+  const rows = [
+    ['班级名称', '学生人数'],
+    ...data.map(c => [c.name, String(c.student_count)]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!cols'] = [{ wch: 20 }, { wch: 12 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '班级列表')
+  XLSX.writeFile(wb, safeFilename(`班级列表_${new Date().toLocaleDateString('zh-CN')}.xlsx`))
+  message.success(`已导出 ${data.length} 条记录`)
+}
 
 // ── 教师管理 ──
 interface Teacher {
@@ -318,7 +520,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             <span>学生管理</span>
           </div>
         </template>
-        <!-- Top bar: filter + add -->
+        <!-- Top bar: filter + batch actions + add -->
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <Filter :size="16" style="color: var(--text-muted); flex-shrink: 0;" />
@@ -335,10 +537,23 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
               共 {{ filteredStudents.length }} 人
             </span>
           </div>
-          <n-button type="primary" @click="openNew" round size="small">
-            <template #icon><Plus :size="16" /></template>
-            添加学生
-          </n-button>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <!-- 批量操作按钮 -->
+            <template v-if="selectedStudentIds.size > 0">
+              <n-button size="small" type="error" @click="batchDeleteStudents" round>
+                <template #icon><Trash2 :size="14" /></template>
+                删除选中 ({{ selectedStudentIds.size }})
+              </n-button>
+            </template>
+            <n-button size="small" quaternary @click="exportStudents" round>
+              <template #icon><Download :size="14" /></template>
+              {{ selectedStudentIds.size > 0 ? `导出选中 (${selectedStudentIds.size})` : '导出全部' }}
+            </n-button>
+            <n-button type="primary" @click="openNew" round size="small">
+              <template #icon><Plus :size="16" /></template>
+              添加学生
+            </n-button>
+          </div>
         </div>
 
         <n-spin :show="loading" style="min-height: 200px">
@@ -348,19 +563,35 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             clickable
             style="background: transparent"
           >
-            <n-list-item v-for="s in filteredStudents" :key="s.id">
+            <!-- 全选行 -->
+            <n-list-item style="padding: 8px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color);" @click="toggleAllStudents">
               <template #prefix>
-                <n-avatar
-                  :size="40"
-                  :style="{
-                    background: 'var(--accent-glow)',
-                    color: 'var(--accent-text)',
-                    fontWeight: 600,
-                    fontSize: '16px',
-                  }"
-                >
-                  {{ s.display_name?.charAt(0) || '?' }}
-                </n-avatar>
+                <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                  <n-icon :size="20" :component="allStudentsSelected ? CheckSquare : someStudentsSelected ? MinusSquare : Square" :style="{ color: allStudentsSelected || someStudentsSelected ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                </div>
+              </template>
+              <span style="font-size: 13px; color: var(--text-muted);">
+                {{ allStudentsSelected ? '取消全选' : '全选' }}
+                {{ selectedStudentIds.size > 0 ? `（已选 ${selectedStudentIds.size} 人）` : '' }}
+              </span>
+            </n-list-item>
+
+            <n-list-item v-for="s in filteredStudents" :key="s.id" @click="toggleStudent(s.id)">
+              <template #prefix>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <n-icon :size="20" :component="selectedStudentIds.has(s.id) ? CheckSquare : Square" :style="{ color: selectedStudentIds.has(s.id) ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                  <n-avatar
+                    :size="40"
+                    :style="{
+                      background: 'var(--accent-glow)',
+                      color: 'var(--accent-text)',
+                      fontWeight: 600,
+                      fontSize: '16px',
+                    }"
+                  >
+                    {{ s.display_name?.charAt(0) || '?' }}
+                  </n-avatar>
+                </div>
               </template>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ s.display_name }}</span>
@@ -373,12 +604,12 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 <n-tag v-if="groupName(s.role_id)" size="tiny" :bordered="false" type="info" round style="font-size: 11px">{{ groupName(s.role_id) }}</n-tag>
               </div>
               <template #suffix>
-                <div style="display: flex; gap: 4px; flex-shrink: 0;">
-                  <n-button quaternary size="small" @click.stop="openEdit(s)" round>
+                <div style="display: flex; gap: 4px; flex-shrink: 0;" @click.stop>
+                  <n-button quaternary size="small" @click="openEdit(s)" round>
                     <template #icon><Pencil :size="14" /></template>
                     编辑
                   </n-button>
-                  <n-button quaternary size="small" type="error" @click.stop="remove(s.id)" round>
+                  <n-button quaternary size="small" type="error" @click="remove(s.id)" round>
                     <template #icon><Trash2 :size="14" /></template>
                     删除
                   </n-button>
@@ -404,10 +635,22 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             <span style="font-size: 14px; color: var(--text-primary); font-weight: 600;">教师账号</span>
             <span style="font-size: 12px; color: var(--text-muted);">共 {{ teachers.length }} 人</span>
           </div>
-          <n-button type="primary" @click="openNewTeacher" round size="small">
-            <template #icon><Plus :size="16" /></template>
-            添加教师
-          </n-button>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <template v-if="selectedTeacherIds.size > 0">
+              <n-button size="small" type="error" @click="batchDeleteTeachers" round>
+                <template #icon><Trash2 :size="14" /></template>
+                删除选中 ({{ selectedTeacherIds.size }})
+              </n-button>
+            </template>
+            <n-button size="small" quaternary @click="exportTeachers" round>
+              <template #icon><Download :size="14" /></template>
+              {{ selectedTeacherIds.size > 0 ? `导出选中 (${selectedTeacherIds.size})` : '导出全部' }}
+            </n-button>
+            <n-button type="primary" @click="openNewTeacher" round size="small">
+              <template #icon><Plus :size="16" /></template>
+              添加教师
+            </n-button>
+          </div>
         </div>
 
         <n-spin :show="teachersLoading" style="min-height: 200px">
@@ -416,19 +659,35 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             hoverable
             style="background: transparent"
           >
-            <n-list-item v-for="t in teachers" :key="t.id">
+            <!-- 全选行 -->
+            <n-list-item style="padding: 8px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color);" @click="toggleAllTeachers">
               <template #prefix>
-                <n-avatar
-                  :size="40"
-                  :style="{
-                    background: 'var(--accent-glow)',
-                    color: 'var(--accent-text)',
-                    fontWeight: 600,
-                    fontSize: '16px',
-                  }"
-                >
-                  {{ t.display_name?.charAt(0) || '?' }}
-                </n-avatar>
+                <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                  <n-icon :size="20" :component="allTeachersSelected ? CheckSquare : someTeachersSelected ? MinusSquare : Square" :style="{ color: allTeachersSelected || someTeachersSelected ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                </div>
+              </template>
+              <span style="font-size: 13px; color: var(--text-muted);">
+                {{ allTeachersSelected ? '取消全选' : '全选' }}
+                {{ selectedTeacherIds.size > 0 ? `（已选 ${selectedTeacherIds.size} 人）` : '' }}
+              </span>
+            </n-list-item>
+
+            <n-list-item v-for="t in teachers" :key="t.id" @click="toggleTeacher(t.id)">
+              <template #prefix>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <n-icon :size="20" :component="selectedTeacherIds.has(t.id) ? CheckSquare : Square" :style="{ color: selectedTeacherIds.has(t.id) ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                  <n-avatar
+                    :size="40"
+                    :style="{
+                      background: 'var(--accent-glow)',
+                      color: 'var(--accent-text)',
+                      fontWeight: 600,
+                      fontSize: '16px',
+                    }"
+                  >
+                    {{ t.display_name?.charAt(0) || '?' }}
+                  </n-avatar>
+                </div>
               </template>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ t.display_name }}</span>
@@ -441,10 +700,12 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 <n-tag v-if="groupName(t.role_id)" size="tiny" :bordered="false" type="info" round style="font-size: 11px">{{ groupName(t.role_id) }}</n-tag>
               </div>
               <template #suffix>
-                <n-button quaternary size="small" @click.stop="openEditTeacher(t)" round>
-                  <template #icon><Pencil :size="14" /></template>
-                  编辑
-                </n-button>
+                <div @click.stop>
+                  <n-button quaternary size="small" @click="openEditTeacher(t)" round>
+                    <template #icon><Pencil :size="14" /></template>
+                    编辑
+                  </n-button>
+                </div>
               </template>
             </n-list-item>
           </n-list>
@@ -460,16 +721,28 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             <span>班级管理</span>
           </div>
         </template>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <School :size="16" style="color: var(--text-muted);" />
             <span style="font-size: 14px; color: var(--text-primary); font-weight: 600;">班级列表</span>
             <span style="font-size: 12px; color: var(--text-muted);">共 {{ classData.length }} 个班级</span>
           </div>
-          <n-button type="primary" @click="openNewClass" round size="small">
-            <template #icon><Plus :size="16" /></template>
-            创建班级
-          </n-button>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <template v-if="selectedClassIds.size > 0">
+              <n-button size="small" type="error" @click="batchDeleteClasses" round>
+                <template #icon><Trash2 :size="14" /></template>
+                删除选中 ({{ selectedClassIds.size }})
+              </n-button>
+            </template>
+            <n-button size="small" quaternary @click="exportClasses" round>
+              <template #icon><Download :size="14" /></template>
+              {{ selectedClassIds.size > 0 ? `导出选中 (${selectedClassIds.size})` : '导出全部' }}
+            </n-button>
+            <n-button type="primary" @click="openNewClass" round size="small">
+              <template #icon><Plus :size="16" /></template>
+              创建班级
+            </n-button>
+          </div>
         </div>
 
         <n-spin :show="classLoading" style="min-height: 200px">
@@ -479,19 +752,35 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
             clickable
             style="background: transparent"
           >
-            <n-list-item v-for="c in classData" :key="c.id">
+            <!-- 全选行 -->
+            <n-list-item style="padding: 8px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color);" @click="toggleAllClasses">
               <template #prefix>
-                <n-avatar
-                  :size="40"
-                  :style="{
-                    background: 'var(--accent-glow)',
-                    color: 'var(--accent-text)',
-                    fontWeight: 600,
-                    fontSize: '16px',
-                  }"
-                >
-                  🏫
-                </n-avatar>
+                <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                  <n-icon :size="20" :component="allClassesSelected ? CheckSquare : someClassesSelected ? MinusSquare : Square" :style="{ color: allClassesSelected || someClassesSelected ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                </div>
+              </template>
+              <span style="font-size: 13px; color: var(--text-muted);">
+                {{ allClassesSelected ? '取消全选' : '全选' }}
+                {{ selectedClassIds.size > 0 ? `（已选 ${selectedClassIds.size} 个）` : '' }}
+              </span>
+            </n-list-item>
+
+            <n-list-item v-for="c in classData" :key="c.id" @click="toggleClass(c.id)">
+              <template #prefix>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <n-icon :size="20" :component="selectedClassIds.has(c.id) ? CheckSquare : Square" :style="{ color: selectedClassIds.has(c.id) ? 'var(--primary-color)' : 'var(--text-muted)' }" />
+                  <n-avatar
+                    :size="40"
+                    :style="{
+                      background: 'var(--accent-glow)',
+                      color: 'var(--accent-text)',
+                      fontWeight: 600,
+                      fontSize: '16px',
+                    }"
+                  >
+                    🏫
+                  </n-avatar>
+                </div>
               </template>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ c.name }}</span>
@@ -500,12 +789,12 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                 </n-tag>
               </div>
               <template #suffix>
-                <div style="display: flex; gap: 4px; flex-shrink: 0;">
-                  <n-button quaternary size="small" @click.stop="openEditClass(c)" round>
+                <div style="display: flex; gap: 4px; flex-shrink: 0;" @click.stop>
+                  <n-button quaternary size="small" @click="openEditClass(c)" round>
                     <template #icon><Pencil :size="14" /></template>
                     重命名
                   </n-button>
-                  <n-button quaternary size="small" type="error" @click.stop="removeClass(c.id, c.name)" round>
+                  <n-button quaternary size="small" type="error" @click="removeClass(c.id, c.name)" round>
                     <template #icon><Trash2 :size="14" /></template>
                     删除
                   </n-button>

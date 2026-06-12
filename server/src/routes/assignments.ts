@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, createReadStream, copyFileSync } from 'fs'
 import { join, extname, basename, dirname } from 'path'
@@ -10,7 +10,7 @@ import { getDb } from '../db/init.js'
 import { validate } from '../middleware/validate.js'
 import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { ok, fail } from '../lib/response.js'
-import { NotFoundError, ValidationError } from '../lib/errors.js'
+import { NotFoundError, ValidationError, ForbiddenError } from '../lib/errors.js'
 
 const __dirname = pathDirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
@@ -128,7 +128,13 @@ function validateFileName(name: string): void {
 // GET /api/assignments
 // ---------------------------------------------------------------------------
 
-router.get('/', requirePermission('assignments.write'), (req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response, next: NextFunction) => {
+  const perms = req.user?.permissions ?? []
+  if (!perms.includes('assignments.read') && !perms.includes('assignments.write')) {
+    throw new ForbiddenError('权限不足')
+  }
+  next()
+}, (req: Request, res: Response) => {
   const db = getDb()
   const { student_id } = req.query
   const { permissions, class: userClass } = req.user!
