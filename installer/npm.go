@@ -48,25 +48,42 @@ func npmFlags() []string {
 func installDependencies(projectRoot string) {
 	serverDir := filepath.Join(projectRoot, "server")
 
-	// Check if lockfiles exist — use npm ci (faster) or npm install
-	useCI := fileExists(filepath.Join(projectRoot, "package-lock.json"))
-	cmdName := "install"
-	if useCI {
-		cmdName = "ci"
-	}
+	// node_modules exists → npm install (incremental, fast)
+	// node_modules missing → npm ci (clean install, slower but reliable)
+	frontendHasModules := dirExists(filepath.Join(projectRoot, "node_modules"))
+	backendHasModules := dirExists(filepath.Join(serverDir, "node_modules"))
 
-	printInfo(fmt.Sprintf("安装前端依赖（npm %s）...", cmdName))
-	args := append([]string{cmdName}, npmFlags()...)
-	if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
-		exitWithError(fmt.Sprintf("前端依赖安装失败: %v", err))
+	// Frontend
+	if frontendHasModules {
+		printInfo("前端依赖已存在，增量更新...")
+		args := append([]string{"install"}, npmFlags()...)
+		if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("前端依赖更新失败: %v", err))
+		}
+	} else {
+		printInfo("首次安装前端依赖（npm ci）...")
+		args := append([]string{"ci"}, npmFlags()...)
+		if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("前端依赖安装失败: %v", err))
+		}
 	}
-	printSuccess("前端依赖安装完成")
+	printSuccess("前端依赖完成")
 
-	printInfo(fmt.Sprintf("安装后端依赖（npm %s）...", cmdName))
-	if err := runCommandInDir(serverDir, "npm", args...); err != nil {
-		exitWithError(fmt.Sprintf("后端依赖安装失败: %v", err))
+	// Backend
+	if backendHasModules {
+		printInfo("后端依赖已存在，增量更新...")
+		args := append([]string{"install"}, npmFlags()...)
+		if err := runCommandInDir(serverDir, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("后端依赖更新失败: %v", err))
+		}
+	} else {
+		printInfo("首次安装后端依赖（npm ci）...")
+		args := append([]string{"ci"}, npmFlags()...)
+		if err := runCommandInDir(serverDir, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("后端依赖安装失败: %v", err))
+		}
 	}
-	printSuccess("后端依赖安装完成")
+	printSuccess("后端依赖完成")
 }
 
 func fileExists(path string) bool {
