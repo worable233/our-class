@@ -41,33 +41,37 @@ func main() {
 	fmt.Printf("\n  %s系统:%s %s/%s\n", ColorGray, ColorReset, runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("  %s路径:%s %s\n", ColorGray, ColorReset, projectRoot)
 
-	// Step 1: Clone or update project
-	printStep(1, 6, "获取项目代码")
+	// Step 1: Check/Install Git
+	printStep(1, 7, "检查 Git 环境")
+	ensureGit()
+
+	// Step 2: Clone or update project
+	printStep(2, 7, "获取项目代码")
 	projectRoot = ensureProject(projectRoot)
 
-	// Step 2: Check/Install Node.js
-	printStep(2, 6, "检查 Node.js 环境")
+	// Step 3: Check/Install Node.js
+	printStep(3, 7, "检查 Node.js 环境")
 	ensureNode()
 
-	// Step 3: Set npm registry
-	printStep(3, 6, "配置 npm 镜像源")
+	// Step 4: Set npm registry
+	printStep(4, 7, "配置 npm 镜像源")
 	ensureNpmRegistry()
 
-	// Step 4: Install dependencies
-	printStep(4, 6, "安装项目依赖")
+	// Step 5: Install dependencies
+	printStep(5, 7, "安装项目依赖")
 	installDependencies(projectRoot)
 
-	// Step 5: Build frontend (optional)
+	// Step 6: Build frontend (optional)
 	if !*skipBuild {
-		printStep(5, 6, "构建前端")
+		printStep(6, 7, "构建前端")
 		buildFrontend(projectRoot)
 	} else {
-		printStep(5, 6, "构建前端（已跳过）")
+		printStep(6, 7, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")
 	}
 
-	// Step 6: Install PM2 and start setup wizard
-	printStep(6, 6, "安装 PM2 并启动配置向导")
+	// Step 7: Install PM2 and start setup wizard
+	printStep(7, 7, "安装 PM2 并启动配置向导")
 	ensurePM2()
 	startSetupWizard(projectRoot, *port)
 
