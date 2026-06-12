@@ -168,6 +168,22 @@ router.post('/create', requirePermission('chat.config'), async (req: Request, re
     return fail(res, 500, 'BACKUP_FAILED', '备份文件生成失败')
   }
 
+  // Verify zip integrity by reading it back
+  try {
+    const AdmZip = (await import('adm-zip'))
+    const testZip = new AdmZip.default(filePath)
+    const entries = testZip.getEntries()
+    const hasBackupJson = entries.some(e => e.entryName === 'backup.json')
+    const hasDatabaseJson = entries.some(e => e.entryName === 'database.json')
+    if (!hasBackupJson || !hasDatabaseJson) {
+      unlinkSync(filePath)
+      return fail(res, 500, 'BACKUP_FAILED', '备份文件完整性校验失败')
+    }
+  } catch (e: any) {
+    try { unlinkSync(filePath) } catch {}
+    return fail(res, 500, 'BACKUP_FAILED', `备份文件损坏: ${e.message}`)
+  }
+
   // Clean up old backups
   cleanupOldBackups()
 
@@ -202,8 +218,15 @@ function cleanupOldBackups() {
 router.put('/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
   const oldName = basename(req.params.name)
   const newName = req.body.name as string
-  if (!oldName.endsWith('.zip')) return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
+  if (!oldName.endsWith('.zip') || !/^backup-[\w\-]+\.zip$/.test(oldName)) {
+    return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
+  }
   if (!newName || !newName.endsWith('.zip')) return fail(res, 400, 'INVALID_NAME', '新文件名必须以 .zip 结尾')
+  // Validate new name: only allow alphanumeric, hyphens, underscores
+  const baseName = newName.replace(/\.zip$/, '')
+  if (!/^[\w\-]+$/.test(baseName) || baseName.length > 100) {
+    return fail(res, 400, 'INVALID_NAME', '文件名只能包含字母、数字、下划线和连字符')
+  }
   const oldPath = join(BACKUP_DIR, oldName)
   const newPath = join(BACKUP_DIR, newName)
   if (!existsSync(oldPath)) return fail(res, 404, 'NOT_FOUND', '备份文件不存在')
@@ -432,8 +455,9 @@ router.post('/import', requirePermission('chat.config'), upload.single('backup')
       const relPath = entry.entryName.slice(6) // remove 'files/'
       if (!relPath || relPath.includes('..')) continue // block path traversal
 
-      const safePath = safeJoin(UPLOAD_ROOT, relPath)
-      if (!safePath) continue // rejects paths escaping uploads/
+      // Try both uploads and storage directories
+      const safePath = safeJoin(UPLOAD_ROOT, relPath) || safeJoin(STORAGE_ROOT, relPath)
+      if (!safePath) continue // rejects paths escaping both directories
 
       const targetDir = join(safePath, '..')
       if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true })
@@ -459,13 +483,19 @@ router.post('/import', requirePermission('chat.config'), upload.single('backup')
   }
 })
 
-// GET /api/backup/download/:name — download a server-side backup
-router.get('/download/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
+// POST /api/backup/download/:name — download a server-side backup (POST to avoid token in URL)
+router.post('/download/:name', requirePermission('chat.config'), (req: Request, res: Response) => {
   const name = basename(req.params.name)
-  if (!name.endsWith('.zip')) return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
+  if (!name.endsWith('.zip') || !/^backup-[\w\-]+\.zip$/.test(name)) {
+    return fail(res, 400, 'INVALID_NAME', '无效的备份文件名')
+  }
   const fp = join(BACKUP_DIR, name)
   if (!existsSync(fp)) return fail(res, 404, 'NOT_FOUND', '备份文件不存在')
+
+  // Verify it's a valid zip file
   const st = statSync(fp)
+  if (st.size < 100) return fail(res, 500, 'INVALID_FILE', '备份文件损坏')
+
   res.setHeader('Content-Type', 'application/zip')
   res.setHeader('Content-Disposition', `attachment; filename="${name}"`)
   res.setHeader('Content-Length', st.size)

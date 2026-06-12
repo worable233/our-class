@@ -139,6 +139,16 @@ function triggerUpload() {
   input.onchange = async () => {
     const file = input.files?.[0]
     if (!file) return
+    // Validate file size (max 1GB)
+    if (file.size > 1024 * 1024 * 1024) {
+      message.error('备份文件过大，最大支持 1GB')
+      return
+    }
+    // Validate file extension
+    if (!file.name.endsWith('.zip')) {
+      message.error('请选择 .zip 格式的备份文件')
+      return
+    }
     const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
     const fd = new FormData(); fd.append('backup', file)
     try {
@@ -153,12 +163,26 @@ function triggerUpload() {
   input.click()
 }
 
-// ── 下载 ──
-function doDownload(b: BackupFile) {
-  const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
-  const a = document.createElement('a')
-  a.href = `${BASE}/backup/download/${encodeURIComponent(b.name)}?token=${token}`
-  a.download = b.name; a.click()
+// ── 下载（POST + blob，避免 token 暴露在 URL）──
+async function doDownload(b: BackupFile) {
+  try {
+    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+    const resp = await fetch(`${BASE}/backup/download/${encodeURIComponent(b.name)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err.error?.message || '下载失败')
+    }
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = b.name; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    message.error(e.message || '下载失败')
+  }
 }
 
 // ── 重命名 ──
