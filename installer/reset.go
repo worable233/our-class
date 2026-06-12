@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// resetProject resets the project to a fresh-install state.
+// resetProject resets the project to a fresh-install state and reinstalls.
 func resetProject(projectRoot string) {
 	printBanner()
 	fmt.Printf("\n%s  ⚠️  即将重置 OurClass 项目到初始状态%s\n", ColorYellow, ColorReset)
@@ -18,16 +18,20 @@ func resetProject(projectRoot string) {
 	fmt.Println("    - 向导状态 (server/src/setup/setup-state.json)")
 	fmt.Println("    - 上传文件 (server/uploads/)")
 	fmt.Println("    - 存储文件 (server/storage/)")
+	fmt.Println()
+	fmt.Println("  然后将自动拉取最新代码、安装依赖、构建前端、启动向导。")
 
 	if !promptYesNo("  确认继续？") {
 		fmt.Println("  已取消")
 		return
 	}
 
-	// Stop running processes
+	// Step 1: Stop running processes
+	printStep(1, 5, "停止服务")
 	stopProcesses(projectRoot)
 
-	// Delete files and directories
+	// Step 2: Delete files and directories
+	printStep(2, 5, "清理数据")
 	filesToDelete := []string{
 		filepath.Join(projectRoot, "server", "data.db"),
 		filepath.Join(projectRoot, "server", "data.db-shm"),
@@ -53,10 +57,24 @@ func resetProject(projectRoot string) {
 		}
 		os.MkdirAll(d, 0755)
 	}
+	printSuccess("数据已清理")
 
-	printSuccess("项目已重置")
+	// Step 3: Pull latest code
+	printStep(3, 5, "拉取最新代码")
+	if err := gitPull(projectRoot); err != nil {
+		printWarning(fmt.Sprintf("拉取失败（可能有本地修改），继续使用当前版本: %v", err))
+	} else {
+		printSuccess("代码已更新到最新版本")
+	}
 
-	// Restart setup wizard
+	// Step 4: Install dependencies
+	printStep(4, 5, "安装依赖")
+	ensureNpmRegistry()
+	installDependencies(projectRoot)
+
+	// Step 5: Build frontend and start setup wizard
+	printStep(5, 5, "构建前端并启动向导")
+	buildFrontend(projectRoot)
 	startSetupWizard(projectRoot, 3001)
 }
 
