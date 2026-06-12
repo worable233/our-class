@@ -348,35 +348,105 @@ app.post('/api/setup/apply', async (req, res) => {
 
     const isWin = process.platform === 'win32'
     const serverCwd = join(PROJECT_ROOT, 'server')
-    const tsxCli = join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs')
-    const child = spawn('node', [tsxCli, 'src/index.ts'], {
-      cwd: serverCwd,
-      stdio: 'ignore',
-      windowsHide: true,
-      ...(isWin ? {} : { detached: true }),
-    })
-    child.on('error', (err) => {
-      console.error('[setup] failed to spawn server:', err)
-    })
-    child.unref()
-
     const targetPort = getState().port || 3000
 
-    // Health check: poll /api/health until server responds
+    // Try multiple methods to start the server
     let started = false
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 1000))
+    let lastError = ''
+
+    // Method 1: Use npx tsx (most reliable across platforms)
+    emit('  尝试启动服务...')
+    try {
+      const child = spawn('npx', ['tsx', 'src/index.ts'], {
+        cwd: serverCwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: false,
+        shell: isWin,
+      })
+
+      // Capture errors
+      let stderr = ''
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString()
+      })
+
+      // Check if process exits immediately
+      let exited = false
+      child.on('exit', (code) => {
+        exited = true
+        if (code !== 0) {
+          lastError = stderr || `进程退出码: ${code}`
+        }
+      })
+
+      // Wait a bit to see if process stays alive
+      await new Promise(r => setTimeout(r, 2000))
+
+      if (exited) {
+        emit(`  ⚠️ 进程立即退出: ${lastError.slice(0, 200)}`)
+      } else {
+        // Process is alive, wait for health check
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 1000))
+          try {
+            const r = await fetch(`http://localhost:${targetPort}/api/health`)
+            if (r.ok) { started = true; break }
+          } catch { /* not ready yet */ }
+        }
+      }
+    } catch (spawnErr: any) {
+      lastError = spawnErr.message
+    }
+
+    // Method 2: Fallback to direct node command if npx failed
+    if (!started) {
+      emit('  尝试备用启动方式...')
       try {
-        const r = await fetch(`http://localhost:${targetPort}/api/health`)
-        if (r.ok) { started = true; break }
-      } catch { /* server not ready yet */ }
+        const tsxCli = join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+        const child2 = spawn('node', [tsxCli, 'src/index.ts'], {
+          cwd: serverCwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: false,
+          shell: isWin,
+        })
+
+        let stderr2 = ''
+        child2.stderr?.on('data', (data) => {
+          stderr2 += data.toString()
+        })
+
+        let exited2 = false
+        child2.on('exit', (code) => {
+          exited2 = true
+          if (code !== 0) {
+            lastError = stderr2 || `进程退出码: ${code}`
+          }
+        })
+
+        await new Promise(r => setTimeout(r, 2000))
+
+        if (!exited2) {
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 1000))
+            try {
+              const r = await fetch(`http://localhost:${targetPort}/api/health`)
+              if (r.ok) { started = true; break }
+            } catch { /* not ready yet */ }
+          }
+        }
+      } catch (spawnErr2: any) {
+        lastError = spawnErr2.message
+      }
     }
 
     if (started) {
       emit(`✅ 服务启动成功 (http://localhost:${targetPort})`)
     } else {
-      emit('⚠️ 服务启动超时，请检查日志后手动启动')
-      emit('  cd server && npx tsx src/index.ts')
+      emit('⚠️ 服务启动失败')
+      if (lastError) {
+        emit(`  错误: ${lastError.slice(0, 300)}`)
+      }
+      emit('  请手动启动: cd server && npx tsx src/index.ts')
     }
 
     saveState({ step: 'done' })
