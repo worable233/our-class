@@ -48,42 +48,49 @@ func npmFlags() []string {
 func installDependencies(projectRoot string) {
 	serverDir := filepath.Join(projectRoot, "server")
 
-	// node_modules exists → npm install (incremental, fast)
-	// node_modules missing → npm ci (clean install, slower but reliable)
-	frontendHasModules := dirExists(filepath.Join(projectRoot, "node_modules"))
-	backendHasModules := dirExists(filepath.Join(serverDir, "node_modules"))
+	installDir(projectRoot, "前端")
+	installDir(serverDir, "后端")
+}
 
-	// Frontend
-	if frontendHasModules {
-		printInfo("前端依赖已存在，增量更新...")
+// installDir installs dependencies for a single directory.
+func installDir(dir string, label string) {
+	modulesDir := filepath.Join(dir, "node_modules")
+	lockFile := filepath.Join(dir, "package-lock.json")
+
+	// If node_modules exists and is newer than lockfile, skip entirely
+	if dirExists(modulesDir) && isUpToDate(modulesDir, lockFile) {
+		printSuccess(fmt.Sprintf("%s依赖已是最新，跳过", label))
+		return
+	}
+
+	if dirExists(modulesDir) {
+		printInfo(fmt.Sprintf("%s依赖已存在，增量更新...", label))
 		args := append([]string{"install"}, npmFlags()...)
-		if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
-			exitWithError(fmt.Sprintf("前端依赖更新失败: %v", err))
+		if err := runCommandInDir(dir, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("%s依赖更新失败: %v", label, err))
 		}
 	} else {
-		printInfo("首次安装前端依赖（npm ci）...")
+		printInfo(fmt.Sprintf("首次安装%s依赖...", label))
 		args := append([]string{"ci"}, npmFlags()...)
-		if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
-			exitWithError(fmt.Sprintf("前端依赖安装失败: %v", err))
+		if err := runCommandInDir(dir, "npm", args...); err != nil {
+			exitWithError(fmt.Sprintf("%s依赖安装失败: %v", label, err))
 		}
 	}
-	printSuccess("前端依赖完成")
+	printSuccess(fmt.Sprintf("%s依赖完成", label))
+}
 
-	// Backend
-	if backendHasModules {
-		printInfo("后端依赖已存在，增量更新...")
-		args := append([]string{"install"}, npmFlags()...)
-		if err := runCommandInDir(serverDir, "npm", args...); err != nil {
-			exitWithError(fmt.Sprintf("后端依赖更新失败: %v", err))
-		}
-	} else {
-		printInfo("首次安装后端依赖（npm ci）...")
-		args := append([]string{"ci"}, npmFlags()...)
-		if err := runCommandInDir(serverDir, "npm", args...); err != nil {
-			exitWithError(fmt.Sprintf("后端依赖安装失败: %v", err))
-		}
+// isUpToDate checks if node_modules is newer than package-lock.json.
+// If so, dependencies haven't changed and we can skip npm install.
+func isUpToDate(modulesDir string, lockFile string) bool {
+	modInfo, err := os.Stat(modulesDir)
+	if err != nil {
+		return false
 	}
-	printSuccess("后端依赖完成")
+	lockInfo, err := os.Stat(lockFile)
+	if err != nil {
+		return false
+	}
+	return modInfo.ModTime().After(lockInfo.ModTime())
 }
 
 func fileExists(path string) bool {
