@@ -8,10 +8,13 @@ import (
 	"runtime"
 )
 
-const defaultPort = 3001
+const (
+	defaultPort = 3001
+	repoURL     = "https://github.com/worable233/our-class.git"
+	repoName    = "our-class"
+)
 
 func main() {
-	// Ensure "press any key to exit" on Windows
 	if runtime.GOOS == "windows" {
 		defer pressAnyKey()
 	}
@@ -22,23 +25,8 @@ func main() {
 	reset := flag.Bool("reset", false, "重置项目到初始状态")
 	flag.Parse()
 
-	// Get project root: prefer CWD (user should run from project root)
-	cwd, err := os.Getwd()
-	if err != nil {
-		exitWithError(fmt.Sprintf("获取当前目录失败: %v", err))
-	}
-
-	// Detect if we're inside the installer/ subdirectory
-	projectRoot := cwd
-	if filepath.Base(cwd) == "installer" {
-		projectRoot = filepath.Dir(cwd)
-	}
-
-	// Verify this looks like the project root (check for package.json)
-	if _, err := os.Stat(filepath.Join(projectRoot, "package.json")); os.IsNotExist(err) {
-		exitWithError(fmt.Sprintf(
-			"未在当前目录找到 package.json，请在 OurClass 项目根目录下运行此程序。\n当前目录: %s", cwd))
-	}
+	// Resolve project root
+	projectRoot := resolveProjectRoot()
 
 	// Handle reset mode
 	if *reset {
@@ -52,29 +40,33 @@ func main() {
 	fmt.Printf("\n  %s系统:%s %s/%s\n", ColorGray, ColorReset, runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("  %s路径:%s %s\n", ColorGray, ColorReset, projectRoot)
 
-	// Step 1: Check/Install Node.js
-	printStep(1, 5, "检查 Node.js 环境")
+	// Step 1: Clone or update project
+	printStep(1, 6, "获取项目代码")
+	projectRoot = ensureProject(projectRoot)
+
+	// Step 2: Check/Install Node.js
+	printStep(2, 6, "检查 Node.js 环境")
 	ensureNode()
 
-	// Step 2: Set npm registry
-	printStep(2, 5, "配置 npm 镜像源")
+	// Step 3: Set npm registry
+	printStep(3, 6, "配置 npm 镜像源")
 	ensureNpmRegistry()
 
-	// Step 3: Install dependencies
-	printStep(3, 5, "安装项目依赖")
+	// Step 4: Install dependencies
+	printStep(4, 6, "安装项目依赖")
 	installDependencies(projectRoot)
 
-	// Step 4: Build frontend (optional)
+	// Step 5: Build frontend (optional)
 	if !*skipBuild {
-		printStep(4, 5, "构建前端")
+		printStep(5, 6, "构建前端")
 		buildFrontend(projectRoot)
 	} else {
-		printStep(4, 5, "构建前端（已跳过）")
+		printStep(5, 6, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")
 	}
 
-	// Step 5: Install PM2 and start setup wizard
-	printStep(5, 5, "安装 PM2 并启动配置向导")
+	// Step 6: Install PM2 and start setup wizard
+	printStep(6, 6, "安装 PM2 并启动配置向导")
 	ensurePM2()
 	startSetupWizard(projectRoot, *port)
 
@@ -82,4 +74,33 @@ func main() {
 	fmt.Println("  请在浏览器中完成配置向导。")
 	fmt.Println("  按任意键退出...")
 	waitForInput()
+}
+
+// resolveProjectRoot determines the project root directory.
+// If run from within the project, use that. Otherwise return empty string
+// (will be resolved by ensureProject).
+func resolveProjectRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Check if CWD is the project root
+	if isProjectRoot(cwd) {
+		return cwd
+	}
+
+	// Check if we're in installer/ subdirectory
+	parent := filepath.Dir(cwd)
+	if filepath.Base(cwd) == "installer" && isProjectRoot(parent) {
+		return parent
+	}
+
+	// Not in project — will need to clone
+	return ""
+}
+
+func isProjectRoot(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "package.json"))
+	return err == nil
 }
