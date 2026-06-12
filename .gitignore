@@ -68,3 +68,4 @@ server/uploads/
 server/backups/
 server/src/setup/setup-state.json
 .mimocode/
+ecosystem.config.cjs

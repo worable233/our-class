@@ -602,16 +602,6 @@ select.field-input{appearance:none;cursor:pointer;background:#fff url("data:imag
         <div class="step-title">准备就绪</div>
         <div class="step-desc">确认以下配置，点击完成即可启动服务。</div>
         <div class="summary" id="summary"></div>
-        <div class="n-tooltip" style="display:block">
-          <div class="n-tooltip-trigger" style="display:block">
-            <label class="n-checkbox">
-              <input type="checkbox" id="usePm2" checked>
-              <span class="n-checkbox-box" aria-hidden="true"></span>
-              <span>使用 PM2 进程管理（推荐，支持开机自启）</span>
-            </label>
-          </div>
-          <div class="n-tooltip-content">PM2 可自动管理 Node 进程、崩溃重启、开机自启</div>
-        </div>
         <div class="term" id="applyLog" style="display:none"></div>
         <div id="applyAlert"></div>
         <div class="btn-group">
@@ -905,7 +895,6 @@ async function saveConfig() {
 
 // ── Step 5: Deploy (流式日志) ──────────────────────
 async function applySetup() {
-  const use_pm2 = document.getElementById('usePm2').checked
   const logEl = document.getElementById('applyLog')
   const btn = document.getElementById('applyBtn')
   const alertEl = document.getElementById('applyAlert')
@@ -922,7 +911,7 @@ async function applySetup() {
   }
 
   try {
-    const res = await fetch(API + '/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ use_pm2 }) })
+    const res = await fetch(API + '/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) })
 
     // Handle validation errors (returned as normal JSON, not stream)
     if (!res.ok) {

@@ -19,14 +19,13 @@ interface SetupState {
   admin_created: boolean
   api_configured: boolean
   port: number
-  pm2_installed: boolean
 }
 
 function getState(): SetupState {
   try {
     return JSON.parse(readFileSync(STATE_FILE, 'utf-8'))
   } catch {
-    return { step: 'idle', admin_created: false, api_configured: false, port: 3000, pm2_installed: false }
+    return { step: 'idle', admin_created: false, api_configured: false, port: 3000 }
   }
 }
 
@@ -296,9 +295,8 @@ app.post('/api/setup/config', (req, res) => {
   }
 })
 
-// 5. 安装 PM2 并启动服务（流式输出日志）
+// 5. 启动服务（流式输出日志）
 app.post('/api/setup/apply', async (req, res) => {
-  const { use_pm2 } = req.body
   let port = getState().port || 3000
 
   // Validate: admin and config must be done
@@ -337,7 +335,7 @@ app.post('/api/setup/apply', async (req, res) => {
 
   try {
     // 1. Build frontend
-    emit('[1/3] 构建前端...')
+    emit('[1/2] 构建前端...')
     try {
       execSync('npm run build-only 2>&1', { encoding: 'utf-8', timeout: 120000, cwd: PROJECT_ROOT })
       emit('✅ 前端构建完成')
@@ -345,99 +343,44 @@ app.post('/api/setup/apply', async (req, res) => {
       emit('⚠️ 前端构建失败: ' + buildErr.message)
     }
 
-    // 2. Install PM2 if requested (with npm mirror for speed)
-    if (use_pm2) {
-      emit('[2/3] 安装 PM2...')
-      try {
-        execSync('npm install -g pm2 --registry https://registry.npmmirror.com 2>&1', { encoding: 'utf-8', timeout: 120000 })
-        emit('✅ PM2 安装完成')
-      } catch (pm2Err: any) {
-        emit('⚠️ PM2 安装失败: ' + pm2Err.message)
-        emit('  → 跳过 PM2，走直接启动')
-      }
-    }
+    // 2. Start server
+    emit('[2/2] 启动服务...')
 
-    // 3. Start server
-    emit('[3/3] 启动服务...')
-
-    // Write ecosystem.config.cjs (.cjs to work with "type":"module" in package.json)
     const isWin = process.platform === 'win32'
     const serverCwd = join(PROJECT_ROOT, 'server')
-    const ecoConfig = {
-      name: 'ourclass',
-      script: join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-      args: 'src/index.ts',
+    const tsxCli = join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+    const child = spawn('node', [tsxCli, 'src/index.ts'], {
       cwd: serverCwd,
-      env: { NODE_ENV: 'production' },
-      instances: 1,
-      exec_mode: 'fork',
-    }
+      stdio: 'ignore',
+      windowsHide: true,
+      ...(isWin ? {} : { detached: true }),
+    })
+    child.on('error', (err) => {
+      console.error('[setup] failed to spawn server:', err)
+    })
+    child.unref()
 
-    writeFileSync(join(PROJECT_ROOT, 'ecosystem.config.cjs'),
-      `module.exports = { apps: [${JSON.stringify(ecoConfig, null, 2)}] }`)
-
-    let started = false
     const targetPort = getState().port || 3000
 
     // Health check: poll /api/health until server responds
-    async function waitForHealth(maxSec: number): Promise<boolean> {
-      for (let i = 0; i < maxSec; i++) {
-        await new Promise(r => setTimeout(r, 1000))
-        try {
-          const r = await fetch(`http://localhost:${targetPort}/api/health`)
-          if (r.ok) return true
-        } catch { /* server not ready yet */ }
-      }
-      return false
-    }
-
-    // ── Try PM2 first (short timeout — fail fast) ──
-    if (use_pm2) {
-      emit('[尝试] PM2 启动...')
+    let started = false
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 1000))
       try {
-        execSync(`pm2 start ecosystem.config.cjs`, {
-          encoding: 'utf-8', timeout: 8000, cwd: PROJECT_ROOT, shell: 'cmd.exe',
-        })
-        execSync(`pm2 save`, {
-          encoding: 'utf-8', timeout: 5000, cwd: PROJECT_ROOT, shell: 'cmd.exe',
-        })
-        if (await waitForHealth(8)) {
-          started = true
-          emit(`✅ PM2 启动成功 (http://localhost:${targetPort})`)
-        }
-      } catch (pm2StartErr: any) {
-        const pm2ErrMsg = pm2StartErr?.stderr?.toString().trim() || pm2StartErr?.message || ''
-        if (pm2ErrMsg) emit(`  PM2: ${pm2ErrMsg}`)
-      }
-      if (!started) emit('  → 走直接启动...')
+        const r = await fetch(`http://localhost:${targetPort}/api/health`)
+        if (r.ok) { started = true; break }
+      } catch { /* server not ready yet */ }
     }
 
-    // ── Direct start (reliable path) ──
-    if (!started) {
-      emit('[尝试] 直接启动...')
-      const tsxCli = join(serverCwd, 'node_modules', 'tsx', 'dist', 'cli.mjs')
-      const child = spawn('node', [tsxCli, 'src/index.ts'], {
-        cwd: serverCwd,
-        stdio: 'ignore',
-        windowsHide: true,
-        ...(isWin ? {} : { detached: true }),
-      })
-      child.on('error', (err) => {
-        console.error('[setup] failed to spawn server:', err)
-      })
-      child.unref()
-
-      if (await waitForHealth(12)) {
-        started = true
-        emit(`✅ 服务启动成功 (http://localhost:${targetPort})`)
-      } else {
-        emit('⚠️ 服务启动超时，请检查日志后手动启动')
-        emit('  cd server && npx tsx src/index.ts')
-      }
+    if (started) {
+      emit(`✅ 服务启动成功 (http://localhost:${targetPort})`)
+    } else {
+      emit('⚠️ 服务启动超时，请检查日志后手动启动')
+      emit('  cd server && npx tsx src/index.ts')
     }
 
-    saveState({ step: 'done', pm2_installed: !!use_pm2 })
-    emitDone({ success: true, port: targetPort, pm2: !!use_pm2 })
+    saveState({ step: 'done' })
+    emitDone({ success: true, port: targetPort })
   } catch (e: any) {
     console.error('[setup] apply error:', e)
     emitDone({ success: false, error: e.message })
