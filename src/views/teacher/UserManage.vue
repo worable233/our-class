@@ -375,7 +375,6 @@ async function loadClasses() {
     const data = await api.get<ClassInfo[]>('/classes')
     classData.value = data
     classList.value = data.map(c => c.name)
-    if (!form.value.class && data.length > 0) form.value.class = data[0]!.name
     // 加载全部权限组（身份+职位）
     allGroups.value = await api.get<PermissionGroup[]>('/roles/groups').catch(() => [])
   } catch (e: any) {
@@ -392,7 +391,7 @@ function autoGenerateStudentNo(): string {
 function openNew() {
   const no = autoGenerateStudentNo()
   editing.value = null
-  form.value = { student_no: no, display_name: '', nickname: '', class: '高三(2)班', password: no, group_id: null, role_id: null }
+  form.value = { student_no: no, display_name: '', nickname: '', class: '', password: no, group_id: null, role_id: null }
   showModal.value = true
 }
 

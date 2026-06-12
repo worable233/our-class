@@ -6,6 +6,7 @@ import { useMessage } from 'naive-ui'
 import {
   NButton, NTag, NSpin, NEmpty, NSelect, NPagination,
 } from 'naive-ui'
+import PageHeader from '@/components/PageHeader.vue'
 import { useRefresh } from '@/composables/useRefresh'
 
 function getToken(): string {
@@ -358,10 +359,7 @@ onMounted(() => {
 <template>
   <div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">操作日志</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">查看所有用户的操作记录与系统变更</NText>
-      </div>
+      <PageHeader title="操作日志" subtitle="查看所有用户的操作记录与系统变更" />
       <NButton quaternary @click="reset" :disabled="loading" round>
         <template #icon><RefreshCw :size="15" /></template>
         刷新

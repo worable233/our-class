@@ -8,6 +8,7 @@ import {
   NSpin, NEmpty, NText, NGrid, NGi, NTag, NAvatar, NIcon,
 } from 'naive-ui'
 import { Plus, Trash2, ThumbsUp, ShieldBan } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 interface ReviewType {
   id: number
@@ -107,10 +108,7 @@ onMounted(load)
   <div>
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">点评类型</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理加减分的点评项，可在积分管理中使用</NText>
-      </div>
+      <PageHeader title="点评类型" subtitle="管理加减分的点评项，可在积分管理中使用" />
       <div style="display:flex;gap:8px;align-items:center;">
         <NSelect
           v-if="hasViewAll"

@@ -10,6 +10,7 @@ import {
 import { useRefresh } from '@/composables/useRefresh'
 import { Plus, Download, File as FileIcon, BookOpen, GraduationCap, FileSpreadsheet } from '@lucide/vue'
 import { useMessage } from 'naive-ui'
+import PageHeader from '@/components/PageHeader.vue'
 import * as XLSX from 'xlsx'
 const message = useMessage()
 
@@ -201,12 +202,7 @@ onMounted(() => { loadClasses(); load() })
     </template>
 
     <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">作业管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级和课程后查看和发布作业，批改学生提交</NText>
-      </div>
-    </div>
+    <PageHeader title="作业管理" subtitle="选择班级和课程后查看和发布作业，批改学生提交" />
 
     <!-- ════ 班级选择视图 ════ -->
     <template v-if="!selectedClass">

@@ -11,6 +11,7 @@ import {
 import { useRefresh } from '@/composables/useRefresh'
 import { Plus, Trash2, BookOpen, GraduationCap, ClipboardList, FileSpreadsheet } from '@lucide/vue'
 import { useMessage } from 'naive-ui'
+import PageHeader from '@/components/PageHeader.vue'
 import * as XLSX from 'xlsx'
 
 const message = useMessage()
@@ -267,12 +268,7 @@ function exportScores() {
     </template>
 
     <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">成绩管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">选择班级和课程后管理考试与录入成绩</NText>
-      </div>
-    </div>
+    <PageHeader title="成绩管理" subtitle="选择班级和课程后管理考试与录入成绩" />
 
     <!-- ════ 阶段 1：选择班级 ════ -->
     <template v-if="!selectedClass">

@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Assignment, SubmissionFile } from '@/types'
-import { NButton, NCard, NModal, NInput, NForm, NFormItem, NSpace, NTag, NSpin, NEmpty, NText } from 'naive-ui'
+import { NButton, NCard, NModal, NInput, NForm, NFormItem, NTag, NSpin, NEmpty, NText } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { useMessage } from 'naive-ui'
 import { Calendar, Upload, FolderOpen, X, File, Clock, CheckCircle, AlertCircle } from '@lucide/vue'
@@ -74,17 +74,9 @@ function handleFileSelected(e: Event) {
   input.value = ''
 }
 
-function removeFile(index: number) {
-  selectedFiles.value.splice(index, 1)
-}
-
-function removeExistingFile(index: number) {
-  existingFiles.value.splice(index, 1)
-}
-
-function removeDiskFile(path: string) {
-  diskPickedFiles.value = diskPickedFiles.value.filter(f => f.path !== path)
-}
+function removeFile(index: number) { selectedFiles.value.splice(index, 1) }
+function removeExistingFile(index: number) { existingFiles.value.splice(index, 1) }
+function removeDiskFile(path: string) { diskPickedFiles.value = diskPickedFiles.value.filter(f => f.path !== path) }
 
 function onDiskPick(files: { name: string; path: string; size: number; size_display: string }[]) {
   const existing = new Set(diskPickedFiles.value.map(f => f.path))
@@ -118,9 +110,7 @@ async function submit() {
     }
 
     if (diskPickedFiles.value.length > 0) {
-      formData.append('disk_files', JSON.stringify(
-        diskPickedFiles.value.map(f => ({ name: f.name, disk_path: f.path }))
-      ))
+      formData.append('disk_files', JSON.stringify(diskPickedFiles.value.map(f => ({ name: f.name, disk_path: f.path }))))
     }
 
     const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
@@ -159,7 +149,7 @@ onMounted(load)
 <template>
   <div class="page-container">
     <n-spin :show="loading">
-      <div v-if="!loading && assignments.length === 0" class="empty-state">
+      <div v-if="!loading && assignments.length === 0" style="display:flex;justify-content:center;padding:48px 0">
         <n-empty description="暂无作业" />
       </div>
       <div v-else class="assignment-list">
@@ -170,27 +160,15 @@ onMounted(load)
                 <span class="assignment-title">{{ a.title }}</span>
                 <n-tag size="small" :bordered="false" round>{{ a.course }}</n-tag>
               </div>
-              <div class="assignment-status">
-                <n-tag
-                  :type="getStatusInfo(a.submit_status).type"
-                  size="small"
-                  round
-                >
-                  <template #icon>
-                    <component :is="getStatusInfo(a.submit_status).icon" :size="12" />
-                  </template>
-                  {{ getStatusInfo(a.submit_status).label }}
-                  <span v-if="a.submit_status === 'graded' && a.submit_score != null" class="score-badge">
-                    {{ a.submit_score }}分
-                  </span>
-                </n-tag>
-              </div>
+              <n-tag :type="getStatusInfo(a.submit_status).type" size="small" round>
+                <template #icon><component :is="getStatusInfo(a.submit_status).icon" :size="12" /></template>
+                {{ getStatusInfo(a.submit_status).label }}
+                <span v-if="a.submit_status === 'graded' && a.submit_score != null" class="score-badge">{{ a.submit_score }}分</span>
+              </n-tag>
             </div>
           </template>
 
-          <div class="assignment-desc">
-            {{ a.description || '暂无描述' }}
-          </div>
+          <div class="assignment-desc">{{ a.description || '暂无描述' }}</div>
 
           <template #footer>
             <div class="assignment-footer">
@@ -198,13 +176,7 @@ onMounted(load)
                 <Calendar :size="14" />
                 <span>截止：{{ a.due_date }}</span>
               </div>
-              <n-button
-                v-if="a.submit_status !== 'graded'"
-                type="primary"
-                size="small"
-                round
-                @click="openSubmit(a.id, a.submit_status === 'pending')"
-              >
+              <n-button v-if="a.submit_status !== 'graded'" type="primary" size="small" round @click="openSubmit(a.id, a.submit_status === 'pending')">
                 {{ a.submit_status === 'pending' ? '重新提交' : '提交作业' }}
               </n-button>
             </div>
@@ -214,19 +186,11 @@ onMounted(load)
     </n-spin>
 
     <!-- Submit Modal -->
-    <n-modal
-      v-model:show="showSubmit"
-      preset="card"
-      :title="isResubmit ? '重新提交' : '提交作业'"
-      style="width: 560px"
-      :mask-closable="false"
-      @update:show="(val) => { if (!val) handleClose() }"
-    >
+    <n-modal v-model:show="showSubmit" preset="card" :title="isResubmit ? '重新提交' : '提交作业'" style="width:560px" :mask-closable="false" @update:show="(val) => { if (!val) handleClose() }">
       <n-form>
         <n-form-item label="作业内容">
           <n-input type="textarea" v-model:value="submitContent" placeholder="输入作业内容或备注..." :rows="3" />
         </n-form-item>
-
         <n-form-item v-if="existingFiles.length > 0" label="已提交文件">
           <div class="file-list">
             <div v-for="(f, i) in existingFiles" :key="'exist'+f.path" class="file-item">
@@ -237,7 +201,6 @@ onMounted(load)
             </div>
           </div>
         </n-form-item>
-
         <n-form-item label="添加文件">
           <div class="upload-area">
             <div class="upload-buttons">
@@ -251,7 +214,6 @@ onMounted(load)
               </NButton>
             </div>
             <input ref="fileInput" type="file" multiple style="display:none" @change="handleFileSelected" @click="(e: any) => e.target.value = null" />
-
             <div v-if="selectedFiles.length > 0 || diskPickedFiles.length > 0" class="file-list">
               <div v-for="(f, i) in selectedFiles" :key="'local'+i" class="file-item">
                 <File :size="14" class="file-icon" />
@@ -270,7 +232,7 @@ onMounted(load)
         </n-form-item>
       </n-form>
       <template #footer>
-        <div style="display: flex; gap: 8px; justify-content: flex-end">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
           <n-button @click="handleClose">取消</n-button>
           <n-button type="primary" @click="submit" :loading="uploading" :disabled="!submitContent && existingFiles.length === 0 && selectedFiles.length === 0 && diskPickedFiles.length === 0" round>
             {{ isResubmit ? '重新提交' : '提交' }}
@@ -279,64 +241,45 @@ onMounted(load)
       </template>
     </n-modal>
 
-    <FilePicker
-      v-model:show="showDiskPicker"
-      :accept="['*']"
-      multiple
-      @confirm="onDiskPick"
-    />
+    <FilePicker v-model:show="showDiskPicker" :accept="['*']" multiple @confirm="onDiskPick" />
   </div>
 </template>
 
 <style scoped>
-.page-container {
-  padding: 24px 0;
-}
-
-.empty-state {
-  display: flex;
-  justify-content: center;
-  padding: 48px 0;
-}
-
 .assignment-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .assignment-card {
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal) var(--ease-out);
 }
 
 .assignment-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .assignment-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
 .assignment-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .assignment-title {
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-subtitle);
   color: var(--text-primary);
-}
-
-.assignment-status {
-  flex-shrink: 0;
 }
 
 .score-badge {
@@ -347,8 +290,8 @@ onMounted(load)
 }
 
 .assignment-desc {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--text-body);
+  line-height: var(--leading-relaxed);
   color: var(--text-secondary);
 }
 
@@ -356,15 +299,15 @@ onMounted(load)
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 16px;
+  padding-top: var(--space-4);
   border-top: 1px solid var(--hairline);
 }
 
 .assignment-due {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: var(--space-1);
+  font-size: var(--text-caption);
   color: var(--text-muted);
 }
 
@@ -373,32 +316,26 @@ onMounted(load)
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .file-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--surface-2);
-  border-radius: 8px;
-  font-size: 13px;
-  transition: background 0.15s;
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  transition: background var(--duration-fast);
 }
 
 .file-item:hover {
   background: var(--surface-3);
 }
 
-.file-icon {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.file-icon.disk {
-  color: #f0a020;
-}
+.file-icon { color: var(--accent); flex-shrink: 0; }
+.file-icon.disk { color: #f0a020; }
 
 .file-name {
   flex: 1;
@@ -409,7 +346,7 @@ onMounted(load)
 }
 
 .file-size {
-  font-size: 11px;
+  font-size: var(--text-overline);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -418,7 +355,7 @@ onMounted(load)
   cursor: pointer;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: color 0.15s;
+  transition: color var(--duration-fast);
 }
 
 .file-remove:hover {
@@ -430,34 +367,30 @@ onMounted(load)
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .upload-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .upload-hint {
-  font-size: 12px;
+  font-size: var(--text-caption);
   color: var(--text-muted);
 }
 
 /* Mobile */
 @media (max-width: 768px) {
-  .page-container {
-    padding: 16px 0;
-  }
-
   .assignment-header {
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .assignment-footer {
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
     align-items: flex-start;
   }
 }

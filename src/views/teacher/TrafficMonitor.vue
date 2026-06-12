@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { BASE } from '@/api/client'
 import { NSpin, NEmpty, NButton, NText, NCard, NTag } from 'naive-ui'
 import { RotateCw, Activity, Eye, Users, Globe, Shield, ShieldAlert, AlertTriangle, XCircle } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 function getToken(): string {
   const stored = localStorage.getItem('ourclass_user')
@@ -160,10 +161,7 @@ onUnmounted(() => {
 <template>
   <div style="height:100%;display:flex;flex-direction:column;">
     <div class="page-header">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">流量监控</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">实时监控网站访问流量与 API 调用情况</NText>
-      </div>
+      <PageHeader title="流量监控" subtitle="实时监控网站访问流量与 API 调用情况" />
       <NButton quaternary size="small" @click="load" :disabled="loading" round>
         <template #icon><RotateCw :size="15" /></template> 刷新
       </NButton>

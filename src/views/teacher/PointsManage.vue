@@ -9,6 +9,7 @@ import {
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Shuffle, Star, ArrowLeft, School, Users } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 interface ReviewType {
   id: number; name: string; emoji: string
@@ -259,12 +260,7 @@ onUnmounted(() => {
     </template>
 
     <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">积分管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">{{ auth.hasPermission('points.write') ? '选择班级后管理学生积分，支持加减分与随机抽取' : '选择班级后查看学生积分排行' }}</NText>
-      </div>
-    </div>
+    <PageHeader title="积分管理" :subtitle="auth.hasPermission('points.write') ? '选择班级后管理学生积分，支持加减分与随机抽取' : '选择班级后查看学生积分排行'" />
 
     <!-- ════ 班级选择视图 ════ -->
     <template v-if="!selectedClass">
@@ -355,7 +351,7 @@ onUnmounted(() => {
 
       <div style="display:flex;flex-direction:column;gap:20px">
         <div v-if="addTypes.length > 0">
-          <NText :style="{fontSize:'14px',fontWeight:700,color:'#18a058',display:'block',marginBottom:'16px'}">
+          <NText :style="{fontSize:'14px',fontWeight:700,color:'var(--success-color, #18a058)',display:'block',marginBottom:'16px'}">
             <span style="margin-right:6px">🎉</span>表扬
           </NText>
           <n-grid :cols="4" :x-gap="24" :y-gap="20">
@@ -363,7 +359,7 @@ onUnmounted(() => {
               <div class="review-option" :class="{ selected: selectedReview?.id === t.id }" @click="selectedReview = t; confirmQuick()">
                 <div class="review-option-circle add">
                   <span class="review-option-emoji">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:#18a058;color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">+{{ t.amount }}</n-tag>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:var(--success-color, #18a058);color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">+{{ t.amount }}</n-tag>
                 </div>
                 <span class="review-option-name">{{ t.name }}</span>
               </div>
@@ -372,7 +368,7 @@ onUnmounted(() => {
         </div>
 
         <div v-if="deductTypes.length > 0">
-          <NText :style="{fontSize:'14px',fontWeight:700,color:'#d03050',display:'block',marginBottom:'16px'}">
+          <NText :style="{fontSize:'14px',fontWeight:700,color:'var(--error-color, #d03050)',display:'block',marginBottom:'16px'}">
             <span style="margin-right:6px">🔧</span>待改进
           </NText>
           <n-grid :cols="4" :x-gap="24" :y-gap="20">
@@ -380,7 +376,7 @@ onUnmounted(() => {
               <div class="review-option" :class="{ selected: selectedReview?.id === t.id }" @click="selectedReview = t; confirmQuick()">
                 <div class="review-option-circle deduct">
                   <span class="review-option-emoji">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:#d03050;color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">-{{ t.amount }}</n-tag>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-5px;right:-5px;background:var(--error-color, #d03050);color:#fff;font-weight:800;font-size:10px;padding:0 4px;line-height:20px;min-width:24px;justify-content:center">-{{ t.amount }}</n-tag>
                 </div>
                 <span class="review-option-name">{{ t.name }}</span>
               </div>
@@ -439,7 +435,7 @@ onUnmounted(() => {
               >
                 <div class="review-option-circle add" style="width:56px;height:56px">
                   <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:#18a058;color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">+{{ t.amount }}</n-tag>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:var(--success-color, #18a058);color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">+{{ t.amount }}</n-tag>
                 </div>
                 <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
               </div>
@@ -452,7 +448,7 @@ onUnmounted(() => {
               >
                 <div class="review-option-circle deduct" style="width:56px;height:56px">
                   <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:#d03050;color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">-{{ t.amount }}</n-tag>
+                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:var(--error-color, #d03050);color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">-{{ t.amount }}</n-tag>
                 </div>
                 <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
               </div>

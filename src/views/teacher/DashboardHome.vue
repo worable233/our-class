@@ -3,8 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { BASE } from '@/api/client'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { NCard, NText, NGi, NGrid, NTag, NSpin, NAvatar, NButton, useThemeVars } from 'naive-ui'
+import { NCard, NText, NGi, NGrid, NTag, NSpin, NAvatar, NButton, NEmpty, useThemeVars } from 'naive-ui'
 import { Star, Users, List, Shield, Bot, Award, TrendingUp, ChevronRight } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -20,11 +21,11 @@ const auth = useAuthStore()
 
 const quickLinks = computed(() => {
   const links = [
-    { label: '积分管理', icon: Star, route: '/teacher/points', color: '#0FC6C2', perm: 'points.read' },
+    { label: '积分管理', icon: Star, route: '/teacher/points', color: '#5E6AD2', perm: 'points.read' },
     { label: '用户管理', icon: Users, route: '/teacher/users', color: '#5E6AD2', perm: 'students.write' },
-    { label: '作业管理', icon: List, route: '/teacher/assignments', color: '#18a058', perm: 'assignments.write' },
-    { label: '职位管理', icon: Shield, route: '/teacher/roles', color: '#f0a020', perm: '' },
-    { label: 'AI 配置', icon: Bot, route: '/teacher/settings', color: '#a050dc', perm: 'chat.config' },
+    { label: '作业管理', icon: List, route: '/teacher/assignments', color: '#5E6AD2', perm: 'assignments.write' },
+    { label: '职位管理', icon: Shield, route: '/teacher/roles', color: '#5E6AD2', perm: '' },
+    { label: 'AI 配置', icon: Bot, route: '/teacher/settings', color: '#5E6AD2', perm: 'chat.config' },
   ]
   return links.filter(l => !l.perm || auth.hasPermission(l.perm))
 })
@@ -85,7 +86,7 @@ function chartOption(data: TopRow[]) {
         const row = data[p.dataIndex]
         return `<div style="font-size:13px;line-height:1.8">
           <b>${row.display_name}</b> <span style="color:#888">${row.class}</span><br/>
-          总积分: <b style="color:#0FC6C2">+${row.total_added}</b> / <b style="color:#e86969">-${row.total_deducted}</b>
+          总积分: <b style="color:#18a058">+${row.total_added}</b> / <b style="color:#d03050">-${row.total_deducted}</b>
           <br/>净增: <b>${row.total > 0 ? '+' : ''}${row.total}</b>
         </div>`
       },
@@ -111,7 +112,7 @@ function chartOption(data: TopRow[]) {
       data: values.map((v, i) => ({
         value: v,
         itemStyle: {
-          color: i === 0 ? '#0FC6C2' : i === 1 ? '#5E6AD2' : i === 2 ? '#f0a020' : 'rgba(128,128,128,0.25)',
+          color: i === 0 ? 'var(--accent)' : i === 1 ? 'var(--accent)' : i === 2 ? '#f0a020' : 'rgba(128,128,128,0.25)',
           borderRadius: [4, 4, 0, 0] as [number, number, number, number],
         },
       })),
@@ -130,12 +131,9 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:28px;padding-bottom:24px;">
+  <div style="display:flex;flex-direction:column;gap:20px;padding-bottom:24px;">
     <!-- ═══ 页面标题 ═══ -->
-    <div>
-      <NText tag="h1" depth="1" style="margin:0;font-size:26px;font-weight:700;letter-spacing:-0.03em;">仪表盘</NText>
-      <NText depth="3" style="margin-top:4px;display:block;font-size:14px;">班级概览 · 快速操作</NText>
-    </div>
+    <PageHeader title="仪表盘" subtitle="班级概览 · 快速操作" />
 
     <!-- ═══ 快捷入口 ═══ -->
     <n-grid :cols="quickLinks.length" :x-gap="14" :y-gap="14" style="max-width:820px;">
@@ -188,7 +186,7 @@ onMounted(load)
                   <span style="font-size:22px;line-height:1;">{{ rankBadge(i).label }}</span>
                   <span style="font-size:13px;font-weight:600;color:var(--text-primary);text-align:center;">{{ row.display_name }}</span>
                   <span style="font-size:11px;color:var(--text-muted);">{{ row.class }}</span>
-                  <span style="font-size:18px;font-weight:700;color:#0FC6C2;">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
+                  <span style="font-size:18px;font-weight:700;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
                 </div>
               </div>
               <!-- 排行列表 -->
@@ -204,11 +202,11 @@ onMounted(load)
                   </span>
                   <span style="flex:1;color:var(--text-primary);font-weight:500;">{{ row.display_name }}</span>
                   <span style="color:var(--text-muted);font-size:12px;">{{ row.class }}</span>
-                  <span style="font-weight:600;min-width:48px;text-align:right;color:#0FC6C2;">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
+                  <span style="font-weight:600;min-width:48px;text-align:right;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
                 </div>
               </div>
             </template>
-            <div v-else style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--text-muted);font-size:13px;">暂无本周积分数据</div>
+            <n-empty v-else description="暂无本周积分数据" style="height:260px;display:flex;flex-direction:column;justify-content:center;" />
           </n-spin>
         </n-card>
       </n-gi>
@@ -232,7 +230,7 @@ onMounted(load)
                   <span style="font-size:22px;line-height:1;">{{ rankBadge(i).label }}</span>
                   <span style="font-size:13px;font-weight:600;color:var(--text-primary);text-align:center;">{{ row.display_name }}</span>
                   <span style="font-size:11px;color:var(--text-muted);">{{ row.class }}</span>
-                  <span style="font-size:18px;font-weight:700;color:#5E6AD2;">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
+                  <span style="font-size:18px;font-weight:700;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
                 </div>
               </div>
               <VChart :option="monthChartOption" autoresize style="width:100%;height:140px;" />
@@ -246,11 +244,11 @@ onMounted(load)
                   </span>
                   <span style="flex:1;color:var(--text-primary);font-weight:500;">{{ row.display_name }}</span>
                   <span style="color:var(--text-muted);font-size:12px;">{{ row.class }}</span>
-                  <span style="font-weight:600;min-width:48px;text-align:right;color:#5E6AD2;">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
+                  <span style="font-weight:600;min-width:48px;text-align:right;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
                 </div>
               </div>
             </template>
-            <div v-else style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--text-muted);font-size:13px;">暂无本月积分数据</div>
+            <n-empty v-else description="暂无本月积分数据" style="height:260px;display:flex;flex-direction:column;justify-content:center;" />
           </n-spin>
         </n-card>
       </n-gi>
