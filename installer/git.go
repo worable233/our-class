@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 )
@@ -36,40 +35,41 @@ func ensureGit() {
 }
 
 func installGitWindows() {
-	// Download Git for Windows from npmmirror (fast in China)
-	filename := "Git-2.47.1.2-64-bit.exe"
-	url := fmt.Sprintf("https://npmmirror.com/mirrors/git-for-windows/v2.47.1.windows.1/%s", filename)
+	// Use MinGit — small (~15MB), no admin required, just unzip
+	url := "https://mirrors.ustc.edu.cn/github-release/git-for-windows/git/LatestRelease/MinGit-2.54.0-64-bit.zip"
+	filename := "MinGit-2.54.0-64-bit.zip"
 
 	tmpFile := filepath.Join(os.TempDir(), filename)
 	if err := downloadFile(url, tmpFile); err != nil {
-		// Fallback: try official
-		url = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/" + filename
+		// Fallback: npmmirror
+		url = "https://npmmirror.com/mirrors/git-for-windows/LatestRelease/" + filename
 		if err2 := downloadFile(url, tmpFile); err2 != nil {
 			exitWithError(fmt.Sprintf("下载 Git 失败: %v", err2))
 		}
 	}
 	defer os.Remove(tmpFile)
 
-	printInfo("正在静默安装 Git...")
-	cmd := exec.Command(tmpFile, "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/COMPONENTS=icons,ext\\reg\\shellhere,assoc,assoc_sh")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		exitWithError(fmt.Sprintf("安装 Git 失败: %v", err))
+	// Extract to user-local directory (no admin needed)
+	homeDir, _ := os.UserHomeDir()
+	installDir := filepath.Join(homeDir, ".ourclass", "git")
+	os.MkdirAll(installDir, 0755)
+
+	printInfo("正在解压 Git...")
+	if err := extractZip(tmpFile, installDir); err != nil {
+		exitWithError(fmt.Sprintf("解压 Git 失败: %v", err))
 	}
 
-	// Add Git to PATH for current process
-	gitPaths := []string{
-		`C:\Program Files\Git\cmd`,
-		`C:\Program Files (x86)\Git\cmd`,
+	// MinGit extracts to a folder like MinGit-2.54.0-64-bit
+	// The git.exe is in cmd/ subfolder
+	gitBin := findGitBin(installDir)
+	if gitBin == "" {
+		exitWithError("Git 解压后找不到 git.exe")
 	}
-	path := os.Getenv("PATH")
-	for _, p := range gitPaths {
-		if _, err := os.Stat(filepath.Join(p, "git.exe")); err == nil {
-			os.Setenv("PATH", p+";"+path)
-			break
-		}
-	}
+
+	// Add to PATH for current process
+	os.Setenv("PATH", gitBin+";"+os.Getenv("PATH"))
+
+	printInfo(fmt.Sprintf("已安装到 %s", installDir))
 }
 
 func installGitMacOS() {
@@ -133,4 +133,22 @@ func getGitVersion() string {
 	}
 	// Output: "git version 2.47.1"
 	return out
+}
+
+// findGitBin searches for git.exe inside the extracted MinGit directory.
+func findGitBin(baseDir string) string {
+	// MinGit structure: MinGit-2.54.0-64-bit/cmd/git.exe
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			candidate := filepath.Join(baseDir, entry.Name(), "cmd", "git.exe")
+			if _, err := os.Stat(candidate); err == nil {
+				return filepath.Dir(candidate)
+			}
+		}
+	}
+	return ""
 }
