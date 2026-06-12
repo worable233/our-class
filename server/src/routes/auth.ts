@@ -28,6 +28,13 @@ const loginSchema = z.object({
   password: z.string().min(1, '请输入密码'),
 })
 
+const updateProfileSchema = z.object({
+  nickname: z.string().max(50, '昵称最长 50 字符').optional(),
+  avatar: z.string().max(500, '头像 URL 过长').optional(),
+  password: z.string().min(6, '密码最少 6 位').max(100, '密码过长').optional(),
+  old_password: z.string().optional(),
+})
+
 // POST /api/auth/login
 router.post('/login', validate(loginSchema), async (req: Request, res: Response) => {
   const { username, password } = req.body
@@ -114,6 +121,67 @@ router.get('/me', authMiddleware, (req: Request, res: Response) => {
 // GET /api/auth/permissions — get current user's permissions
 router.get('/permissions', authMiddleware, (req: Request, res: Response) => {
   ok(res, req.user!.permissions)
+})
+
+// PUT /api/auth/profile — update current user's own profile
+router.put('/profile', authMiddleware, validate(updateProfileSchema), async (req: Request, res: Response) => {
+  const db = getDb()
+  const userId = req.user!.id
+  const { nickname, avatar, password, old_password } = req.body
+
+  const fields: string[] = []
+  const values: any[] = []
+
+  if (nickname !== undefined) {
+    fields.push('nickname = ?')
+    values.push(nickname || null)
+  }
+
+  if (avatar !== undefined) {
+    fields.push('avatar = ?')
+    values.push(avatar || null)
+  }
+
+  if (password !== undefined) {
+    // Require old password for password change
+    if (!old_password) {
+      return fail(res, 400, 'OLD_PASSWORD_REQUIRED', '修改密码需要输入原密码')
+    }
+    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(userId) as { password: string } | undefined
+    if (!user) return fail(res, 404, 'NOT_FOUND', '用户不存在')
+
+    // Verify old password
+    const match = user.password.startsWith('$2b$')
+      ? await bcrypt.compare(old_password, user.password)
+      : user.password === old_password
+    if (!match) {
+      return fail(res, 401, 'AUTH_ERROR', '原密码错误')
+    }
+
+    const hashedPw = await bcrypt.hash(password, BCRYPT_ROUNDS)
+    fields.push('password = ?')
+    values.push(hashedPw)
+  }
+
+  if (fields.length === 0) {
+    return fail(res, 400, 'NO_CHANGES', '没有要修改的字段')
+  }
+
+  values.push(userId)
+  db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+
+  // Return updated user info
+  const updated = db.prepare('SELECT id, username, display_name, class, avatar, student_no, nickname FROM users WHERE id = ?').get(userId) as any
+
+  ok(res, {
+    id: updated.id,
+    username: updated.username,
+    display_name: updated.display_name,
+    class: updated.class,
+    avatar: updated.avatar,
+    student_no: updated.student_no,
+    nickname: updated.nickname,
+  })
 })
 
 export default router
