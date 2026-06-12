@@ -10,11 +10,17 @@ import (
 // ensureGit checks for Git and installs if missing.
 func ensureGit() {
 	if commandExists("git") {
-		version := getGitVersion()
-		printSuccess(fmt.Sprintf("Git %s 已安装", version))
+		printSuccess(fmt.Sprintf("Git %s 已安装", getGitVersion()))
 		return
 	}
 
+	if err := installGitForParallel(); err != nil {
+		exitWithError(err.Error())
+	}
+}
+
+// installGitForParallel installs Git and returns error (safe for concurrent use).
+func installGitForParallel() error {
 	printInfo("正在安装 Git...")
 
 	switch runtime.GOOS {
@@ -25,13 +31,14 @@ func ensureGit() {
 	case "linux":
 		installGitLinux()
 	default:
-		exitWithError("无法自动安装 Git，请手动安装后重试")
+		return fmt.Errorf("无法自动安装 Git，请手动安装后重试")
 	}
 
 	if !commandExists("git") {
-		exitWithError("Git 安装后无法检测到，请重启终端后重试")
+		return fmt.Errorf("Git 安装后无法检测到，请重启终端后重试")
 	}
 	printSuccess("Git 安装完成")
+	return nil
 }
 
 func installGitWindows() {

@@ -48,38 +48,34 @@ func main() {
 		fmt.Printf("  %s路径:%s 将自动克隆到桌面\n", ColorGray, ColorReset)
 	}
 
-	// Step 1: Check/Install Git
-	printStep(1, 7, "检查 Git 环境")
-	ensureGit()
+	// Step 1: Check/Install Git + Node.js in parallel
+	printStep(1, 6, "检查环境（Git + Node.js 并行检测）")
+	ensureGitAndNode()
 
 	// Step 2: Clone or update project
-	printStep(2, 7, "获取项目代码")
+	printStep(2, 6, "获取项目代码")
 	projectRoot = ensureProject(projectRoot)
 
-	// Step 3: Check/Install Node.js
-	printStep(3, 7, "检查 Node.js 环境")
-	ensureNode()
-
-	// Step 4: Set npm registry
-	printStep(4, 7, "配置 npm 镜像源")
+	// Step 3: Set npm registry + install dependencies
+	printStep(3, 6, "安装项目依赖")
 	ensureNpmRegistry()
-
-	// Step 5: Install dependencies
-	printStep(5, 7, "安装项目依赖")
 	installDependencies(projectRoot)
 
-	// Step 6: Build frontend (optional)
+	// Step 4: Build frontend (optional)
 	if !*skipBuild {
-		printStep(6, 7, "构建前端")
+		printStep(4, 6, "构建前端")
 		buildFrontend(projectRoot)
 	} else {
-		printStep(6, 7, "构建前端（已跳过）")
+		printStep(4, 6, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")
 	}
 
-	// Step 7: Install PM2 and start setup wizard
-	printStep(7, 7, "安装 PM2 并启动配置向导")
+	// Step 5: Install PM2 and start setup wizard
+	printStep(5, 6, "安装 PM2")
 	ensurePM2()
+
+	// Step 6: Start setup wizard
+	printStep(6, 6, "启动配置向导")
 	startSetupWizard(projectRoot, *port)
 
 	fmt.Printf("\n%s  🎉 安装完成！%s\n", ColorGreen, ColorReset)
@@ -111,4 +107,36 @@ func resolveProjectRoot() string {
 func isProjectRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "package.json"))
 	return err == nil
+}
+
+// ensureGitAndNode checks/installs Git and Node.js concurrently.
+func ensureGitAndNode() {
+	errCh := make(chan error, 2)
+
+	go func() {
+		errCh <- func() error {
+			if commandExists("git") {
+				printSuccess(fmt.Sprintf("Git %s 已安装", getGitVersion()))
+				return nil
+			}
+			return installGitForParallel()
+		}()
+	}()
+
+	go func() {
+		errCh <- func() error {
+			version := getNodeVersion()
+			if version != "" && parseMajorVersion(version) >= 18 {
+				printSuccess(fmt.Sprintf("Node.js %s 已安装", version))
+				return nil
+			}
+			return installNodeForParallel()
+		}()
+	}()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			exitWithError(err.Error())
+		}
+	}
 }

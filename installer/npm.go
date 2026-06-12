@@ -136,7 +136,18 @@ func startSetupWizard(projectRoot string, port int) {
 
 	printInfo(fmt.Sprintf("正在启动配置向导（端口 %d）...", port))
 
-	cmd := createBackgroundCommand("npx", "tsx", "src/setup/index.ts")
+	// Use local tsx directly (faster than npx which has lookup overhead)
+	tsxPath := filepath.Join(serverDir, "node_modules", ".bin", "tsx")
+	if runtime.GOOS == "windows" {
+		tsxPath += ".cmd"
+	}
+
+	var cmd *exec.Cmd
+	if fileExists(tsxPath) {
+		cmd = createBackgroundCommand(tsxPath, "src/setup/index.ts")
+	} else {
+		cmd = createBackgroundCommand("npx", "tsx", "src/setup/index.ts")
+	}
 	cmd.Dir = serverDir
 
 	if err := cmd.Start(); err != nil {

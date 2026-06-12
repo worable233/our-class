@@ -20,11 +20,24 @@ const (
 // ensureNode checks for Node.js >= 18 and installs if missing.
 func ensureNode() string {
 	version := getNodeVersion()
+	if version != "" && parseMajorVersion(version) >= 18 {
+		printSuccess(fmt.Sprintf("Node.js %s 已安装", version))
+		return version
+	}
+
+	if err := installNodeForParallel(); err != nil {
+		exitWithError(err.Error())
+	}
+	return getNodeVersion()
+}
+
+// installNodeForParallel installs Node.js and returns error (safe for concurrent use).
+func installNodeForParallel() error {
+	version := getNodeVersion()
 	if version != "" {
-		major := parseMajorVersion(version)
-		if major >= 18 {
+		if parseMajorVersion(version) >= 18 {
 			printSuccess(fmt.Sprintf("Node.js %s 已安装", version))
-			return version
+			return nil
 		}
 		printWarning(fmt.Sprintf("Node.js %s 版本过低，需要 >= 18", version))
 	}
@@ -33,15 +46,15 @@ func ensureNode() string {
 
 	switch runtime.GOOS {
 	case "windows":
-		return installNodeWindows()
+		installNodeWindows()
 	case "darwin":
-		return installNodeMacOS()
+		installNodeMacOS()
 	case "linux":
-		return installNodeLinux()
+		installNodeLinux()
 	default:
-		exitWithError(fmt.Sprintf("不支持的操作系统: %s", runtime.GOOS))
-		return ""
+		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
 	}
+	return nil
 }
 
 func installNodeWindows() string {
@@ -124,13 +137,13 @@ func installNodeMacOSDirect() string {
 	defer os.Remove(tmpFile)
 
 	printInfo("正在解压 Node.js...")
-	// Try /usr/local first (needs sudo on macOS)
+	// Use system tar (faster than Go implementation for .tar.gz)
 	if err := runCommand("sudo", "tar", "-xzf", tmpFile, "-C", "/usr/local", "--strip-components=1"); err != nil {
 		printWarning("解压到 /usr/local 失败，尝试用户目录...")
 		homeDir, _ := os.UserHomeDir()
 		localDir := filepath.Join(homeDir, ".local")
 		os.MkdirAll(localDir, 0755)
-		if err2 := extractTarGz(tmpFile, localDir); err2 != nil {
+		if err2 := runCommand("tar", "-xzf", tmpFile, "-C", localDir, "--strip-components=1"); err2 != nil {
 			exitWithError(fmt.Sprintf("解压 Node.js 失败: %v", err2))
 		}
 		printWarning(fmt.Sprintf("已安装到 %s，请确保 %s/bin 在 PATH 中", localDir, localDir))
@@ -245,7 +258,7 @@ func downloadFile(url string, dest string) error {
 
 	total := resp.ContentLength
 	written := int64(0)
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, 128*1024) // 128KB buffer for faster downloads
 	lastPct := -1
 
 	for {
