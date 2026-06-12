@@ -11,6 +11,7 @@ import {
   Download, Upload, Trash2, Database, FileArchive, AlertTriangle, CheckCircle,
   RefreshCw, Plus, Edit3, RotateCcw, HardDrive, Table,
 } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -253,10 +254,7 @@ onMounted(load)
 
     <!-- ═══ 页面标题 ═══ -->
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">备份管理</NText>
-        <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">创建、导入和恢复系统完整备份</NText>
-      </div>
+      <PageHeader title="备份管理" subtitle="创建、导入和恢复系统完整备份" />
       <NSpace size="small">
         <NButton @click="triggerUpload" secondary round size="small">
           <template #icon><Upload :size="14" /></template>

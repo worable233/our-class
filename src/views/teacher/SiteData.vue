@@ -12,6 +12,7 @@ import {
   GridComponent,
 } from 'echarts/components'
 import { useRefresh } from '@/composables/useRefresh'
+import PageHeader from '@/components/PageHeader.vue'
 
 use([CanvasRenderer, LineChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -179,12 +180,7 @@ onMounted(load)
 
 <template>
   <div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">站点数据</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">查看网站运营数据、访问趋势和技术栈信息</NText>
-      </div>
-    </div>
+    <PageHeader title="站点数据" subtitle="查看网站运营数据、访问趋势和技术栈信息" />
     <NSpin :show="loading" style="min-height: 400px">
       <template v-if="data">
         <!-- Stats Row -->

@@ -9,6 +9,7 @@ import {
 } from 'naive-ui'
 import { Plus, Trash2, Edit3, BookOpen, Upload, Image } from '@lucide/vue'
 import FilePicker from '@/components/FilePicker.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -132,10 +133,7 @@ onMounted(load)
 <template>
   <div style="display:flex;flex-direction:column;gap:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <div>
-        <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">课程管理</NText>
-        <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">创建和管理课程，用于布置和收集作业</NText>
-      </div>
+      <PageHeader title="课程管理" subtitle="创建和管理课程，用于布置和收集作业" />
       <div style="display:flex;align-items:center;gap:8px;">
         <NSelect
           v-if="hasViewAll"

@@ -9,6 +9,7 @@ import {
 } from 'naive-ui'
 import { Plus, Pencil, Trash2, GripVertical, BookOpen, ArrowUp, ArrowDown } from '@lucide/vue'
 import type { Skill } from '@/types'
+import PageHeader from '@/components/PageHeader.vue'
 
 // CodeMirror
 import { Codemirror } from 'vue-codemirror'
@@ -163,10 +164,7 @@ onMounted(load)
 <template>
   <div class="skill-page">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">Skill 管理</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">管理系统提示词，可在 AI 对话中作为预设指令使用</NText>
-      </div>
+      <PageHeader title="Skill 管理" subtitle="管理系统提示词，可在 AI 对话中作为预设指令使用" />
       <NButton type="primary" @click="openNew" round>
         <template #icon><Plus :size="16" /></template>
         新建 Skill

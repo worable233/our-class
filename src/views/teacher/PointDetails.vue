@@ -6,6 +6,7 @@ import { useMessage } from 'naive-ui'
 import {
   NButton, NTag, NSpin, NEmpty, NPagination, NText, NSelect,
 } from 'naive-ui'
+import PageHeader from '@/components/PageHeader.vue'
 import { useRefresh } from '@/composables/useRefresh'
 import { useAuthStore } from '@/stores/auth'
 
@@ -131,10 +132,7 @@ onMounted(load)
 <template>
   <div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-      <div>
-        <NText tag="h2" style="margin:0 0 4px;font-size:24px;font-weight:700;">积分明细</NText>
-        <NText depth="3" style="display:block;margin:0;font-size:14px;">查看所有学生的加分与扣分记录</NText>
-      </div>
+      <PageHeader title="积分明细" subtitle="查看所有学生的加分与扣分记录" />
       <div style="display:flex;align-items:center;gap:8px;">
         <NSelect
           v-if="hasViewAll"

@@ -7,6 +7,7 @@ import {
 } from 'naive-ui'
 import { Save, Globe, Image as ImageIcon, FileText } from '@lucide/vue'
 import FilePicker from '@/components/FilePicker.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 interface SiteSettings {
   site_title: string
@@ -88,10 +89,7 @@ onMounted(load)
 <template>
   <div style="display:flex;flex-direction:column;gap:20px;">
     <!-- ═══ 页面标题 ═══ -->
-    <div>
-      <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">普通设置</NText>
-      <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">配置网站标题、图标等基础信息</NText>
-    </div>
+    <PageHeader title="普通设置" subtitle="配置网站标题、图标等基础信息" />
 
     <NSpin :show="loading" style="min-height:200px;">
       <template v-if="loaded">

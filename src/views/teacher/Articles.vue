@@ -13,6 +13,7 @@ import {
   ExternalLink, Trash2, Eye, Globe, RefreshCw, Link as LinkIcon,
   Newspaper, CalendarDays, User, FileText, Plus, Loader2,
 } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { marked } from 'marked'
 
 marked.use({ breaks: true, gfm: true })
@@ -290,12 +291,7 @@ onMounted(load)
   <div style="display:flex;flex-direction:column;gap:20px;">
     <!-- ═══ 页面标题 ═══ -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-      <div>
-        <NText tag="h1" depth="1" style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.03em;">公众号文章</NText>
-        <NText depth="3" style="margin-top:4px;display:block;font-size:13px;">
-          输入链接自动解析并保存为 Markdown 格式
-        </NText>
-      </div>
+      <PageHeader title="公众号文章" subtitle="输入链接自动解析并保存为 Markdown 格式" />
       <NButton v-if="!isStudent" type="primary" @click="openParseModal" round>
         <template #icon><Plus :size="16" /></template>
         解析文章
