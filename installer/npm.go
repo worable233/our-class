@@ -39,17 +39,14 @@ func ensureNpmRegistry() {
 func npmFlags() []string {
 	return []string{
 		"--registry", npmRegistry,
-		"--prefer-offline", // Use cache when possible
-		"--no-audit",       // Skip security audit
-		"--no-fund",        // Skip funding messages
-		"--loglevel=error", // Reduce output noise
+		"--no-audit", // Skip security audit
+		"--no-fund",  // Skip funding messages
 	}
 }
 
-// installDependencies runs npm ci in both server/ and root directories concurrently.
+// installDependencies runs npm install in both server/ and root directories.
 func installDependencies(projectRoot string) {
 	serverDir := filepath.Join(projectRoot, "server")
-	flags := npmFlags()
 
 	// Check if lockfiles exist — use npm ci (faster) or npm install
 	useCI := fileExists(filepath.Join(projectRoot, "package-lock.json"))
@@ -58,29 +55,18 @@ func installDependencies(projectRoot string) {
 		cmdName = "ci"
 	}
 
-	printInfo(fmt.Sprintf("安装依赖（前后端并行，使用 npm %s）...", cmdName))
-
-	// Run both installs concurrently
-	errCh := make(chan error, 2)
-
-	go func() {
-		args := append([]string{cmdName}, flags...)
-		errCh <- runCommandInDir(projectRoot, "npm", args...)
-	}()
-
-	go func() {
-		args := append([]string{cmdName}, flags...)
-		errCh <- runCommandInDir(serverDir, "npm", args...)
-	}()
-
-	// Wait for both
-	for i := 0; i < 2; i++ {
-		if err := <-errCh; err != nil {
-			exitWithError(fmt.Sprintf("依赖安装失败: %v", err))
-		}
+	printInfo(fmt.Sprintf("安装前端依赖（npm %s）...", cmdName))
+	args := append([]string{cmdName}, npmFlags()...)
+	if err := runCommandInDir(projectRoot, "npm", args...); err != nil {
+		exitWithError(fmt.Sprintf("前端依赖安装失败: %v", err))
 	}
+	printSuccess("前端依赖安装完成")
 
-	printSuccess("前后端依赖安装完成")
+	printInfo(fmt.Sprintf("安装后端依赖（npm %s）...", cmdName))
+	if err := runCommandInDir(serverDir, "npm", args...); err != nil {
+		exitWithError(fmt.Sprintf("后端依赖安装失败: %v", err))
+	}
+	printSuccess("后端依赖安装完成")
 }
 
 func fileExists(path string) bool {
