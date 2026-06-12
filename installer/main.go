@@ -24,7 +24,11 @@ func main() {
 	skipBuild := flag.Bool("skip-build", false, "跳过前端构建（开发模式）")
 	port := flag.Int("port", defaultPort, "配置向导端口")
 	reset := flag.Bool("reset", false, "重置项目到初始状态")
+	resetShort := flag.Bool("r", false, "重置项目到初始状态（等同 --reset）")
 	flag.Parse()
+
+	// Merge short flag
+	*reset = *reset || *resetShort
 
 	// Resolve project root
 	projectRoot := resolveProjectRoot()
