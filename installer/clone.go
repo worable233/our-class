@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
 // ensureProject clones the repo if needed, or pulls latest if already exists.
@@ -53,28 +52,33 @@ func ensureProject(existingRoot string) string {
 }
 
 // chooseCloneDir picks the best directory to clone into.
+// Priority: installer's directory > CWD > home
 func chooseCloneDir() string {
-	home, _ := os.UserHomeDir()
-
-	switch runtime.GOOS {
-	case "windows":
-		// Try localized Desktop names (Chinese Windows uses 桌面)
-		for _, name := range []string{"Desktop", "桌面"} {
-			desktop := filepath.Join(home, name)
-			if dirExists(desktop) {
-				return filepath.Join(desktop, repoName)
-			}
+	// 1. Same directory as the installer binary
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		// Verify we can write here
+		testFile := filepath.Join(execDir, ".write-test")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err == nil {
+			os.Remove(testFile)
+			return filepath.Join(execDir, repoName)
 		}
-		return filepath.Join(home, repoName)
-	case "darwin":
-		desktop := filepath.Join(home, "Desktop")
-		if dirExists(desktop) {
-			return filepath.Join(desktop, repoName)
-		}
-		return filepath.Join(home, repoName)
-	default:
-		return filepath.Join(home, repoName)
 	}
+
+	// 2. Current working directory
+	cwd, err := os.Getwd()
+	if err == nil {
+		testFile := filepath.Join(cwd, ".write-test")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err == nil {
+			os.Remove(testFile)
+			return filepath.Join(cwd, repoName)
+		}
+	}
+
+	// 3. Home directory as fallback
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, repoName)
 }
 
 func dirExists(path string) bool {

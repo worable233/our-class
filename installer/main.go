@@ -85,7 +85,7 @@ func main() {
 }
 
 // resolveProjectRoot determines the project root directory.
-// Order: CWD → saved path → common locations → empty (will clone)
+// Order: CWD → installer dir → saved path → home
 func resolveProjectRoot() string {
 	// 1. Check CWD
 	cwd, err := os.Getwd()
@@ -99,18 +99,31 @@ func resolveProjectRoot() string {
 		}
 	}
 
-	// 2. Check saved path from previous installation
+	// 2. Check installer's directory
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		if isProjectRoot(filepath.Join(execDir, repoName)) {
+			return filepath.Join(execDir, repoName)
+		}
+		// Also check if installer is inside the project
+		if isProjectRoot(execDir) {
+			return execDir
+		}
+	}
+
+	// 3. Check saved path from previous installation
 	saved := loadSavedPath()
 	if saved != "" && isProjectRoot(saved) {
 		return saved
 	}
 
-	// 3. Search common locations
+	// 4. Search home directory
 	home, _ := os.UserHomeDir()
 	candidates := []string{
+		filepath.Join(home, repoName),
 		filepath.Join(home, "Desktop", repoName),
 		filepath.Join(home, "桌面", repoName),
-		filepath.Join(home, repoName),
 	}
 	for _, dir := range candidates {
 		if isProjectRoot(dir) {
