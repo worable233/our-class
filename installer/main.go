@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -59,6 +60,7 @@ func main() {
 	// Step 2: Clone or update project
 	printStep(2, 5, "获取项目代码")
 	projectRoot = ensureProject(projectRoot)
+	saveProjectPath(projectRoot) // Remember path for reset
 
 	// Step 3: Set npm registry + install dependencies
 	printStep(3, 5, "安装项目依赖")
@@ -83,25 +85,59 @@ func main() {
 }
 
 // resolveProjectRoot determines the project root directory.
+// Order: CWD → saved path → common locations → empty (will clone)
 func resolveProjectRoot() string {
+	// 1. Check CWD
 	cwd, err := os.Getwd()
+	if err == nil {
+		if isProjectRoot(cwd) {
+			return cwd
+		}
+		parent := filepath.Dir(cwd)
+		if filepath.Base(cwd) == "installer" && isProjectRoot(parent) {
+			return parent
+		}
+	}
+
+	// 2. Check saved path from previous installation
+	saved := loadSavedPath()
+	if saved != "" && isProjectRoot(saved) {
+		return saved
+	}
+
+	// 3. Search common locations
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		filepath.Join(home, "Desktop", repoName),
+		filepath.Join(home, "桌面", repoName),
+		filepath.Join(home, repoName),
+	}
+	for _, dir := range candidates {
+		if isProjectRoot(dir) {
+			return dir
+		}
+	}
+
+	// Not found — will need to clone
+	return ""
+}
+
+// saveProjectPath saves the project path for future reset operations.
+func saveProjectPath(path string) {
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".ourclass")
+	os.MkdirAll(dir, 0755)
+	os.WriteFile(filepath.Join(dir, "install-path.txt"), []byte(path), 0644)
+}
+
+// loadSavedPath loads the saved project path.
+func loadSavedPath() string {
+	home, _ := os.UserHomeDir()
+	data, err := os.ReadFile(filepath.Join(home, ".ourclass", "install-path.txt"))
 	if err != nil {
 		return ""
 	}
-
-	// Check if CWD is the project root
-	if isProjectRoot(cwd) {
-		return cwd
-	}
-
-	// Check if we're in installer/ subdirectory
-	parent := filepath.Dir(cwd)
-	if filepath.Base(cwd) == "installer" && isProjectRoot(parent) {
-		return parent
-	}
-
-	// Not in project — will need to clone
-	return ""
+	return strings.TrimSpace(string(data))
 }
 
 func isProjectRoot(dir string) bool {
