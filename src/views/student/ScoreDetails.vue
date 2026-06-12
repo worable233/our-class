@@ -14,14 +14,18 @@ import {
   NSpin,
   NEmpty,
 } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 
 const auth = useAuthStore()
+const message = useMessage()
 const scores = ref<Score[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
   try {
     scores.value = await api.get<Score[]>(`/scores?student_id=${auth.user?.id}`)
+  } catch (e: any) {
+    message.error(e.message || '加载成绩失败')
   } finally {
     loading.value = false
   }

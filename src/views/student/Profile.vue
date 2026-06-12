@@ -4,8 +4,10 @@ import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api/client'
 import type { Score, PointRecord, Assignment } from '@/types'
 import { NCard, NGrid, NGi, NTag, NText, NSpace, NSpin, NEmpty, NAvatar } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 
 const auth = useAuthStore()
+const message = useMessage()
 const scores = ref<Score[]>([])
 const points = ref<PointRecord[]>([])
 const assignments = ref<Assignment[]>([])
@@ -21,6 +23,8 @@ onMounted(async () => {
     scores.value = scs
     points.value = pts
     assignments.value = asgns
+  } catch (e: any) {
+    message.error(e.message || '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -30,7 +34,7 @@ const avgScore = computed(() => scores.value.length > 0
   ? Math.round(scores.value.reduce((a, b) => a + b.score, 0) / scores.value.length)
   : 0)
 const totalPoints = computed(() => points.value.reduce((a, b) => a + (b.type === 'add' ? b.amount : -b.amount), 0))
-const completedAssignments = computed(() => assignments.value.filter(a => a.submit_status === 'graded').length)
+const completedAssignments = computed(() => assignments.value.filter(a => a.submit_status === 'graded' || a.submit_status === 'pending').length)
 </script>
 
 <template>
@@ -59,7 +63,6 @@ const completedAssignments = computed(() => assignments.value.filter(a => a.subm
           </n-text>
           <n-space size="small">
             <n-tag size="small" :bordered="false">学生</n-tag>
-            <n-tag size="small" :bordered="false">ID: {{ auth.user?.id }}</n-tag>
           </n-space>
         </div>
       </div>

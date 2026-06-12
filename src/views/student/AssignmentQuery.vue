@@ -111,8 +111,12 @@ async function submit() {
       formData.append('kept_files', JSON.stringify(existingFiles.value))
     }
 
-    // 新增的本地文件
+    // 新增的本地文件（检查大小）
     for (const sf of selectedFiles.value) {
+      if (sf.file.size > 500 * 1024 * 1024) {
+        message.error(`文件 ${sf.name} 过大，最大支持 500MB`)
+        return
+      }
       formData.append('file', sf.file, sf.name)
     }
 
@@ -123,18 +127,26 @@ async function submit() {
       ))
     }
 
-    await fetch(`/api/assignments/${submittingId.value}/submit`, {
+    const token = JSON.parse(localStorage.getItem('ourclass_user') || '{}').token || ''
+    const resp = await fetch(`/api/assignments/${submittingId.value}/submit`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${auth.user?.token}` },
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
-    }).then(r => r.json()).then(body => {
-      if (!body.success) throw new Error(body.error?.message || '提交失败')
     })
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}))
+      throw new Error(errData.error?.message || `提交失败 (${resp.status})`)
+    }
+
+    const body = await resp.json()
+    if (!body.success) throw new Error(body.error?.message || '提交失败')
 
     handleClose()
     await load()
+    message.success('提交成功')
   } catch (e: any) {
-    alert(e.message || '提交失败')
+    message.error(e.message || '提交失败')
   }
   finally { uploading.value = false }
 }

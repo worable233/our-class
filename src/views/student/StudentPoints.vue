@@ -4,10 +4,11 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { PointRecord, PointSummary } from '@/types'
 import { NCard, NGrid, NGi, NTag, NText, NSpace, NSpin, NEmpty, NAvatar } from 'naive-ui'
-import { useRefresh } from '@/composables/useRefresh'
+import { useMessage } from 'naive-ui'
 import { ThumbsUp, ThumbsDown, Trophy, BarChart3 } from '@lucide/vue'
 
 const auth = useAuthStore()
+const message = useMessage()
 const records = ref<PointRecord[]>([])
 const summary = ref<PointSummary[]>([])
 const loading = ref(true)
@@ -20,6 +21,8 @@ onMounted(async () => {
     ])
     records.value = recs
     summary.value = sum
+  } catch (e: any) {
+    message.error(e.message || '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -32,7 +35,7 @@ const mySummary = computed(() =>
 const myRank = computed(() => {
   const sorted = [...summary.value].sort((a, b) => b.total_points - a.total_points)
   const idx = sorted.findIndex(s => s.id === auth.user?.id)
-  return idx + 1
+  return idx >= 0 ? idx + 1 : null
 })
 
 const totalAdded = computed(() => mySummary.value?.total_added || 0)
@@ -60,8 +63,8 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
           </n-text>
         </div>
         <div style="text-align:right;">
-          <div style="font-weight:800;font-size:42px;color:#d97706;letter-spacing:-0.03em;line-height:1;">
-            {{ netPoints }}
+          <div :style="{ fontWeight: 800, fontSize: '42px', color: netPoints >= 0 ? '#d97706' : '#ef4444', letterSpacing: '-0.03em', lineHeight: 1 }">
+            {{ netPoints > 0 ? '+' : '' }}{{ netPoints }}
           </div>
           <n-text depth="3" style="font-size:13px;margin-top:4px;display:block;">总积分</n-text>
         </div>
@@ -92,7 +95,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
         <n-card size="small" :hoverable="true" style="text-align:center;">
           <Trophy :size="22" style="color:var(--accent-text);margin-bottom:8px;display:block;margin-inline:auto;" />
           <n-text style="font-weight:700;font-size:22px;letter-spacing:-0.02em;line-height:1.2;display:block;">
-            #{{ myRank }}
+            {{ myRank ? `#${myRank}` : '—' }}
           </n-text>
           <n-text depth="3" style="font-size:12px;margin-top:2px;display:block;">班级排名</n-text>
         </n-card>

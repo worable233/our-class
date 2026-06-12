@@ -4,8 +4,10 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Assignment, Score, PointRecord } from '@/types'
 import { NCard, NGrid, NGi, NTag, NText, NSpace, NSpin, NEmpty } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 
 const auth = useAuthStore()
+const message = useMessage()
 const assignments = ref<Assignment[]>([])
 const scores = ref<Score[]>([])
 const points = ref<PointRecord[]>([])
@@ -21,6 +23,8 @@ onMounted(async () => {
     assignments.value = asgns
     scores.value = scs
     points.value = pts
+  } catch (e: any) {
+    message.error(e.message || '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -47,7 +51,7 @@ const totalPoints = computed(() => points.value.reduce((a, b) => a + (b.type ===
         <n-gi>
           <n-card size="small">
             <n-text style="font-family:'Inter Tight',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.02em;display:block;margin-bottom:4px">
-              {{ pendingAssignments }}
+              {{ pendingAssignments.length }}
             </n-text>
             <n-text depth="3">待完成作业</n-text>
           </n-card>

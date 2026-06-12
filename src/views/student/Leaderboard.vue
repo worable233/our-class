@@ -1,29 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
 import {
-  NButton,
   NCard,
   NDataTable,
   NTag,
   NText,
-  NSpace,
   NSpin,
   NEmpty,
-  NAvatar,
 } from 'naive-ui'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useMessage } from 'naive-ui'
 import type { PointSummary } from '@/types'
-import { useRefresh } from '@/composables/useRefresh'
 import { Crown } from '@lucide/vue'
 
 const auth = useAuthStore()
+const message = useMessage()
 const summary = ref<PointSummary[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
   try {
-    summary.value = await api.get<PointSummary[]>('/points/summary')
+    const data = await api.get<PointSummary[]>('/points/summary')
+    summary.value = [...data].sort((a, b) => b.total_points - a.total_points)
+  } catch (e: any) {
+    message.error(e.message || '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -91,7 +92,7 @@ const columns = [
 
 const rowProps = (row: any) => {
   if (row.id === auth.user?.id) {
-    return { style: 'background: rgba(94, 106, 210, 0.03);' }
+    return { style: 'background: rgba(94, 106, 210, 0.08); border-left: 3px solid var(--accent);' }
   }
   return {}
 }
