@@ -1280,8 +1280,9 @@ async function agentLoopAnthropic(
 
       if (thinking) {
         apiParams.thinking = { type: 'enabled', budget_tokens: 16000 }
-        // No tools when thinking mode — Anthropic API limitation
-      } else if (activeTools.length > 0) {
+      }
+
+      if (activeTools.length > 0) {
         apiParams.tools = activeTools.map(t => ({
           name: t.name, description: t.description, input_schema: t.input_schema,
         }))
