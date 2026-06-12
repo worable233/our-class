@@ -1,7 +1,8 @@
 import dotenv from 'dotenv'
 import { resolve } from 'path'
 
-dotenv.config({ path: resolve(import.meta.dirname, '..', '..', '..', '.env') })
+// Load .env from server/ directory (where setup wizard saves config)
+dotenv.config({ path: resolve(import.meta.dirname, '..', '..', '.env') })
 
 function envStr(key: string, fallback: string): string {
   return process.env[key] || fallback
