@@ -124,7 +124,9 @@ func installNodeMacOSDirect() string {
 	defer os.Remove(tmpFile)
 
 	printInfo("正在解压 Node.js...")
-	if err := extractTarGz(tmpFile, "/usr/local"); err != nil {
+	// Try /usr/local first (needs sudo on macOS)
+	if err := runCommand("sudo", "tar", "-xzf", tmpFile, "-C", "/usr/local", "--strip-components=1"); err != nil {
+		printWarning("解压到 /usr/local 失败，尝试用户目录...")
 		homeDir, _ := os.UserHomeDir()
 		localDir := filepath.Join(homeDir, ".local")
 		os.MkdirAll(localDir, 0755)

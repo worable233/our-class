@@ -16,9 +16,9 @@ const (
 )
 
 func main() {
-	if runtime.GOOS == "windows" {
-		defer pressAnyKey()
-	}
+	// Always wait before exit — prevents terminal window from closing immediately
+	// on double-click (Windows cmd, macOS Finder, Linux file manager)
+	defer waitForExit()
 
 	// Parse command line arguments
 	skipBuild := flag.Bool("skip-build", false, "跳过前端构建（开发模式）")
@@ -31,6 +31,9 @@ func main() {
 
 	// Handle reset mode
 	if *reset {
+		if projectRoot == "" {
+			exitWithError("未找到 OurClass 项目目录，请在项目目录下运行，或先执行安装")
+		}
 		resetProject(projectRoot)
 		return
 	}
@@ -39,7 +42,11 @@ func main() {
 	printBanner()
 
 	fmt.Printf("\n  %s系统:%s %s/%s\n", ColorGray, ColorReset, runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("  %s路径:%s %s\n", ColorGray, ColorReset, projectRoot)
+	if projectRoot != "" {
+		fmt.Printf("  %s路径:%s %s\n", ColorGray, ColorReset, projectRoot)
+	} else {
+		fmt.Printf("  %s路径:%s 将自动克隆到桌面\n", ColorGray, ColorReset)
+	}
 
 	// Step 1: Check/Install Git
 	printStep(1, 7, "检查 Git 环境")
@@ -77,13 +84,9 @@ func main() {
 
 	fmt.Printf("\n%s  🎉 安装完成！%s\n", ColorGreen, ColorReset)
 	fmt.Println("  请在浏览器中完成配置向导。")
-	fmt.Println("  按任意键退出...")
-	waitForInput()
 }
 
 // resolveProjectRoot determines the project root directory.
-// If run from within the project, use that. Otherwise return empty string
-// (will be resolved by ensureProject).
 func resolveProjectRoot() string {
 	cwd, err := os.Getwd()
 	if err != nil {

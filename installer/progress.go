@@ -66,19 +66,12 @@ func promptYesNo(msg string) bool {
 
 func exitWithError(msg string) {
 	printError(msg)
-	if runtime.GOOS == "windows" {
-		pressAnyKey()
-	}
 	os.Exit(1)
 }
 
-// pressAnyKey waits for user to press Enter (Windows: prevents window from closing).
-func pressAnyKey() {
+// waitForExit waits for user to press Enter before the program exits.
+// Prevents terminal window from closing immediately when double-clicked.
+func waitForExit() {
 	fmt.Printf("\n%s按 Enter 键退出...%s", ColorGray, ColorReset)
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
-}
-
-// waitForInput waits for user input before exiting.
-func waitForInput() {
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }

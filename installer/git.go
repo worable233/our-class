@@ -59,17 +59,24 @@ func installGitWindows() {
 		exitWithError(fmt.Sprintf("解压 Git 失败: %v", err))
 	}
 
-	// MinGit extracts to a folder like MinGit-2.54.0-64-bit
-	// The git.exe is in cmd/ subfolder
-	gitBin := findGitBin(installDir)
-	if gitBin == "" {
-		exitWithError("Git 解压后找不到 git.exe")
+	// Find the MinGit root directory (contains cmd/ and mingw64/)
+	minGitRoot := findMinGitRoot(installDir)
+	if minGitRoot == "" {
+		exitWithError("Git 解压后找不到目录结构")
 	}
 
-	// Add to PATH for current process
-	os.Setenv("PATH", gitBin+";"+os.Getenv("PATH"))
+	// Add BOTH cmd/ and mingw64/bin/ to PATH — git.exe needs both
+	cmdDir := filepath.Join(minGitRoot, "cmd")
+	mingwDir := filepath.Join(minGitRoot, "mingw64", "bin")
+	pathSep := string(os.PathListSeparator)
 
-	printInfo(fmt.Sprintf("已安装到 %s", installDir))
+	newPath := cmdDir + pathSep + mingwDir + pathSep + os.Getenv("PATH")
+	os.Setenv("PATH", newPath)
+
+	// Also set GIT_EXEC_PATH so git can find its subcommands
+	os.Setenv("GIT_EXEC_PATH", mingwDir)
+
+	printInfo(fmt.Sprintf("已安装到 %s", minGitRoot))
 }
 
 func installGitMacOS() {
@@ -84,12 +91,17 @@ func installGitMacOS() {
 	// Install Xcode Command Line Tools
 	printInfo("正在安装 Xcode Command Line Tools（含 Git）...")
 	printInfo("如果弹出系统对话框，请点击「安装」...")
-	if err := runCommand("xcode-select", "--install"); err != nil {
-		// xcode-select --install returns error if already installed
-		printInfo("可能已安装，继续...")
+	runCommand("xcode-select", "--install")
+
+	// Wait for installation (may take several minutes)
+	printInfo("等待 Xcode CLT 安装完成（可能需要 5-10 分钟）...")
+	for i := 0; i < 120; i++ { // Wait up to 2 minutes
+		if commandExists("git") {
+			return
+		}
+		sleep(1000)
 	}
 
-	// Wait for installation
 	if !commandExists("git") {
 		printWarning("Git 尚未就绪，可能需要等待 Xcode CLT 安装完成")
 		printInfo("安装完成后请重新运行此程序")
@@ -131,22 +143,21 @@ func getGitVersion() string {
 	if err != nil {
 		return "unknown"
 	}
-	// Output: "git version 2.47.1"
 	return out
 }
 
-// findGitBin searches for git.exe inside the extracted MinGit directory.
-func findGitBin(baseDir string) string {
-	// MinGit structure: MinGit-2.54.0-64-bit/cmd/git.exe
+// findMinGitRoot finds the MinGit root directory inside the extracted folder.
+func findMinGitRoot(baseDir string) string {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return ""
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			candidate := filepath.Join(baseDir, entry.Name(), "cmd", "git.exe")
-			if _, err := os.Stat(candidate); err == nil {
-				return filepath.Dir(candidate)
+			// Check if this directory has cmd/git.exe
+			candidate := filepath.Join(baseDir, entry.Name())
+			if _, err := os.Stat(filepath.Join(candidate, "cmd", "git.exe")); err == nil {
+				return candidate
 			}
 		}
 	}

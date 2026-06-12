@@ -12,11 +12,24 @@ import (
 
 const npmRegistry = "https://registry.npmmirror.com"
 
+// sleep pauses execution for the specified milliseconds.
+func sleep(ms int) {
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
 // ensureNpmRegistry sets the npm registry to npmmirror for faster downloads in China.
 func ensureNpmRegistry() {
-	printInfo("设置 npm 镜像源...")
+	// Check current registry first
+	current, _ := runCommandSilent("npm", "config", "get", "registry")
+	if current == npmRegistry {
+		printSuccess("npm 镜像源已设置为 npmmirror")
+		return
+	}
+
+	printInfo("设置 npm 镜像源（将修改全局 npm 配置）...")
 	if err := runCommand("npm", "config", "set", "registry", npmRegistry); err != nil {
 		printWarning(fmt.Sprintf("设置 npm 镜像失败: %v", err))
+		printInfo("将使用 --registry 参数替代")
 	} else {
 		printSuccess("npm 镜像源已设置为 npmmirror")
 	}
@@ -93,6 +106,8 @@ func startSetupWizard(projectRoot string, port int) {
 	if err := cmd.Start(); err != nil {
 		exitWithError(fmt.Sprintf("配置向导启动失败: %v", err))
 	}
+	// Release the process so it survives after installer exits
+	cmd.Process.Release()
 
 	// Wait for the server to be ready (poll with timeout)
 	printInfo("等待服务启动...")
