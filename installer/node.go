@@ -225,9 +225,7 @@ func installNodeLinuxDirect() string {
 func downloadFile(url string, dest string) error {
 	printInfo(fmt.Sprintf("下载: %s", url))
 
-	client := &http.Client{
-		// No timeout for large files
-	}
+	client := httpClient() // 3s connection timeout, no total timeout
 
 	resp, err := client.Get(url)
 	if err != nil {

@@ -93,20 +93,18 @@ func installGitMacOS() {
 	printInfo("如果弹出系统对话框，请点击「安装」...")
 	runCommand("xcode-select", "--install")
 
-	// Wait for installation (may take several minutes)
-	printInfo("等待 Xcode CLT 安装完成（可能需要 5-10 分钟）...")
-	for i := 0; i < 120; i++ { // Wait up to 2 minutes
+	// Wait up to 3s for git to appear (if already installed but not in PATH)
+	for i := 0; i < 10; i++ {
 		if commandExists("git") {
 			return
 		}
-		sleep(1000)
+		sleep(300)
 	}
 
-	if !commandExists("git") {
-		printWarning("Git 尚未就绪，可能需要等待 Xcode CLT 安装完成")
-		printInfo("安装完成后请重新运行此程序")
-		exitWithError("Git 未安装完成")
-	}
+	// Xcode CLT takes 5-10 minutes — can't wait that long
+	printWarning("Xcode CLT 安装需要较长时间（5-10 分钟）")
+	printInfo("请等待安装完成后重新运行此程序")
+	exitWithError("Git 未安装完成，请等待 Xcode CLT 安装后重试")
 }
 
 func installGitLinux() {

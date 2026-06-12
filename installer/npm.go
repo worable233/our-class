@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,7 +20,6 @@ func sleep(ms int) {
 
 // ensureNpmRegistry sets the npm registry to npmmirror for faster downloads in China.
 func ensureNpmRegistry() {
-	// Check current registry first
 	current, _ := runCommandSilent("npm", "config", "get", "registry")
 	if current == npmRegistry {
 		printSuccess("npm 镜像源已设置为 npmmirror")
@@ -65,7 +65,6 @@ func ensurePM2() {
 		return
 	}
 
-	// On Windows, also install pm2-windows-startup for service support
 	if runtime.GOOS == "windows" {
 		runCommand("npm", "install", "-g", "pm2-windows-startup", "--registry", npmRegistry)
 	}
@@ -80,7 +79,6 @@ func buildFrontend(projectRoot string) {
 		exitWithError(fmt.Sprintf("前端构建失败: %v", err))
 	}
 
-	// Verify dist/ exists
 	distDir := filepath.Join(projectRoot, "dist")
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
 		exitWithError("前端构建完成但 dist/ 目录不存在")
@@ -92,35 +90,36 @@ func buildFrontend(projectRoot string) {
 func startSetupWizard(projectRoot string, port int) {
 	serverDir := filepath.Join(projectRoot, "server")
 
-	// Check npx is available
 	if !commandExists("npx") {
 		exitWithError("npx 命令不可用，请确保 Node.js 正确安装并在 PATH 中")
 	}
 
 	printInfo(fmt.Sprintf("正在启动配置向导（端口 %d）...", port))
 
-	// Start the setup wizard as a background process
 	cmd := createBackgroundCommand("npx", "tsx", "src/setup/index.ts")
 	cmd.Dir = serverDir
 
 	if err := cmd.Start(); err != nil {
 		exitWithError(fmt.Sprintf("配置向导启动失败: %v", err))
 	}
-	// Release the process so it survives after installer exits
 	cmd.Process.Release()
 
-	// Wait for the server to be ready (poll with timeout)
-	printInfo("等待服务启动...")
 	url := fmt.Sprintf("http://localhost:%d/setup", port)
-	if !waitForServer(url, 15) {
-		printWarning("服务启动超时，但可能仍在启动中")
-	}
 
-	// Open browser
+	// Quick check: wait 3s, then open browser regardless
+	printInfo("等待服务启动...")
+	ready := waitForServer(url, 3)
+
+	// Open browser regardless — page will load once server is up
 	printInfo(fmt.Sprintf("正在打开浏览器: %s", url))
 	openBrowser(url)
 
-	printSuccess("配置向导已启动！")
+	if ready {
+		printSuccess("配置向导已启动！")
+	} else {
+		printSuccess("配置向导启动中，浏览器页面将自动加载...")
+	}
+
 	fmt.Printf("\n  %s╔══════════════════════════════════════╗%s\n", ColorGreen, ColorReset)
 	fmt.Printf("  %s║  浏览器应该已自动打开配置页面        ║%s\n", ColorGreen, ColorReset)
 	fmt.Printf("  %s║  如果没有，请手动访问:               ║%s\n", ColorGreen, ColorReset)
@@ -135,9 +134,11 @@ func createBackgroundCommand(name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-// waitForServer polls the URL until it responds or timeout.
+// waitForServer polls the URL until it responds or timeout (3s default).
 func waitForServer(url string, timeoutSec int) bool {
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
 	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
 
 	for time.Now().Before(deadline) {
@@ -146,7 +147,23 @@ func waitForServer(url string, timeoutSec int) bool {
 			resp.Body.Close()
 			return true
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 	}
 	return false
+}
+
+// httpClient returns an HTTP client with 3s connection timeout.
+// Used for all network requests to avoid hanging on slow networks.
+func httpClient() *http.Client {
+	return &http.Client{
+		Timeout: 0, // No total timeout (large files need time)
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   3 * time.Second, // Connection timeout
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 3 * time.Second,
+		},
+	}
 }
