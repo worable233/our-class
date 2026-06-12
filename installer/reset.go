@@ -18,6 +18,7 @@ func resetProject(projectRoot string) {
 	fmt.Println("    - 向导状态 (server/src/setup/setup-state.json)")
 	fmt.Println("    - 上传文件 (server/uploads/)")
 	fmt.Println("    - 存储文件 (server/storage/)")
+	fmt.Println("    - 构建产物 (dist/)")
 	fmt.Println()
 	fmt.Println("  然后将自动拉取最新代码、安装依赖、构建前端、启动向导。")
 
@@ -43,6 +44,7 @@ func resetProject(projectRoot string) {
 	dirsToClean := []string{
 		filepath.Join(projectRoot, "server", "uploads"),
 		filepath.Join(projectRoot, "server", "storage"),
+		filepath.Join(projectRoot, "dist"), // 清理旧构建产物，避免 Windows 文件锁定
 	}
 
 	for _, f := range filesToDelete {
