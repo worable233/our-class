@@ -212,7 +212,9 @@ async function doRestore() {
       try {
         const r = await api.post<{ tables_restored: number; records_total: number; files_restored: number; errors?: string[] }>(`/backup/restore/${encodeURIComponent(restoreTarget.value!.name)}`)
         restoreResult.value = r
-        message.success('备份恢复成功')
+        message.success('备份恢复成功，3 秒后刷新页面...')
+        // Reload page after restore to reflect new data
+        setTimeout(() => window.location.reload(), 3000)
       } catch (e: any) { message.error(e.message || '恢复失败') }
       finally { restoreLoading.value = false }
     },

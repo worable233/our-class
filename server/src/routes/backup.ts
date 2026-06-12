@@ -30,6 +30,8 @@ const upload = multer({
 
 const BACKUP_VERSION = 1
 
+const MAX_BACKUPS = 20 // 自动清理超过此数量的旧备份
+
 /** Tables to backup/restore in dependency-safe order */
 const BACKUP_TABLES = [
   'permission_groups',
@@ -166,6 +168,9 @@ router.post('/create', requirePermission('chat.config'), async (req: Request, re
     return fail(res, 500, 'BACKUP_FAILED', '备份文件生成失败')
   }
 
+  // Clean up old backups
+  cleanupOldBackups()
+
   const st = statSync(filePath)
   ok(res, { name: filename, size: st.size, size_display: fmtSize(st.size) })
 })
@@ -174,6 +179,23 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+/** Clean up old backups if exceeding MAX_BACKUPS */
+function cleanupOldBackups() {
+  try {
+    const files = readdirSync(BACKUP_DIR)
+      .filter(f => f.endsWith('.zip'))
+      .map(f => ({ name: f, time: statSync(join(BACKUP_DIR, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time) // newest first
+
+    if (files.length > MAX_BACKUPS) {
+      const toDelete = files.slice(MAX_BACKUPS)
+      for (const f of toDelete) {
+        try { unlinkSync(join(BACKUP_DIR, f.name)) } catch {}
+      }
+    }
+  } catch {}
 }
 
 // PUT /api/backup/:name — 重命名备份
@@ -272,22 +294,21 @@ router.get('/list', requirePermission('chat.config'), (_req: Request, res: Respo
   ok(res, files)
 })
 
-// POST /api/backup/export — create and download a full backup
+// POST /api/backup/export — create and stream download (no file left on server)
 router.post('/export', requirePermission('chat.config'), async (req: Request, res: Response) => {
-  let cleanupPath: string | null = null
   try {
-    const { Archiver } = await import('archiver')
+    const archiver = await import('archiver')
     const db = getDb()
-    const archive = new Archiver('zip', { zlib: { level: 6 } })
+    const archive = archiver.default('zip', { zlib: { level: 6 } })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const tag = uuidv4().slice(0, 8)
     const filename = `backup-${timestamp}-${tag}.zip`
-    const filePath = join(BACKUP_DIR, filename)
-    cleanupPath = filePath
 
-    const writeStream = createWriteStream(filePath)
-    archive.pipe(writeStream)
+    // Stream directly to response (no temp file on disk)
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    archive.pipe(res)
 
     // 1. Database data
     const dbData: Record<string, any[]> = {}
@@ -307,42 +328,21 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
       try { if (existsSync(f.src)) archive.file(f.src, { name: `files/${f.path}` }) } catch {}
     }
 
-    // 3. Backup metadata (compute all fields before writing)
+    // 3. Backup metadata
     const totalRecords = Object.values(dbData).reduce((sum, arr) => sum + arr.length, 0)
-    const backupMeta = {
+    archive.append(JSON.stringify({
       version: BACKUP_VERSION,
       created_at: new Date().toISOString(),
       db_tables: tables.length,
       db_records: totalRecords,
       files_count: allFiles.length,
-    }
-    archive.append(JSON.stringify(backupMeta, null, 2), { name: 'backup.json' })
+    }, null, 2), { name: 'backup.json' })
 
     await archive.finalize()
-    await new Promise<void>((resolve, reject) => {
-      writeStream.on('close', resolve)
-      writeStream.on('error', reject)
-    })
-
-    // Verify the zip was written
-    if (!existsSync(filePath) || statSync(filePath).size === 0) {
-      throw new Error('备份文件生成失败')
-    }
-
-    // Stream download to client
-    const st = statSync(filePath)
-    res.setHeader('Content-Type', 'application/zip')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-    res.setHeader('Content-Length', st.size)
-    const rs = createReadStream(filePath)
-    rs.pipe(res)
-    rs.on('error', () => { /* client disconnected — cleanup handled below */ })
   } catch (e: any) {
-    // Clean up partial file on error
-    if (cleanupPath && existsSync(cleanupPath)) {
-      try { unlinkSync(cleanupPath) } catch {}
+    if (!res.headersSent) {
+      return fail(res, 500, 'BACKUP_FAILED', `导出失败: ${e.message}`)
     }
-    return fail(res, 500, 'BACKUP_FAILED', `导出失败: ${e.message}`)
   }
 })
 
