@@ -1614,7 +1614,7 @@ async function agentLoopAnthropic(
     const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
     generateTitle(keyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
-    })
+    }).catch(() => {})
   }
 
   res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
@@ -1807,7 +1807,7 @@ async function agentLoopOpenAI(
     const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
     generateTitle(keyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
-    })
+    }).catch(() => {})
   }
 }
 
@@ -2427,6 +2427,13 @@ router.post(
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
+
+    // 客户端断连时中止处理，避免浪费 API token
+    let clientDisconnected = false
+    req.on('close', () => {
+      clientDisconnected = true
+      if (abortCtrl) abortCtrl.abort()
+    })
 
     // Save user message FIRST (skip for continue — AI instruction only, no visible message)
     if (!isContinue) {

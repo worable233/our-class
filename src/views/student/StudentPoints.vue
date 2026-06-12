@@ -45,7 +45,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 
 <template>
   <div class="page-container">
-    <!-- Hero Points Display -->
+    <!-- Hero Card -->
     <n-card :bordered="true" class="hero-card">
       <div class="hero-content">
         <n-avatar :size="56" round class="hero-avatar">
@@ -56,7 +56,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
           <div class="hero-class">{{ auth.userClass }}</div>
         </div>
         <div class="hero-points">
-          <div class="points-number" :class="netPoints >= 0 ? 'positive' : 'negative'">
+          <div class="points-number" :class="netPoints >= 0 ? 'text-positive' : 'text-negative'">
             {{ netPoints > 0 ? '+' : '' }}{{ netPoints }}
           </div>
           <div class="points-label">总积分</div>
@@ -64,39 +64,39 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
       </div>
     </n-card>
 
-    <!-- Stats Row -->
+    <!-- Stats Grid -->
     <n-grid :cols="4" :x-gap="12" :y-gap="12" responsive="screen" :item-responsive="true">
       <n-gi span="4 m:1">
         <n-card size="small" class="stat-card">
-          <div class="stat-icon green"><ThumbsUp :size="20" /></div>
+          <div class="stat-icon bg-positive text-positive"><ThumbsUp :size="20" /></div>
           <div class="stat-value">+{{ totalAdded }}</div>
           <div class="stat-label">获得加分</div>
         </n-card>
       </n-gi>
       <n-gi span="4 m:1">
         <n-card size="small" class="stat-card">
-          <div class="stat-icon red"><ThumbsDown :size="20" /></div>
+          <div class="stat-icon bg-negative text-negative"><ThumbsDown :size="20" /></div>
           <div class="stat-value">-{{ totalDeducted }}</div>
           <div class="stat-label">被扣分</div>
         </n-card>
       </n-gi>
       <n-gi span="4 m:1">
         <n-card size="small" class="stat-card">
-          <div class="stat-icon accent"><Trophy :size="20" /></div>
+          <div class="stat-icon bg-accent text-accent"><Trophy :size="20" /></div>
           <div class="stat-value">{{ myRank ? `#${myRank}` : '—' }}</div>
           <div class="stat-label">班级排名</div>
         </n-card>
       </n-gi>
       <n-gi span="4 m:1">
         <n-card size="small" class="stat-card">
-          <div class="stat-icon muted"><BarChart3 :size="20" /></div>
+          <div class="stat-icon" style="background:var(--surface-2);color:var(--text-muted)"><BarChart3 :size="20" /></div>
           <div class="stat-value">{{ records.length }}</div>
           <div class="stat-label">评价次数</div>
         </n-card>
       </n-gi>
     </n-grid>
 
-    <!-- Points Timeline -->
+    <!-- Timeline -->
     <n-card class="timeline-card">
       <template #header>
         <span class="card-title">积分记录</span>
@@ -104,12 +104,12 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
       <n-spin :show="loading">
         <div class="timeline">
           <div v-for="r in records" :key="r.id" class="timeline-item">
-            <div class="timeline-dot" :class="r.type === 'add' ? 'green' : 'red'" />
+            <div class="timeline-dot" :class="r.type === 'add' ? 'text-positive' : 'text-negative'" />
             <div class="timeline-content">
               <div class="timeline-reason">{{ r.reason }}</div>
               <div class="timeline-meta">{{ r.teacher_name }} · {{ r.date }}</div>
             </div>
-            <div class="timeline-amount" :class="r.type === 'add' ? 'positive' : 'negative'">
+            <div class="timeline-amount" :class="r.type === 'add' ? 'text-positive' : 'text-negative'">
               {{ r.type === 'add' ? '+' : '-' }}{{ r.amount }}
             </div>
           </div>
@@ -121,14 +121,7 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 </template>
 
 <style scoped>
-.page-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 24px 0;
-}
-
-/* Hero Card */
+/* Hero */
 .hero-card {
   background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
   border: 1px solid var(--hairline-strong);
@@ -137,14 +130,14 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 .hero-content {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-6);
 }
 
 .hero-avatar {
   background: var(--accent);
   color: #fff;
-  font-weight: 700;
-  font-size: 24px;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-headline);
   flex-shrink: 0;
 }
 
@@ -154,17 +147,17 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 }
 
 .hero-name {
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-title);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
   color: var(--text-primary);
 }
 
 .hero-class {
-  font-size: 13px;
+  font-size: var(--text-caption);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .hero-points {
@@ -173,59 +166,16 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 }
 
 .points-number {
-  font-weight: 800;
-  font-size: 42px;
-  letter-spacing: -0.03em;
+  font-weight: var(--weight-extrabold);
+  font-size: var(--text-display);
+  letter-spacing: var(--tracking-tight);
   line-height: 1;
 }
 
-.points-number.positive { color: #d97706; }
-.points-number.negative { color: #ef4444; }
-
 .points-label {
-  font-size: 13px;
+  font-size: var(--text-caption);
   color: var(--text-muted);
-  margin-top: 4px;
-}
-
-/* Stat Cards */
-.stat-card {
-  text-align: center;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 10px;
-}
-
-.stat-icon.green { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
-.stat-icon.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-.stat-icon.accent { background: rgba(94, 106, 210, 0.1); color: var(--accent-text); }
-.stat-icon.muted { background: var(--surface-2); color: var(--text-muted); }
-
-.stat-value {
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 /* Timeline */
@@ -233,24 +183,13 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
   border: 1px solid var(--hairline);
 }
 
-.card-title {
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
-
-.timeline {
-  display: flex;
-  flex-direction: column;
-}
-
 .timeline-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 0;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--hairline);
-  transition: background 0.15s;
+  transition: background var(--duration-fast);
 }
 
 .timeline-item:last-child {
@@ -259,21 +198,19 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 
 .timeline-item:hover {
   background: var(--surface-2);
-  margin: 0 -16px;
-  padding-left: 16px;
-  padding-right: 16px;
-  border-radius: 8px;
+  margin: 0 calc(-1 * var(--space-4));
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+  border-radius: var(--radius-md);
 }
 
 .timeline-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
+  background: currentColor;
 }
-
-.timeline-dot.green { background: #22c55e; }
-.timeline-dot.red { background: #ef4444; }
 
 .timeline-content {
   flex: 1;
@@ -281,48 +218,40 @@ const netPoints = computed(() => totalAdded.value - totalDeducted.value)
 }
 
 .timeline-reason {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.4;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
   color: var(--text-primary);
 }
 
 .timeline-meta {
-  font-size: 12px;
+  font-size: var(--text-caption);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .timeline-amount {
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-body);
   flex-shrink: 0;
 }
 
-.timeline-amount.positive { color: #22c55e; }
-.timeline-amount.negative { color: #ef4444; }
-
 /* Mobile */
 @media (max-width: 768px) {
-  .page-container {
-    padding: 16px 0;
-    gap: 16px;
-  }
-
   .hero-content {
     flex-wrap: wrap;
-    gap: 16px;
+    gap: var(--space-4);
   }
 
   .hero-points {
     width: 100%;
     text-align: left;
-    padding-top: 12px;
+    padding-top: var(--space-3);
     border-top: 1px solid var(--hairline);
   }
 
   .points-number {
-    font-size: 36px;
+    font-size: 34px;
   }
 }
 </style>

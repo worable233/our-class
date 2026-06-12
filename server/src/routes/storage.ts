@@ -279,6 +279,13 @@ router.post('/upload/chunk', requirePermission('chat.access'), (req: Request, re
       finalName = `${base}_${Date.now()}${ext}`
     }
 
+    // 白名单校验：只允许上传指定文件类型
+    const fileExt = extname(finalName).toLowerCase()
+    if (!ALLOWED_EXTENSIONS.has(fileExt)) {
+      rmSync(chunkDir, { recursive: true, force: true })
+      return fail(res, 400, 'FILE_TYPE_BLOCKED', `不支持上传「${fileExt}」文件类型，允许的类型：文档/图片/音视频/压缩包`)
+    }
+
     // 合并分片
     const assembledPath = join(STORAGE_ROOT, `_assemble_${uuidv4()}`)
     try {

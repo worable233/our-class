@@ -493,13 +493,17 @@ router.put(
 
     // 班级限制：验证提交属于自己的班级
     if (!req.user?.permissions?.includes('classes.view_all')) {
+      const myClasses = (req.user?.class || '').split(',').filter(Boolean).map(c => c.trim())
       const sub = db.prepare(`
-        SELECT s.id FROM submissions s
+        SELECT s.id, c.class as course_class FROM submissions s
         JOIN assignments a ON s.assignment_id = a.id
-        JOIN courses c ON a.course_id = c.id
+        LEFT JOIN courses c ON a.course_id = c.id
         WHERE s.id = ?
       `).get(req.params.id) as any
       if (!sub) return fail(res, 404, 'NOT_FOUND', '提交记录不存在')
+      if (sub.course_class && myClasses.length > 0 && !myClasses.includes(sub.course_class)) {
+        return fail(res, 403, 'FORBIDDEN', '无权为其他班级的作业打分')
+      }
     }
 
     const status = score !== null ? 'graded' : 'pending'

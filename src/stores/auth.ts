@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/api/client'
+import { api, setUnauthorizedHandler, invalidateTokenCache } from '@/api/client'
 import type { User } from '@/types'
 
 interface LoginResponse {
@@ -23,8 +23,18 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(code)
   }
 
+  // 注册全局 401 处理器
+  setUnauthorizedHandler(() => {
+    user.value = null
+    localStorage.removeItem('ourclass_user')
+    invalidateTokenCache()
+  })
+
   // Tracks in-flight permission refresh
   let _permPromise: Promise<void> | null = null
+  // 权限缓存时间戳，避免每次导航都请求服务器
+  let _permsFetchedAt = 0
+  const PERMS_CACHE_TTL = 60_000 // 60 秒内不重复请求
 
   function loadFromStorage() {
     const stored = localStorage.getItem('ourclass_user')
@@ -49,12 +59,10 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = { ...user.value, permissions: perms }
           localStorage.setItem('ourclass_user', JSON.stringify(user.value))
         }
+        _permsFetchedAt = Date.now()
       } catch (e: any) {
-        // Token expired or invalid — clear auth state to prevent cascading 401s
-        if (e.message?.includes('401') || e.message?.includes('未登录') || e.message?.includes('Unauthorized')) {
-          user.value = null
-          localStorage.removeItem('ourclass_user')
-        }
+        // 401 已由全局处理器处理，这里只需清理 promise
+        if (e.status === 401) return
       }
     })()
     await _permPromise
@@ -64,7 +72,10 @@ export const useAuthStore = defineStore('auth', () => {
   /** Call in router guard when route requires permissions that may not be loaded yet */
   function ensurePermissions(): Promise<void> {
     if (!user.value?.token) return Promise.resolve()
-    // Always refresh from server to get the latest permissions (e.g. after a migration adds a new code)
+    // 有缓存且未过期，跳过请求
+    if (user.value.permissions?.length && Date.now() - _permsFetchedAt < PERMS_CACHE_TTL) {
+      return Promise.resolve()
+    }
     return refreshPermissions()
   }
 
@@ -85,6 +96,8 @@ export const useAuthStore = defineStore('auth', () => {
       }
       user.value = userData
       localStorage.setItem('ourclass_user', JSON.stringify(userData))
+      invalidateTokenCache()
+      _permsFetchedAt = Date.now()
       return userData
     } finally {
       loading.value = false
@@ -94,6 +107,8 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     user.value = null
     localStorage.removeItem('ourclass_user')
+    invalidateTokenCache()
+    _permsFetchedAt = 0
   }
 
   return { user, loading, isLoggedIn, isTeacher, isStudent, displayName, userClass, permissions, hasPermission, loadFromStorage, login, logout, ensurePermissions, refreshPermissions }

@@ -11,6 +11,11 @@ import { NotFoundError } from '../lib/errors.js'
 
 const BCRYPT_ROUNDS = 10
 
+/** 转义 LIKE 通配符 % 和 _ */
+function escapeLike(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
 const router = Router()
 
 const TEACHER_GROUP_SUBQUERY = "(SELECT id FROM permission_groups WHERE group_type = 'teacher' LIMIT 1)"
@@ -55,15 +60,15 @@ router.get('/', requirePermission('students.write'), (req: Request, res: Respons
     const myClasses = userClass.split(',').filter(Boolean).map(c => c.trim())
     if (myClasses.length > 0) {
       // 检查 teachers 的 class 字段是否包含自己的班级（class 可能为逗号分隔的多班级）
-      const classConds = myClasses.map(() => `(u.class LIKE '%' || ? || '%' OR u.class = ?)`)
+      const classConds = myClasses.map(() => `(u.class LIKE '%' || ? || '%' ESCAPE '\\' OR u.class = ?)`)
       sql += ` AND (${classConds.join(' OR ')})`
       for (const c of myClasses) {
-        params.push(c, c) // 每个班级两个占位符（LIKE 和精确匹配）
+        params.push(escapeLike(c), c) // LIKE 参数转义通配符，精确匹配不转义
       }
     }
   } else if (filterClass) {
-    sql += ` AND (u.class LIKE '%' || ? || '%' OR u.class = ?)`
-    params.push(filterClass, filterClass)
+    sql += ` AND (u.class LIKE '%' || ? || '%' ESCAPE '\\' OR u.class = ?)`
+    params.push(escapeLike(filterClass), filterClass)
   }
 
   sql += ' ORDER BY u.id'

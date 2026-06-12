@@ -551,6 +551,10 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
         streaming.value = false
         streamTimer = 0
         if (abortCtrl) abortCtrl = null
+        // 释放流式时间戳内存
+        for (const m of messages.value) {
+          if ((m as any)._streamTimestamps) delete (m as any)._streamTimestamps
+        }
         // Remove stale empty assistant messages
         messages.value = messages.value.filter(m => !(m.role === 'assistant' && !m.content))
         sidebarRef.value?.load()
@@ -563,12 +567,11 @@ async function sendMessage(content: string, isDeepThink?: boolean, isWebSearch?:
       for (let j = messages.value.length - 1; j >= 0; j--) {
         if (messages.value[j]!.role === 'assistant') {
           const msg = messages.value[j] as any
+          const prevLen = msg.content.length
           msg.content += chars
-          // 按 chunk 边界生成时间戳数组
+          // 增量追加时间戳：只为新增字符查找 chunk 时间戳，O(chunkCount) 而非 O(contentLen)
           if (!msg._streamTimestamps) msg._streamTimestamps = []
-          msg._streamTimestamps.length = 0
-          for (let c = 0; c < msg.content.length; c++) {
-            // 二分查找 c 属于哪个 chunk
+          for (let c = prevLen; c < msg.content.length; c++) {
             let lo = 0, hi = chunkTimes.length - 1, idx = 0
             while (lo <= hi) {
               const mid = (lo + hi) >> 1
@@ -760,6 +763,10 @@ async function continueGeneration() {
         streaming.value = false
         streamTimer = 0
         if (abortCtrl) abortCtrl = null
+        // 释放流式时间戳内存
+        for (const m of messages.value) {
+          if ((m as any)._streamTimestamps) delete (m as any)._streamTimestamps
+        }
         messages.value = messages.value.filter(m => !(m.role === 'assistant' && !m.content))
         sidebarRef.value?.load()
       }
@@ -771,11 +778,11 @@ async function continueGeneration() {
       for (let j = messages.value.length - 1; j >= 0; j--) {
         if (messages.value[j]!.role === 'assistant') {
           const msg = messages.value[j] as any
+          const prevLen = msg.content.length
           msg.content += chars
-          // 按 chunk 边界生成时间戳数组
+          // 增量追加时间戳
           if (!msg._streamTimestamps) msg._streamTimestamps = []
-          msg._streamTimestamps.length = 0
-          for (let c = 0; c < msg.content.length; c++) {
+          for (let c = prevLen; c < msg.content.length; c++) {
             let lo = 0, hi = chunkTimes.length - 1, idx = 0
             while (lo <= hi) {
               const mid = (lo + hi) >> 1

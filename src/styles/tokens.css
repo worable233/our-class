@@ -1,0 +1,167 @@
+/*
+ * Design Tokens — 基于 8px 网格系统
+ * 参考：Material Design 2 / Apple HIG / Ant Design
+ *
+ * 间距：4, 8, 12, 16, 24, 32, 48
+ * 圆角：4, 8, 12, 16
+ * 字号：10, 12, 14, 16, 20, 24, 28, 34, 40
+ */
+
+:root {
+  /* ── Spacing (8px grid) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ── Border Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Type Scale (Material Design 2) ── */
+  --text-display: 40px;   /* 大数字、Hero */
+  --text-headline: 24px;  /* 页面标题 */
+  --text-title: 20px;     /* 卡片标题 */
+  --text-subtitle: 16px;  /* 子标题 */
+  --text-body: 14px;      /* 正文 */
+  --text-caption: 12px;   /* 辅助文字 */
+  --text-overline: 10px;  /* 标签、角标 */
+
+  /* ── Font Weight ── */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ── Line Height ── */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── Letter Spacing ── */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  /* ── Shadow ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* ── Transition ── */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── 常用组合 class ── */
+
+/* 页面容器 */
+.page-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6) 0;
+}
+
+@media (max-width: 768px) {
+  .page-container {
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+  }
+}
+
+/* 统计卡片 */
+.stat-card {
+  text-align: center;
+  transition: transform var(--duration-normal) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-2);
+}
+
+.stat-value {
+  font-weight: var(--weight-bold);
+  font-size: var(--text-headline);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+/* 卡片标题 */
+.card-title {
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-subtitle);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* 记录列表项 */
+.record-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  transition: background var(--duration-fast),
+              transform var(--duration-fast);
+}
+
+.record-item:hover {
+  background: var(--surface-3);
+  transform: translateX(2px);
+}
+
+.record-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-subtitle);
+  flex-shrink: 0;
+}
+
+/* 颜色语义 */
+.text-positive { color: #22c55e; }
+.text-negative { color: #ef4444; }
+.text-accent { color: var(--accent-text); }
+
+.bg-positive { background: rgba(34, 197, 94, 0.1); }
+.bg-negative { background: rgba(239, 68, 68, 0.1); }
+.bg-accent { background: rgba(94, 106, 210, 0.1); }
+
+/* 排名高亮行 */
+:deep(.row-highlight) {
+  background: rgba(94, 106, 210, 0.04) !important;
+  border-left: 3px solid var(--accent);
+}

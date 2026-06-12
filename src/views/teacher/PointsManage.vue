@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { Student, PointSummary } from '@/types'
@@ -136,8 +136,10 @@ async function confirmQuick() {
       type: r.type,
       show: true,
     }
-    setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200)
-    setTimeout(() => { celebration.value = null }, 3800)
+    celebrationTimers.push(
+      setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200),
+      setTimeout(() => { celebration.value = null }, 3800),
+    )
 
     quickAction.value = null
     selectedReview.value = null
@@ -213,8 +215,10 @@ function quickForRandom(rt: ReviewType) {
       type: rt.type,
       show: true,
     }
-    setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200)
-    setTimeout(() => { celebration.value = null }, 3800)
+    celebrationTimers.push(
+      setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200),
+      setTimeout(() => { celebration.value = null }, 3800),
+    )
   }).catch((e: any) => message.error(e.message || '操作失败'))
 }
 
@@ -225,6 +229,13 @@ function openScoreCard(student: Student) {
 async function refreshAll() { await loadClasses() }
 useRefresh(refreshAll)
 onMounted(loadClasses)
+
+// 定时器清理
+const celebrationTimers: ReturnType<typeof setTimeout>[] = []
+onUnmounted(() => {
+  celebrationTimers.forEach(clearTimeout)
+  randomStop = true
+})
 </script>
 
 <template>

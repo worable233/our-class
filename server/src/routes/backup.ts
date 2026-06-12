@@ -373,7 +373,8 @@ router.post('/export', requirePermission('chat.config'), async (req: Request, re
 router.post('/upload', requirePermission('chat.config'), upload.single('backup'), (req: Request, res: Response) => {
   if (!req.file) return fail(res, 400, 'NO_FILE', '请选择备份文件')
   const src = req.file.path
-  const dest = join(BACKUP_DIR, req.file.originalname.endsWith('.zip') ? req.file.originalname : `backup-${Date.now()}.zip`)
+  const safeName = basename(req.file.originalname)
+  const dest = join(BACKUP_DIR, safeName.endsWith('.zip') ? safeName : `backup-${Date.now()}.zip`)
   if (existsSync(dest)) return fail(res, 409, 'DUPLICATE', '备份文件已存在')
   try {
     renameSync(src, dest)
