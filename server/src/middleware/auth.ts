@@ -39,13 +39,21 @@ export function requirePermission(code: string) {
 }
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
+  // Support both Authorization header and ?token= query parameter (for file downloads)
+  let token: string | undefined
   const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.slice(7)
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token
+  }
+
+  if (!token) {
     throw new AuthError()
   }
 
   try {
-    const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as JwtPayload
+    const payload = jwt.verify(token, config.jwtSecret) as JwtPayload
     const db = getDb()
     const row = db.prepare(`
       SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, pg.name as group_name, pg.group_type
