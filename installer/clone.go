@@ -75,13 +75,17 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// gitClone clones the repository.
+// gitClone clones the repository. Tries mirror first, falls back to original.
 func gitClone(dest string) error {
 	// Remove partial clone if exists
 	os.RemoveAll(dest)
 
-	if err := runCommand("git", "clone", "--depth=1", repoURL, dest); err != nil {
-		return fmt.Errorf("git clone 失败: %w", err)
+	printInfo("尝试国内镜像加速...")
+	if err := runCommand("git", "clone", "--depth=1", repoMirrorURL, dest); err != nil {
+		printInfo("镜像失败，尝试原始地址...")
+		if err2 := runCommand("git", "clone", "--depth=1", repoURL, dest); err2 != nil {
+			return fmt.Errorf("git clone 失败: %w", err2)
+		}
 	}
 	return nil
 }

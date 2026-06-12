@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	defaultPort = 3001
-	repoURL     = "https://github.com/worable233/our-class.git"
-	repoName    = "our-class"
+	defaultPort   = 3001
+	repoURL       = "https://github.com/worable233/our-class.git"
+	repoMirrorURL = "https://github.chenc.dev/github.com/worable233/our-class"
+	repoName      = "our-class"
 )
 
 func main() {
