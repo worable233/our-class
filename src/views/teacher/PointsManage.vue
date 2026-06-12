@@ -111,6 +111,9 @@ function openQuick(student: Student) {
   quickAction.value = { student, show: true }
 }
 
+// 已加分的学生 ID 集合
+const scoredStudentIds = ref(new Set<number>())
+
 // Execute the point action with selected review type
 async function confirmQuick() {
   if (!quickAction.value || !selectedReview.value) return
@@ -133,6 +136,9 @@ async function confirmQuick() {
     const sign = r.type === 'add' ? '+' : '-'
     message.success(`${student.display_name} ${sign}${r.amount} ${r.name}`)
 
+    // 标记已加分
+    scoredStudentIds.value.add(student.id)
+
     // 全屏庆祝动画（3s，渐显渐隐）
     celebration.value = {
       emoji: r.emoji,
@@ -144,6 +150,13 @@ async function confirmQuick() {
     celebrationTimers.push(
       setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200),
       setTimeout(() => { celebration.value = null }, 3800),
+      // 动画结束后重新打开抽号弹窗（如果还有未加分的学生）
+      setTimeout(() => {
+        if (randomResults.value.length > 0) {
+          const allScored = randomResults.value.every(s => scoredStudentIds.value.has(s.id))
+          if (!allScored) randomModalVisible.value = true
+        }
+      }, 3500),
     )
 
     await loadPoints()
@@ -162,8 +175,12 @@ let randomStop = false
 
 function openRandomModal() {
   randomStop = true; randoming.value = false
-  randomResults.value = []; randomDisplayName.value = ''
-  randomPickCount.value = 1
+  // 如果已有结果，保留（用于连续加分）
+  if (randomResults.value.length === 0) {
+    randomDisplayName.value = ''
+    randomPickCount.value = 1
+    scoredStudentIds.value = new Set()
+  }
   randomModalVisible.value = true
 }
 
@@ -432,14 +449,22 @@ onUnmounted(() => {
               <div
                 v-for="s in randomResults" :key="s.id"
                 class="random-result-tag"
+                :class="{ scored: scoredStudentIds.has(s.id) }"
                 @click="openQuickForResult(s)"
               >
                 <NAvatar :size="28" round :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }">
                   {{ s.display_name.charAt(0) }}
                 </NAvatar>
                 <span class="random-result-name">{{ s.display_name }}</span>
-                <span class="random-result-points">{{ getPoints(s.id) }} 分</span>
+                <span v-if="scoredStudentIds.has(s.id)" class="random-result-check">✅</span>
+                <span v-else class="random-result-points">{{ getPoints(s.id) }} 分</span>
               </div>
+            </div>
+            <div v-if="randomResults.every(s => scoredStudentIds.has(s.id))" style="text-align:center;margin-top:12px;">
+              <NText depth="3" style="font-size:12px;">全部已加分！</NText>
+              <n-button size="tiny" quaternary @click="randomResults = []; scoredStudentIds = new Set()" style="margin-left:8px;">
+                重新抽号
+              </n-button>
             </div>
           </div>
         </Transition>
@@ -569,6 +594,18 @@ onUnmounted(() => {
   background: rgba(94, 106, 210, 0.06);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.random-result-tag.scored {
+  opacity: 0.6;
+  border-color: var(--success-color, #18a058);
+  background: rgba(24, 160, 88, 0.04);
+}
+.random-result-tag.scored:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}
+.random-result-check {
+  font-size: 16px;
 }
 .random-result-name {
   font-size: 14px;
