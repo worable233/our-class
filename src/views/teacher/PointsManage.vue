@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Student, PointSummary } from '@/types'
 import { useMessage } from 'naive-ui'
 import {
-  NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NGrid, NGi, NSpin, NIcon,
+  NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NGrid, NGi, NSpin, NIcon, NInputNumber,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
 import { Shuffle, Star, ArrowLeft, School, Users } from '@lucide/vue'
@@ -154,14 +154,16 @@ async function confirmQuick() {
 
 // Random student picker
 const randomModalVisible = ref(false)
-const randomResult = ref<Student | null>(null)
+const randomResults = ref<Student[]>([])
 const randoming = ref(false)
 const randomDisplayName = ref('')
+const randomPickCount = ref(1)
 let randomStop = false
 
 function openRandomModal() {
   randomStop = true; randoming.value = false
-  randomResult.value = null; randomDisplayName.value = ''
+  randomResults.value = []; randomDisplayName.value = ''
+  randomPickCount.value = 1
   randomModalVisible.value = true
 }
 
@@ -172,55 +174,39 @@ function closeRandomModal() {
 
 function startRandomPick() {
   if (students.value.length === 0) return
-  randoming.value = true; randomResult.value = null
+  const count = Math.min(randomPickCount.value, students.value.length)
+  randoming.value = true; randomResults.value = []
   randomDisplayName.value = ''; randomStop = false
-  let count = 0, delay = 50
+
+  // Fisher-Yates shuffle to pick unique students
+  const shuffled = [...students.value]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  const picked = shuffled.slice(0, count)
+
+  let tickCount = 0, delay = 50
   function tick() {
     if (randomStop) return
     const idx = Math.floor(Math.random() * students.value.length)
     const s = students.value[idx]
     if (s) randomDisplayName.value = s.display_name
-    count++
-    if (count >= 25) {
+    tickCount++
+    if (tickCount >= 25) {
       randoming.value = false
-      const finalIdx = Math.floor(Math.random() * students.value.length)
-      const finalS = students.value[finalIdx]
-      if (finalS) randomResult.value = finalS
+      randomResults.value = picked
       return
     }
-    if (count > 12) delay += 25
+    if (tickCount > 12) delay += 25
     setTimeout(tick, delay)
   }
   tick()
 }
 
-function quickForRandom(rt: ReviewType) {
-  if (!randomResult.value) return
-  randomStop = true; randoming.value = false
-  randomModalVisible.value = false
-  api.post('/points', {
-    student_id: randomResult.value.id,
-    reason: rt.name,
-    type: rt.type,
-    amount: rt.amount,
-    review_type_id: rt.id,
-  }).then(() => {
-    loadPoints()
-    const sign = rt.type === 'add' ? '+' : '-'
-    message.success(`${randomResult.value!.display_name} ${sign}${rt.amount} ${rt.name}`)
-    // 全屏庆祝
-    celebration.value = {
-      emoji: rt.emoji,
-      name: randomResult.value!.display_name,
-      text: `${sign}${rt.amount}`,
-      type: rt.type,
-      show: true,
-    }
-    celebrationTimers.push(
-      setTimeout(() => { if (celebration.value) celebration.value.show = false }, 3200),
-      setTimeout(() => { celebration.value = null }, 3800),
-    )
-  }).catch((e: any) => message.error(e.message || '操作失败'))
+// 点击抽中学生的名字，打开加分弹窗
+function openQuickForResult(student: Student) {
+  openQuick(student)
 }
 
 function openScoreCard(student: Student) {
@@ -393,8 +379,7 @@ onUnmounted(() => {
       :show="randomModalVisible"
       @update:show="closeRandomModal"
       preset="card"
-      style="width: 420px"
-      title="随机抽号"
+      style="width: 480px"
       :mask-closable="true"
       :segmented="{ content: true }"
       header-style="font-size:17px;font-weight:600"
@@ -408,10 +393,21 @@ onUnmounted(() => {
       </template>
 
       <div class="rm-body">
-        <div class="rm-display" :class="{ randoming, hasResult: !!randomResult }">
-          <div class="rm-display-name">{{ randomResult ? randomResult.display_name : (randomDisplayName || '点击下方按钮开始') }}</div>
+        <!-- 人数输入 -->
+        <div v-if="!randoming && randomResults.length === 0" style="display:flex;align-items:center;gap:12px;justify-content:center;">
+          <NText style="font-size:14px;">抽取人数：</NText>
+          <n-input-number v-model:value="randomPickCount" :min="1" :max="Math.min(20, students.length)" style="width:100px;" size="small" />
+          <NText depth="3" style="font-size:12px;">共 {{ students.length }} 人</NText>
+        </div>
+
+        <!-- 动画显示 -->
+        <div class="rm-display" :class="{ randoming, hasResult: randomResults.length > 0 }">
+          <div class="rm-display-name">
+            {{ randomResults.length > 0 ? randomResults.map(s => s.display_name).join('、') : (randomDisplayName || '点击下方按钮开始') }}
+          </div>
           <div v-if="randoming" class="rm-spinner"></div>
         </div>
+
         <div class="rm-controls">
           <n-button
             :disabled="randoming"
@@ -424,33 +420,24 @@ onUnmounted(() => {
             {{ randoming ? '抽选中...' : '开始抽选' }}
           </n-button>
         </div>
+
+        <!-- 抽中结果 -->
         <Transition name="result-fade">
-          <div v-if="randomResult && !randoming" style="padding-top:16px">
-            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:14px">为 <span style="color:var(--accent-text)">{{ randomResult.display_name }}</span> 选择点评：</div>
-            <div v-if="addTypes.length > 0" style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:16px;justify-content:center">
-              <div
-                v-for="t in addTypes" :key="t.id"
-                class="review-option" style="gap:6px"
-                @click="quickForRandom(t)"
-              >
-                <div class="review-option-circle add" style="width:56px;height:56px">
-                  <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:var(--success-color, #18a058);color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">+{{ t.amount }}</n-tag>
-                </div>
-                <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
-              </div>
+          <div v-if="randomResults.length > 0 && !randoming" style="padding-top:16px">
+            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;text-align:center;">
+              抽中 <span style="color:var(--accent-text)">{{ randomResults.length }}</span> 人，点击姓名可加分：
             </div>
-            <div v-if="deductTypes.length > 0" style="display:flex;flex-wrap:wrap;gap:20px;justify-content:center">
+            <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">
               <div
-                v-for="t in deductTypes" :key="t.id"
-                class="review-option" style="gap:6px"
-                @click="quickForRandom(t)"
+                v-for="s in randomResults" :key="s.id"
+                class="random-result-tag"
+                @click="openQuickForResult(s)"
               >
-                <div class="review-option-circle deduct" style="width:56px;height:56px">
-                  <span class="review-option-emoji" style="font-size:22px">{{ t.emoji }}</span>
-                  <n-tag size="tiny" round :bordered="false" class="review-option-badge" style="position:absolute;top:-4px;right:-4px;background:var(--error-color, #d03050);color:#fff;font-weight:800;font-size:9px;padding:0 3px;line-height:18px;min-width:20px;justify-content:center">-{{ t.amount }}</n-tag>
-                </div>
-                <span class="review-option-name" style="font-size:12px;max-width:64px">{{ t.name }}</span>
+                <NAvatar :size="28" round :style="{ background: `hsl(${(s.id * 47) % 360}, 60%, 50%)` }">
+                  {{ s.display_name.charAt(0) }}
+                </NAvatar>
+                <span class="random-result-name">{{ s.display_name }}</span>
+                <span class="random-result-points">{{ getPoints(s.id) }} 分</span>
               </div>
             </div>
           </div>
@@ -563,6 +550,36 @@ onUnmounted(() => {
   text-align: center;
   max-width: 80px;
   line-height: 1.3;
+}
+
+.random-result-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+.random-result-tag:hover {
+  border-color: var(--accent);
+  background: rgba(94, 106, 210, 0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.random-result-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.random-result-points {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 @media (max-width:768px) {
