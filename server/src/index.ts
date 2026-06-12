@@ -72,6 +72,15 @@ const pvLimiter = rateLimit({
   message: { success: false, error: { code: 'RATE_LIMITED', message: '请求过于频繁' } },
 })
 
+// Login rate limiter: 5 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: '登录尝试过于频繁，请 15 分钟后重试' } },
+})
+
 app.use((req, res, next) => {
   if (req.path === '/api/analytics/pv') {
     return pvLimiter(req, res, next)
@@ -105,7 +114,18 @@ app.use('/uploads', (req, res, next) => {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } })
   }
   try {
-    jwt.verify(authHeader.slice(7), config.jwtSecret)
+    const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as { id: number; iat?: number }
+
+    // Check token freshness
+    const db = getDb()
+    const user = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(payload.id) as { password_changed_at: string | null } | undefined
+    if (user?.password_changed_at && payload.iat) {
+      const passwordChangedAt = new Date(user.password_changed_at).getTime() / 1000
+      if (payload.iat < passwordChangedAt) {
+        return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
+      }
+    }
+
     next()
   } catch {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
@@ -126,11 +146,29 @@ app.use('/uploads', (req, res, next) => {
   }
 
   try {
-    const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as any
+    const payload = jwt.verify(authHeader.slice(7), config.jwtSecret) as { id: number; role: string; iat?: number }
+
+    // Check token freshness (same as authMiddleware)
+    const db = getDb()
+    const user = db.prepare('SELECT password_changed_at FROM users WHERE id = ?').get(payload.id) as { password_changed_at: string | null } | undefined
+    if (user?.password_changed_at && payload.iat) {
+      const passwordChangedAt = new Date(user.password_changed_at).getTime() / 1000
+      if (payload.iat < passwordChangedAt) {
+        return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '登录已过期' } })
+      }
+    }
+
     // 管理员（有 classes.view_all）可以访问所有文件
     if (payload.role === 'teacher' && requestedUserId !== payload.id) {
-      // 检查是否有 classes.view_all 权限（简化检查：允许教师角色访问）
-      // 完整检查需要查数据库，这里用 JWT payload 中的信息
+      // 检查是否有 classes.view_all 权限
+      const permRows = db.prepare(`
+        SELECT 1 FROM group_permissions gp
+        JOIN users u ON u.group_id = gp.group_id
+        WHERE u.id = ? AND gp.permission_code = 'classes.view_all'
+      `).get(payload.id)
+      if (!permRows) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: '无权访问此文件' } })
+      }
     }
     // 普通用户只能访问自己的目录
     if (payload.role === 'student' && requestedUserId !== payload.id) {
@@ -150,6 +188,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 // Public routes
+app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth', authRoutes)
 
 // Protected routes

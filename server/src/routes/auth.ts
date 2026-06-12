@@ -167,6 +167,8 @@ router.put('/profile', authMiddleware, validate(updateProfileSchema), async (req
     const hashedPw = await bcrypt.hash(password, BCRYPT_ROUNDS)
     fields.push('password = ?')
     values.push(hashedPw)
+    fields.push('password_changed_at = ?')
+    values.push(new Date().toISOString())
   }
 
   if (fields.length === 0) {

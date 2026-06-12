@@ -7,6 +7,7 @@ import { AuthError, ForbiddenError } from '../lib/errors.js'
 export interface JwtPayload {
   id: number
   role: 'teacher' | 'student'
+  iat?: number
 }
 
 declare global {
@@ -56,13 +57,21 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     const payload = jwt.verify(token, config.jwtSecret) as JwtPayload
     const db = getDb()
     const row = db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, pg.name as group_name, pg.group_type
+      SELECT u.id, u.username, u.display_name, u.class, u.group_id, u.role_id, u.password_changed_at, pg.name as group_name, pg.group_type
       FROM users u
       LEFT JOIN permission_groups pg ON u.group_id = pg.id
       WHERE u.id = ?
-    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; role_id: number | null; group_name: string | null; group_type: string | null } | undefined
+    `).get(payload.id) as { id: number; username: string; display_name: string; class: string; group_id: number | null; role_id: number | null; password_changed_at: string | null; group_name: string | null; group_type: string | null } | undefined
 
     if (!row) throw new AuthError()
+
+    // Check if token was issued before password change
+    if (row.password_changed_at && payload.iat) {
+      const passwordChangedAt = new Date(row.password_changed_at).getTime() / 1000
+      if (payload.iat < passwordChangedAt) {
+        throw new AuthError()
+      }
+    }
 
     // 从权限组类型推导角色：只有明确标记为 student 的组才用学生端，其余（teacher/admin/custom）均为教师端
     const role = row.group_type === 'student' ? ('student' as const) : ('teacher' as const)
