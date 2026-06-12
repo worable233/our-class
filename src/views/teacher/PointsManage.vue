@@ -115,24 +115,28 @@ function openQuick(student: Student) {
 async function confirmQuick() {
   if (!quickAction.value || !selectedReview.value) return
   const r = selectedReview.value
+  const student = quickAction.value.student
+
+  // 先关闭弹窗，避免遮挡动画
+  quickAction.value = null
+  selectedReview.value = null
 
   try {
     await api.post('/points', {
-      student_id: quickAction.value.student.id,
+      student_id: student.id,
       reason: r.name,
       type: r.type,
       amount: r.amount,
       review_type_id: r.id,
     })
 
-    const name = quickAction.value.student.display_name
     const sign = r.type === 'add' ? '+' : '-'
-    message.success(`${name} ${sign}${r.amount} ${r.reason || r.name}`)
+    message.success(`${student.display_name} ${sign}${r.amount} ${r.name}`)
 
     // 全屏庆祝动画（3s，渐显渐隐）
     celebration.value = {
       emoji: r.emoji,
-      name,
+      name: student.display_name,
       text: `${sign}${r.amount}`,
       type: r.type,
       show: true,
@@ -142,13 +146,9 @@ async function confirmQuick() {
       setTimeout(() => { celebration.value = null }, 3800),
     )
 
-    quickAction.value = null
-    selectedReview.value = null
     await loadPoints()
   } catch (e: any) {
     message.error(e.message || '操作失败')
-    quickAction.value = null
-    selectedReview.value = null
   }
 }
 
@@ -204,8 +204,9 @@ function startRandomPick() {
   tick()
 }
 
-// 点击抽中学生的名字，打开加分弹窗
+// 点击抽中学生的名字，关闭抽号弹窗后打开加分弹窗
 function openQuickForResult(student: Student) {
+  randomModalVisible.value = false
   openQuick(student)
 }
 
@@ -594,7 +595,7 @@ onUnmounted(() => {
 .celebration-fade-leave-to { opacity: 0; }
 
 .celebration-overlay {
-  position: fixed; inset: 0; z-index: 1000;
+  position: fixed; inset: 0; z-index: 5000;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0.55);
   backdrop-filter: blur(4px);
