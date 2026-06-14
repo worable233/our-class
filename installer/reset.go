@@ -10,7 +10,7 @@ import (
 
 // resetProject resets the project to a fresh-install state and reinstalls.
 func resetProject(projectRoot string) {
-	ShowIntro()
+	printBanner()
 	fmt.Printf("\n%s  ⚠️  即将重置 OurClass 项目到初始状态%s\n", ColorYellow, ColorReset)
 	fmt.Println("  这将删除以下内容:")
 	fmt.Println("    - 数据库 (server/data.db)")

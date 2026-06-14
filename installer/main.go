@@ -96,7 +96,7 @@ func main() {
 	}
 
 	// Normal installation flow
-	ShowIntro()
+	printBanner()
 
 	printInfo(fmt.Sprintf("系统: %s/%s    路径: %s", runtime.GOOS, runtime.GOARCH, projectRoot))
 
@@ -117,11 +117,6 @@ func main() {
 	// Step 4: Build frontend (optional)
 	if !skipBuild {
 		printStep(4, 5, "构建前端")
-		done := make(chan struct{})
-		go Spin("构建前端中...", done)
-		buildFrontend(projectRoot)
-		close(done)
-	} else {
 		printStep(4, 5, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")
 	}
