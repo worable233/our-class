@@ -26,13 +26,22 @@ func main() {
 	port := flag.Int("port", defaultPort, "配置向导端口")
 	reset := flag.Bool("reset", false, "重置项目到初始状态")
 	resetShort := flag.Bool("r", false, "重置项目到初始状态（等同 --reset）")
+	uninstall := flag.Bool("uninstall", false, "卸载 OurClass（清除所有数据）")
+	uninstallShort := flag.Bool("u", false, "卸载 OurClass（等同 --uninstall）")
 	flag.Parse()
 
-	// Merge short flag
+	// Merge short flags
 	*reset = *reset || *resetShort
+	*uninstall = *uninstall || *uninstallShort
 
 	// Resolve project root
 	projectRoot := resolveProjectRoot()
+
+	// Handle uninstall mode (check before reset — uninstall takes precedence)
+	if *uninstall {
+		uninstallProject(projectRoot)
+		return
+	}
 
 	// Handle reset mode
 	if *reset {

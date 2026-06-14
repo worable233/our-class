@@ -23,17 +23,24 @@ interface ModelConfig {
   has_key: boolean
   api_key: string
   is_active: boolean
-  created_at: string
+  is_builtin?: boolean
+  created_at: string | null
 }
 
 const models = ref<ModelConfig[]>([])
 const modelsLoading = ref(false)
 const loaded = ref(false)
 
-// Modal state
+/** 是否有自定义模型 */
+const hasCustomModel = computed(() => models.value.some(m => !m.is_builtin))
+
+/** 内置模型的显示名称 */
+const BUILTIN_DISPLAY = 'DeepSeek-V4-Flash（免费内置）'
+
+// Modal state (用于自定义配置)
 const showModal = ref(false)
 const editingId = ref<number | null>(null)
-const formProvider = ref('anthropic')
+const formProvider = ref('openai')
 const formModel = ref('')
 const formApiUrl = ref('')
 const formApiKey = ref('')
@@ -41,6 +48,25 @@ const formSaving = ref(false)
 
 // Test state per model
 const testingId = ref<number | null>(null)
+
+// 打开自定义配置弹窗，预填常用值
+function openCustomConfig() {
+  editingId.value = null
+  formProvider.value = 'openai'
+  formModel.value = ''
+  formApiUrl.value = ''
+  formApiKey.value = ''
+  showModal.value = true
+}
+
+function openEditModal(m: ModelConfig) {
+  editingId.value = m.id
+  formProvider.value = m.provider
+  formModel.value = m.model
+  formApiUrl.value = m.api_url
+  formApiKey.value = ''
+  showModal.value = true
+}
 
 // ── Tab 2: Feature Toggles ──────────────────────────────────
 
@@ -116,24 +142,6 @@ async function load() {
 
 // ── Tab 1: Model CRUD ──────────────────────────────────────
 
-function openAddModal() {
-  editingId.value = null
-  formProvider.value = 'anthropic'
-  formModel.value = ''
-  formApiUrl.value = ''
-  formApiKey.value = ''
-  showModal.value = true
-}
-
-function openEditModal(m: ModelConfig) {
-  editingId.value = m.id
-  formProvider.value = m.provider
-  formModel.value = m.model
-  formApiUrl.value = m.api_url
-  formApiKey.value = ''
-  showModal.value = true
-}
-
 async function saveModel() {
   if (!formApiKey.value.trim() && !editingId.value) {
     message.warning('请输入 API Key')
@@ -164,9 +172,13 @@ async function saveModel() {
   }
 }
 
-async function deleteModel(id: number) {
+async function deleteModel(m: ModelConfig) {
+  if (m.is_builtin) {
+    message.info('内置模型无需删除，添加自定义模型后会自动覆盖')
+    return
+  }
   try {
-    await api.delete(`/chat/config/${id}`)
+    await api.delete(`/chat/config/${m.id}`)
     message.success('模型已删除')
     await load()
   } catch (e: any) {
@@ -326,26 +338,30 @@ onMounted(() => {
         <!-- Tab 1: API Config -->
         <n-tab-pane name="api" tab="API 配置">
           <div class="tab-content">
+            <!-- 内置模型提示 -->
+            <n-alert type="success" :bordered="false" :show-icon="true" closable>
+              <template #header>🎉 系统已内置免费 DeepSeek AI 模型，开箱即用！</template>
+              无需任何配置即可使用 AI 聊天助手。如果你有自己的 API Key，可以点击「自定义配置」添加，然后通过 radio 按钮自由切换。
+            </n-alert>
+
             <div class="tab-header">
               <div>
                 <div class="tab-title">模型管理</div>
-                <div class="tab-desc">添加多个模型，选择一个启用。深度思考仅在 Anthropic 接口下可用（会禁用工具调用）。</div>
+                <div class="tab-desc">点击 radio 可随时切换内置免费模型和你自定义的模型。</div>
               </div>
-              <n-button type="primary" size="small" @click="openAddModal">添加模型</n-button>
+              <n-button type="primary" size="small" @click="openCustomConfig">自定义配置</n-button>
             </div>
 
             <div v-if="modelsLoading" class="card-stack">
               <n-card v-for="i in 2" :key="i" size="small"><n-skeleton :repeat="2" /></n-card>
             </div>
 
-            <n-empty v-else-if="models.length === 0" description="暂无配置的模型，点击上方「添加模型」开始" style="padding: 48px 0" />
-
             <div v-else class="card-stack">
               <n-card
                 v-for="m in models"
                 :key="m.id"
                 size="small"
-                :class="{ 'model-card--active': m.is_active }"
+                :class="{ 'model-card--active': m.is_active, 'model-card--builtin': m.is_builtin }"
               >
                 <div class="model-row">
                   <n-radio
@@ -353,12 +369,21 @@ onMounted(() => {
                     :value="m.id"
                     @update:checked="() => activateModel(m.id)"
                     name="active-model"
+                    :disabled="m.is_builtin && !hasCustomModel"
                   />
                   <n-tag :type="m.provider === 'anthropic' ? 'warning' : 'info'" size="small" :bordered="false">
                     {{ m.provider === 'anthropic' ? 'Anthropic' : 'OpenAI' }}
                   </n-tag>
                   <div class="model-info">
-                    <div class="model-name">{{ m.model || '未命名模型' }}</div>
+                    <div class="model-name">
+                      {{ m.model || '未命名模型' }}
+                      <n-tag v-if="m.is_builtin" size="tiny" type="success" :bordered="false" style="margin-left: 8px">
+                        🆓 系统内置 / 免费
+                      </n-tag>
+                      <n-tag v-else size="tiny" type="info" :bordered="false" style="margin-left: 8px">
+                        自定义
+                      </n-tag>
+                    </div>
                     <div class="model-meta">
                       {{ m.api_url || (m.provider === 'anthropic' ? 'api.anthropic.com' : 'api.openai.com') }}
                       <span v-if="m.has_key" class="key-ok">Key 已配置</span>
@@ -368,8 +393,8 @@ onMounted(() => {
                     <n-button size="tiny" :loading="testingId === m.id" @click="testModel(m.id)">
                       {{ testingId === m.id ? '测试中' : '测试' }}
                     </n-button>
-                    <n-button size="tiny" @click="openEditModal(m)">编辑</n-button>
-                    <n-popconfirm @positive-click="deleteModel(m.id)">
+                    <n-button v-if="!m.is_builtin" size="tiny" @click="openEditModal(m)">编辑</n-button>
+                    <n-popconfirm v-if="!m.is_builtin" @positive-click="deleteModel(m)">
                       <template #trigger>
                         <n-button size="tiny" type="error" quaternary>删除</n-button>
                       </template>
@@ -381,14 +406,16 @@ onMounted(() => {
             </div>
 
             <n-alert v-if="activeModel" type="success" :bordered="false" :show-icon="false" class="active-summary">
-              当前使用：<strong>{{ activeModel.model }}</strong>（{{ activeModel.provider === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容' }}）
+              当前使用：<strong>{{ activeModel.is_builtin ? BUILTIN_DISPLAY : activeModel.model }}</strong>
+              （{{ activeModel.provider === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容' }}）
+              <span v-if="activeModel.is_builtin" style="margin-left: 8px">— 🆓 免费内置，无需 Key</span>
             </n-alert>
           </div>
 
           <n-modal
             v-model:show="showModal"
             preset="card"
-            :title="editingId ? '编辑模型' : '添加模型'"
+            :title="editingId ? '编辑模型' : '自定义模型配置'"
             style="max-width: 520px"
             :segmented="{ content: true, footer: true }"
           >
@@ -656,6 +683,11 @@ onMounted(() => {
 .model-card--active {
   border-color: var(--primary-color) !important;
   border-width: 1.5px !important;
+}
+
+.model-card--builtin {
+  border-color: var(--success-color, #18a058) !important;
+  border-width: 1px !important;
 }
 
 .model-row {

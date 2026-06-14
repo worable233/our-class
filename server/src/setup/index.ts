@@ -302,13 +302,10 @@ app.post('/api/setup/config', (req, res) => {
 app.post('/api/setup/apply', async (req, res) => {
   let port = getState().port || 3000
 
-  // Validate: admin and config must be done
+  // Validate: admin must be done (AI config is optional — built-in model available)
   const state = getState()
   if (!state.admin_created) {
     return res.status(400).json({ error: '请先创建管理员账号' })
-  }
-  if (!state.api_configured) {
-    return res.status(400).json({ error: '请先完成 AI 接口配置' })
   }
 
   // Verify JWT_SECRET exists in .env before starting

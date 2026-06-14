@@ -11,6 +11,7 @@ import { authMiddleware, requirePermission } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { ok, fail } from '../lib/response.js'
 import { writeAuditLog } from './audit.js'
+import { BUILTIN_MODEL } from '../config/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const STORAGE_ROOT = join(__dirname, '..', '..', 'storage')
@@ -1663,7 +1664,13 @@ async function agentLoopAnthropic(
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
   if (msgCount.c <= 2) {
     const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
-    generateTitle(keyRec, model, newContent, fullResponse).then(title => {
+    const titleKeyRec = keyRec || {
+      id: 0, user_id: 0, provider: BUILTIN_MODEL.provider,
+      api_key: BUILTIN_MODEL.apiKey, api_url: BUILTIN_MODEL.apiUrl,
+      model: BUILTIN_MODEL.model, city: '', search_api_url: '',
+      search_api_key: '', is_active: 1, created_at: '',
+    }
+    generateTitle(titleKeyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
     }).catch(() => {})
   }
@@ -1856,7 +1863,13 @@ async function agentLoopOpenAI(
   const msgCount = db.prepare('SELECT COUNT(*) as c FROM messages WHERE conversation_id=?').get(convId) as any
   if (msgCount.c <= 2) {
     const keyRec = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as any
-    generateTitle(keyRec, model, newContent, fullResponse).then(title => {
+    const titleKeyRec = keyRec || {
+      id: 0, user_id: 0, provider: BUILTIN_MODEL.provider,
+      api_key: BUILTIN_MODEL.apiKey, api_url: BUILTIN_MODEL.apiUrl,
+      model: BUILTIN_MODEL.model, city: '', search_api_url: '',
+      search_api_key: '', is_active: 1, created_at: '',
+    }
+    generateTitle(titleKeyRec, model, newContent, fullResponse).then(title => {
       if (title) db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, convId)
     }).catch(() => {})
   }
@@ -2159,7 +2172,23 @@ router.get(
       .prepare('SELECT * FROM api_keys ORDER BY is_active DESC, id ASC')
       .all() as ApiKeyRow[]
 
-    const models = rows.map((r) => ({
+    // 判断是否有自定义模型处于激活状态
+    const hasActiveCustom = rows.some((r) => r.is_active)
+
+    // 系统内置模型（始终存在，无自定义模型激活时自动生效）
+    const builtinEntry = {
+      id: 0,
+      provider: BUILTIN_MODEL.provider,
+      model: BUILTIN_MODEL.model,
+      api_url: BUILTIN_MODEL.apiUrl,
+      has_key: true,
+      api_key: maskApiKey(BUILTIN_MODEL.apiKey),
+      is_active: !hasActiveCustom,
+      is_builtin: true,
+      created_at: null,
+    }
+
+    const customModels = rows.map((r) => ({
       id: r.id,
       provider: r.provider,
       model: r.model,
@@ -2167,10 +2196,12 @@ router.get(
       has_key: !!r.api_key,
       api_key: maskApiKey(r.api_key || ''),
       is_active: !!r.is_active,
+      is_builtin: false,
       created_at: r.created_at,
     }))
 
-    ok(res, models)
+    // 内置模型始终排在列表第一个
+    ok(res, [builtinEntry, ...customModels])
   },
 )
 
@@ -2185,6 +2216,11 @@ router.post(
     const userId = req.user!.id
 
     if (!api_key) return fail(res, 400, 'NO_API_KEY', '请输入 API Key')
+
+    // 禁止使用系统内置 API Key 创建自定义模型
+    if (api_key === BUILTIN_MODEL.apiKey) {
+      return fail(res, 400, 'BUILTIN_KEY', '禁止使用系统内置 API Key。请使用「自定义配置」添加你的 Key，或直接使用内置模型。')
+    }
 
     // 如果是第一个模型，自动设为激活
     const count = db.prepare('SELECT COUNT(*) as c FROM api_keys').get() as any
@@ -2214,6 +2250,11 @@ router.put(
     const { api_key, api_url, model, provider: explicitProvider, search_api_url, search_api_key } = req.body
     const provider = explicitProvider || existing.provider
     const finalKey = api_key || existing.api_key
+
+    // 禁止将内置 API Key 用于非内置模型
+    if (finalKey === BUILTIN_MODEL.apiKey) {
+      return fail(res, 400, 'BUILTIN_KEY', '禁止使用系统内置 API Key，请使用你自己的 API Key 或直接使用系统内置模型。')
+    }
 
     db.prepare(
       'UPDATE api_keys SET provider = ?, api_key = ?, api_url = ?, model = ?, search_api_url = ?, search_api_key = ? WHERE id = ?',
@@ -2255,6 +2296,13 @@ router.post(
     const db = getDb()
     const id = Number(req.params.id)
     if (isNaN(id)) return fail(res, 400, 'VALIDATION_ERROR', '无效的模型 ID')
+
+    // id=0 表示内置模型，无需实际激活操作
+    if (id === 0) {
+      // 将自定义模型全部取消激活，内置模型即成为默认
+      db.prepare('UPDATE api_keys SET is_active = 0').run()
+      return ok(res, { message: '已切换为内置模型' })
+    }
 
     const existing = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
     if (!existing) return fail(res, 404, 'NOT_FOUND', '模型不存在')
@@ -2396,10 +2444,25 @@ router.post(
       .get(convId, req.user!.id) as ConversationRow | undefined
     if (!conversation) return fail(res, 404, 'NOT_FOUND', '对话不存在')
 
-    const keyRecord = db
+    let keyRecord = db
       .prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1')
       .get() as ApiKeyRow | undefined
-    if (!keyRecord) return fail(res, 400, 'NO_API_KEY', '请先配置 API Key')
+    if (!keyRecord) {
+      // 没有配置 API Key 时，使用系统内置的免费 DeepSeek 模型
+      keyRecord = {
+        id: 0,
+        user_id: 0,
+        provider: BUILTIN_MODEL.provider,
+        api_key: BUILTIN_MODEL.apiKey,
+        api_url: BUILTIN_MODEL.apiUrl,
+        model: BUILTIN_MODEL.model,
+        city: '',
+        search_api_url: '',
+        search_api_key: '',
+        is_active: 1,
+        created_at: '',
+      }
+    }
 
     const history = db
       .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC')
@@ -2480,11 +2543,8 @@ router.post(
     res.flushHeaders()
 
     // 客户端断连时中止处理，避免浪费 API token
-    let clientDisconnected = false
-    req.on('close', () => {
-      clientDisconnected = true
-      if (abortCtrl) abortCtrl.abort()
-    })
+    const abortCtrl = new AbortController()
+    req.on('close', () => abortCtrl.abort())
 
     // Save user message FIRST (skip for continue — AI instruction only, no visible message)
     if (!isContinue) {
@@ -2540,9 +2600,42 @@ router.post('/test', requirePermission('chat.config'), validate(testByIdSchema),
 
   let keyRecord: ApiKeyRow | undefined
   if (id) {
-    keyRecord = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+    if (id === 0) {
+      // 测试内置模型
+      keyRecord = {
+        id: 0,
+        user_id: 0,
+        provider: BUILTIN_MODEL.provider,
+        api_key: BUILTIN_MODEL.apiKey,
+        api_url: BUILTIN_MODEL.apiUrl,
+        model: BUILTIN_MODEL.model,
+        city: '',
+        search_api_url: '',
+        search_api_key: '',
+        is_active: 1,
+        created_at: '',
+      }
+    } else {
+      keyRecord = db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined
+    }
   } else {
     keyRecord = db.prepare('SELECT * FROM api_keys WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get() as ApiKeyRow | undefined
+    if (!keyRecord) {
+      // 没有配置时，回退到内置模型测试
+      keyRecord = {
+        id: 0,
+        user_id: 0,
+        provider: BUILTIN_MODEL.provider,
+        api_key: BUILTIN_MODEL.apiKey,
+        api_url: BUILTIN_MODEL.apiUrl,
+        model: BUILTIN_MODEL.model,
+        city: '',
+        search_api_url: '',
+        search_api_key: '',
+        is_active: 1,
+        created_at: '',
+      }
+    }
   }
 
   if (!keyRecord) {
