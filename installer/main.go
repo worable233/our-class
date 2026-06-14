@@ -28,6 +28,7 @@ func main() {
 	resetShort := flag.Bool("r", false, "重置项目到初始状态（等同 --reset）")
 	uninstall := flag.Bool("uninstall", false, "卸载 OurClass（清除所有数据）")
 	uninstallShort := flag.Bool("u", false, "卸载 OurClass（等同 --uninstall）")
+	claude := flag.Bool("claude", false, "安装 Claude Code CLI（AI 编程助手）")
 	flag.Parse()
 
 	// Merge short flags
@@ -36,6 +37,12 @@ func main() {
 
 	// Resolve project root
 	projectRoot := resolveProjectRoot()
+
+	// Handle Claude Code install (highest priority — no project needed)
+	if *claude {
+		installClaudeCode()
+		return
+	}
 
 	// Handle uninstall mode (check before reset — uninstall takes precedence)
 	if *uninstall {
