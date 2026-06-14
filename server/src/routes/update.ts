@@ -13,7 +13,6 @@ const FRONTEND_ROOT = join(PROJECT_ROOT, '..')  // 前端项目根目录（含 p
 const IS_WIN = process.platform === 'win32'
 
 // 与安装脚本 installer/main.go 保持一致的镜像源
-const REPO_URL = 'https://github.com/worable233/our-class.git'
 const REPO_MIRROR = 'https://github.chenc.dev/github.com/worable233/our-class'
 
 let updating = false
@@ -43,15 +42,18 @@ function execOpts(extra: Record<string, any> = {}): Record<string, any> {
 /**
  * 跨平台找 npm 可执行文件
  * Windows 下 npm 是 .cmd 批处理文件，spawn 默认找不到
+ * 优先查 npm.cmd，回退 npm，都失败则返回 npm 让系统 PATH 兜底
  */
 function npmCmd(): string {
   if (!IS_WIN) return 'npm'
-  try {
-    execSync('where npm.cmd', execOpts({ encoding: 'utf-8', timeout: 3000, stdio: 'pipe' }))
-    return 'npm.cmd'
-  } catch {
-    return 'npm'
+  const candidates = ['npm.cmd', 'npm.ps1', 'npm']
+  for (const c of candidates) {
+    try {
+      execSync(`where ${c}`, execOpts({ encoding: 'utf-8', timeout: 3000, stdio: 'pipe' }))
+      return c
+    } catch {}
   }
+  return 'npm'
 }
 
 /**
@@ -141,65 +143,64 @@ async function runWithRetry(
 // ── Git 镜像源 fetch ───────────────────────────────────────────────────────
 
 /**
- * 带镜像源兜底的 git fetch
- * 优先级: origin 直连 → origin 重试 → 镜像源
- * 返回 true 表示成功
+ * 带镜像源兜底的 git fetch，完成后清理临时 remote
+ * 优先级: 镜像源（重试 2 次）→ origin（重试 2 次）
+ * 与安装脚本 installer/clone.go 的 gitClone 策略保持一致
  */
 async function fetchWithMirror(
   cwd: string,
   onOutput: (chunk: string) => void,
 ): Promise<boolean> {
-  const execFetch = (url: string, label: string, timeout: number) => {
+  // 执行 git fetch 并返回是否成功
+  const execFetch = (remote: string, timeout: number) => {
     try {
-      execSync(`git fetch ${url} main`, execOpts({ encoding: 'utf-8', timeout, cwd, stdio: 'pipe' }))
+      execSync(`git fetch --depth=5 ${remote} main`, execOpts({ encoding: 'utf-8', timeout, cwd, stdio: 'pipe' }))
       return true
     } catch {
       return false
     }
   }
 
-  // 1. origin 直连（重试 2 次）
+  // 完成时清理临时 mirror remote（不阻塞）
+  const cleanupMirror = () => {
+    try { execSync('git remote remove mirror', execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' })) } catch {}
+  }
+
+  // 1. 镜像源优先（重试 2 次）
+  for (let i = 0; i < 2; i++) {
+    if (i === 0) {
+      onOutput('[尝试] 镜像源 ' + REPO_MIRROR + ' ...\n')
+    } else {
+      onOutput('[重试] 镜像源 fetch ...\n')
+      await new Promise(r => setTimeout(r, 2000))
+    }
+    // 每次重试都重新设置临时 remote（防止上次残留）
+    try { execSync('git remote remove mirror', execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' })) } catch {}
+    try { execSync(`git remote add mirror ${REPO_MIRROR}`, execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' })) } catch {}
+    if (execFetch('mirror', 60000)) {
+      // 镜像 fetch 成功，把 mirror/main 同步到 origin/main
+      try {
+        execSync('git fetch origin', execOpts({ encoding: 'utf-8', timeout: 10000, cwd, stdio: 'pipe' }))
+      } catch {
+        try {
+          execSync('git update-ref refs/remotes/origin/main refs/remotes/mirror/main', execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' }))
+        } catch {}
+      }
+      cleanupMirror()
+      return true
+    }
+  }
+
+  // 2. 原始 origin 兜底（重试 2 次）
   for (let i = 0; i < 2; i++) {
     if (i > 0) {
       onOutput('[重试] origin fetch ...\n')
       await new Promise(r => setTimeout(r, 2000))
     }
-    if (execFetch('origin', 'origin', 30000)) return true
+    if (execFetch('origin', 30000)) { cleanupMirror(); return true }
   }
 
-  // 2. shallow clone 兜底
-  onOutput('[尝试] shallow fetch ...\n')
-  if (execFetch('origin', 'shallow', 30000)) return true
-
-  // 3. 镜像源兜底
-  onOutput('[尝试] 镜像源 ' + REPO_MIRROR + ' ...\n')
-  try {
-    // 设置临时 remote
-    try { execSync('git remote remove mirror', execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' })) } catch {}
-    execSync(`git remote add mirror ${REPO_MIRROR}`, execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' }))
-    // fetch 镜像源（重试 2 次）
-    for (let i = 0; i < 2; i++) {
-      if (i > 0) {
-        onOutput('[重试] 镜像源 fetch ...\n')
-        await new Promise(r => setTimeout(r, 2000))
-      }
-      if (execFetch('mirror', 'mirror', 60000)) {
-        // 镜像 fetch 成功，把 mirror/main 同步到 origin/main
-        try {
-          execSync('git fetch origin', execOpts({ encoding: 'utf-8', timeout: 10000, cwd, stdio: 'pipe' }))
-        } catch {
-          // origin 不可达时，直接用 mirror 的 ref
-          try {
-            execSync('git update-ref refs/remotes/origin/main refs/remotes/mirror/main', execOpts({ encoding: 'utf-8', timeout: 5000, cwd, stdio: 'pipe' }))
-          } catch {}
-        }
-        return true
-      }
-    }
-  } catch {
-    // 镜像源设置失败，忽略
-  }
-
+  cleanupMirror()
   return false
 }
 
@@ -378,6 +379,7 @@ router.post('/apply', async (req: Request, res: Response) => {
       ['清理旧文件', 'git', ['clean', '-fd',
         '-e', '.env',
         '-e', 'node_modules',
+        '-e', 'server/node_modules',
         '-e', 'server/data.db',
         '-e', 'server/storage',
         '-e', 'server/uploads',
@@ -418,15 +420,18 @@ router.post('/apply', async (req: Request, res: Response) => {
     if (aborted) return
     try { writeAuditLog(req.user!.id, req.user!.display_name, 'update_apply', 'system', undefined, { message: '系统更新已应用' }) } catch {}
     emit('done', { message: '更新成功，2 秒后重启...' })
-    res.end()
 
     // ── Step 9: 重启 ──
     setTimeout(() => {
       const node = nodeCmd()
-      const child = spawn(node, process.argv.slice(1), {
-        cwd: FRONTEND_ROOT,
-        stdio: 'inherit',
-        detached: !IS_WIN,
+      // 统一使用本地 tsx 启动，不依赖原始启动方式
+      // 这样无论旧进程是 node src/index.ts、tsx src/index.ts 还是 npx tsx ... 都能正确重启
+      const tsx = join(PROJECT_ROOT, 'node_modules', '.bin', IS_WIN ? 'tsx.cmd' : 'tsx')
+      const entry = 'src/index.ts'
+      const child = spawn(node, [tsx, entry], {
+        cwd: PROJECT_ROOT,         // server/ 目录
+        stdio: 'ignore',
+        detached: true,            // 独立进程组，父进程 exit 不影响子进程
         windowsHide: true,
       })
       child.unref()
@@ -434,8 +439,9 @@ router.post('/apply', async (req: Request, res: Response) => {
     }, 2000)
   } finally {
     req.removeListener('close', onClose)
-    if (!aborted) { try { res.end() } catch {} }
     updating = false
+    // 成功路径已由 emit('done') 关闭，错误路径在此关闭
+    try { res.end() } catch {}
   }
 })
 
