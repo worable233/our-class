@@ -16,42 +16,78 @@ const (
 	repoName      = "our-class"
 )
 
+func init() {
+	flag.Usage = func() {
+		fmt.Println()
+		fmt.Printf("  %sOurClass 安装程序 - 使用说明%s\n", ColorBold, ColorReset)
+		fmt.Println()
+		fmt.Println("  命令:")
+		fmt.Println("    （无参数）           安装 OurClass（默认）")
+		fmt.Println("    -h, --help           显示此帮助")
+		fmt.Println("    -u, --uninstall      卸载 OurClass（清除所有数据）")
+		fmt.Println("    -r, --reset          重置项目到初始状态")
+		fmt.Println("    -c, --claude         安装 Claude Code CLI（AI 编程助手）")
+		fmt.Println("    -s, --skip-build     跳过前端构建（开发模式）")
+		fmt.Println("    -p, --port <端口>    配置向导端口（默认 3001）")
+		fmt.Println()
+		fmt.Println("  示例:")
+		fmt.Println("    ourclass-installer")
+		fmt.Println("    ourclass-installer -u")
+		fmt.Println("    ourclass-installer -c")
+		fmt.Println("    ourclass-installer --skip-build")
+		fmt.Println()
+	}
+}
+
 func main() {
 	// Always wait before exit — prevents terminal window from closing immediately
 	// on double-click (Windows cmd, macOS Finder, Linux file manager)
 	defer waitForExit()
 
-	// Parse command line arguments
-	skipBuild := flag.Bool("skip-build", false, "跳过前端构建（开发模式）")
-	port := flag.Int("port", defaultPort, "配置向导端口")
-	reset := flag.Bool("reset", false, "重置项目到初始状态")
-	resetShort := flag.Bool("r", false, "重置项目到初始状态（等同 --reset）")
-	uninstall := flag.Bool("uninstall", false, "卸载 OurClass（清除所有数据）")
-	uninstallShort := flag.Bool("u", false, "卸载 OurClass（等同 --uninstall）")
-	claude := flag.Bool("claude", false, "安装 Claude Code CLI（AI 编程助手）")
+	// 注册命令行参数
+	var (
+		skipBuild bool
+		port      = defaultPort
+		reset     bool
+		uninstall bool
+		claude    bool
+	)
+	flag.BoolVar(&skipBuild, "skip-build", false, "")
+	flag.BoolVar(&skipBuild, "s", false, "")
+	flag.IntVar(&port, "port", defaultPort, "")
+	flag.IntVar(&port, "p", defaultPort, "")
+	flag.BoolVar(&reset, "reset", false, "")
+	flag.BoolVar(&reset, "r", false, "")
+	flag.BoolVar(&uninstall, "uninstall", false, "")
+	flag.BoolVar(&uninstall, "u", false, "")
+	flag.BoolVar(&claude, "claude", false, "")
+	flag.BoolVar(&claude, "c", false, "")
 	flag.Parse()
 
-	// Merge short flags
-	*reset = *reset || *resetShort
-	*uninstall = *uninstall || *uninstallShort
+	// 检查未知的命令行参数（不允许位置参数）
+	if args := flag.Args(); len(args) > 0 {
+		fmt.Printf("\n  %s❌ 未知命令: %s%s\n", ColorRed, strings.Join(args, " "), ColorReset)
+		fmt.Printf("  %s请使用 -h 或 --help 查看所有命令%s\n\n", ColorYellow, ColorReset)
+		os.Exit(1)
+	}
 
 	// Resolve project root
 	projectRoot := resolveProjectRoot()
 
 	// Handle Claude Code install (highest priority — no project needed)
-	if *claude {
+	if claude {
 		installClaudeCode()
 		return
 	}
 
 	// Handle uninstall mode (check before reset — uninstall takes precedence)
-	if *uninstall {
+	if uninstall {
 		uninstallProject(projectRoot)
 		return
 	}
 
 	// Handle reset mode
-	if *reset {
+	if reset {
 		if projectRoot == "" {
 			exitWithError("未找到 OurClass 项目目录，请在项目目录下运行，或先执行安装")
 		}
@@ -84,7 +120,7 @@ func main() {
 	installDependencies(projectRoot)
 
 	// Step 4: Build frontend (optional)
-	if !*skipBuild {
+	if !skipBuild {
 		printStep(4, 5, "构建前端")
 		buildFrontend(projectRoot)
 	} else {
@@ -94,7 +130,7 @@ func main() {
 
 	// Step 5: Start setup wizard
 	printStep(5, 5, "启动配置向导")
-	startSetupWizard(projectRoot, *port)
+	startSetupWizard(projectRoot, port)
 
 	fmt.Printf("\n%s  🎉 安装完成！%s\n", ColorGreen, ColorReset)
 	fmt.Println("  请在浏览器中完成配置向导。")
