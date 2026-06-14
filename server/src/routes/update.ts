@@ -266,7 +266,7 @@ router.get('/history', (_req: Request, res: Response) => {
   if (!checkGit()) return fail(res, 400, 'GIT_NOT_FOUND', 'Git 未安装')
   try {
     const log = execSync(
-      'git log --oneline --pretty=format:%h|%an|%ci|%s -30',
+      'git log --oneline --pretty=format:"%h|%an|%ci|%s" -30',
       execOpts({ encoding: 'utf-8', timeout: 10000, cwd: FRONTEND_ROOT }),
     ).trim()
     const commits = log.split('\n').filter(Boolean).map(line => {
@@ -297,7 +297,7 @@ router.post('/check', async (req: Request, res: Response) => {
     if (behind) {
       try {
         const log = execSync(
-          `git log --oneline --pretty=format:%h|%an|%ci|%s ${localSha}..origin/main`,
+          `git log --oneline --pretty=format:"%h|%an|%ci|%s" ${localSha}..origin/main`,
           execOpts({ encoding: 'utf-8', timeout: 10000, cwd: FRONTEND_ROOT }),
         ).trim()
         commits = log.split('\n').filter(Boolean).map(line => {
