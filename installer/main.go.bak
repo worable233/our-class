@@ -96,9 +96,14 @@ func main() {
 	}
 
 	// Normal installation flow
-	ShowIntro()
+	printBanner()
 
-	printInfo(fmt.Sprintf("系统: %s/%s    路径: %s", runtime.GOOS, runtime.GOARCH, projectRoot))
+	fmt.Printf("\n  %s系统:%s %s/%s\n", ColorGray, ColorReset, runtime.GOOS, runtime.GOARCH)
+	if projectRoot != "" {
+		fmt.Printf("  %s路径:%s %s\n", ColorGray, ColorReset, projectRoot)
+	} else {
+		fmt.Printf("  %s路径:%s 将自动克隆到桌面\n", ColorGray, ColorReset)
+	}
 
 	// Step 1: Check/Install Git + Node.js in parallel
 	printStep(1, 5, "检查环境（Git + Node.js 并行检测）")
@@ -107,7 +112,7 @@ func main() {
 	// Step 2: Clone or update project
 	printStep(2, 5, "获取项目代码")
 	projectRoot = ensureProject(projectRoot)
-	saveProjectPath(projectRoot)
+	saveProjectPath(projectRoot) // Remember path for reset
 
 	// Step 3: Set npm registry + install dependencies
 	printStep(3, 5, "安装项目依赖")
@@ -117,10 +122,7 @@ func main() {
 	// Step 4: Build frontend (optional)
 	if !skipBuild {
 		printStep(4, 5, "构建前端")
-		done := make(chan struct{})
-		go Spin("构建前端中...", done)
 		buildFrontend(projectRoot)
-		close(done)
 	} else {
 		printStep(4, 5, "构建前端（已跳过）")
 		printInfo("使用 --skip-build 跳过了前端构建")

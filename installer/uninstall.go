@@ -8,7 +8,7 @@ import (
 
 // uninstallProject removes OurClass completely.
 func uninstallProject(projectRoot string) {
-	printBanner()
+	ShowIntro()
 	fmt.Printf("\n%s  ⚠️  即将卸载 OurClass%s\n", ColorYellow, ColorReset)
 	fmt.Println("  这将删除以下内容:")
 	fmt.Println("    - 项目所有文件（代码、数据库、配置）")

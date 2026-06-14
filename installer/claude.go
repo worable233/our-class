@@ -11,7 +11,7 @@ const claudePackage = "@anthropic-ai/claude-code"
 
 // installClaudeCode installs Claude Code CLI globally via npm.
 func installClaudeCode() {
-	printBanner()
+	ShowIntro()
 	fmt.Println()
 	printStep(1, 3, "检查 Node.js 环境")
 
