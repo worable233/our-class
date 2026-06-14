@@ -45,15 +45,18 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:', 'http:'],
       connectSrc: ["'self'", 'https://api.anthropic.com', 'https://*.openai.com'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
     },
   },
+  // 禁用 HSTS——本地开发/部署场景没有 HTTPS 证书，
+  // 开启 HSTS 会导致浏览器强制 HTTPS 访问失败（白屏 + TLS 错误）
+  strictTransportSecurity: false,
 }))
 
 // ── Rate limiting ─────────────────────────────────────────────────────
