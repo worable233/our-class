@@ -8,7 +8,7 @@ import {
   NButton, NCard, NModal, NTag, NEmpty, NText, NAvatar, NGrid, NGi, NSpin, NIcon, NInputNumber,
 } from 'naive-ui'
 import { useRefresh } from '@/composables/useRefresh'
-import { Shuffle, Star, ArrowLeft, School, Users } from '@lucide/vue'
+import { Shuffle, Star, ArrowLeft, School, Users, Sparkles, Check } from '@lucide/vue'
 import PageHeader from '@/components/PageHeader.vue'
 
 interface ReviewType {
@@ -356,7 +356,7 @@ onUnmounted(() => {
       <div style="display:flex;flex-direction:column;gap:20px">
         <div v-if="addTypes.length > 0">
           <NText :style="{fontSize:'14px',fontWeight:700,color:'var(--success-color, #18a058)',display:'block',marginBottom:'16px'}">
-            <span style="margin-right:6px">🎉</span>表扬
+            <span style="margin-right:6px;color:var(--success-color, #18a058);display:inline-flex"><Sparkles :size="16" /></span>表扬
           </NText>
           <n-grid :cols="4" :x-gap="24" :y-gap="20">
             <n-gi v-for="t in addTypes" :key="t.id">
@@ -456,7 +456,7 @@ onUnmounted(() => {
                   {{ s.display_name.charAt(0) }}
                 </NAvatar>
                 <span class="random-result-name">{{ s.display_name }}</span>
-                <span v-if="scoredStudentIds.has(s.id)" class="random-result-check">✅</span>
+                <span v-if="scoredStudentIds.has(s.id)" class="random-result-check"><Check :size="14" /></span>
                 <span v-else class="random-result-points">{{ getPoints(s.id) }} 分</span>
               </div>
             </div>

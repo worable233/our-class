@@ -4,7 +4,7 @@ import { BASE } from '@/api/client'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { NCard, NText, NGi, NGrid, NTag, NSpin, NAvatar, NButton, NEmpty, useThemeVars } from 'naive-ui'
-import { Star, Users, List, Shield, Bot, Award, TrendingUp, ChevronRight } from '@lucide/vue'
+import { Star, Users, List, Shield, Bot, Award, Trophy, TrendingUp, ChevronRight } from '@lucide/vue'
 import PageHeader from '@/components/PageHeader.vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -67,10 +67,10 @@ async function load() {
 
 // 排名辅助
 function rankBadge(index: number) {
-  if (index === 0) return { label: '🥇', color: '#f0a020' }
-  if (index === 1) return { label: '🥈', color: '#8899AA' }
-  if (index === 2) return { label: '🥉', color: '#CD7F32' }
-  return { label: `#${index + 1}`, color: 'var(--text-muted)' }
+  if (index === 0) return { icon: Trophy, color: '#f0a020' }
+  if (index === 1) return { icon: Trophy, color: '#8899AA' }
+  if (index === 2) return { icon: Trophy, color: '#CD7F32' }
+  return { text: `#${index + 1}`, color: 'var(--text-muted)' }
 }
 
 function chartOption(data: TopRow[]) {
@@ -183,7 +183,7 @@ onMounted(load)
                 <div v-for="(row, i) in weeklyTop.slice(0, 3)" :key="row.id"
                   style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:10px;background:var(--surface-2);"
                 >
-                  <span style="font-size:22px;line-height:1;">{{ rankBadge(i).label }}</span>
+                  <component :is="rankBadge(i).icon" :size="22" v-if="rankBadge(i).icon" :color="rankBadge(i).color" /><span v-else style="font-size:22px;line-height:1;">{{ rankBadge(i).text }}</span>
                   <span style="font-size:13px;font-weight:600;color:var(--text-primary);text-align:center;">{{ row.display_name }}</span>
                   <span style="font-size:11px;color:var(--text-muted);">{{ row.class }}</span>
                   <span style="font-size:18px;font-weight:700;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
@@ -197,8 +197,9 @@ onMounted(load)
                   style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;transition:background .15s;"
                   :style="{ background: i % 2 === 0 ? 'var(--surface-1)' : 'transparent' }"
                 >
-                  <span :style="{ width: 24, textAlign: 'center', fontWeight: i < 3 ? 600 : 400, color: rankBadge(i).color }">
-                    {{ rankBadge(i).label }}
+                  <span :style="{ width: 24, textAlign: 'center', fontWeight: i < 3 ? 600 : 400, color: rankBadge(i).color, display: 'flex', alignItems: 'center', justifyContent: 'center' }">
+                    <component :is="rankBadge(i).icon" :size="16" v-if="rankBadge(i).icon" />
+                    <span v-else>{{ rankBadge(i).text }}</span>
                   </span>
                   <span style="flex:1;color:var(--text-primary);font-weight:500;">{{ row.display_name }}</span>
                   <span style="color:var(--text-muted);font-size:12px;">{{ row.class }}</span>
@@ -227,7 +228,7 @@ onMounted(load)
                 <div v-for="(row, i) in monthlyTop.slice(0, 3)" :key="row.id"
                   style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:10px;background:var(--surface-2);"
                 >
-                  <span style="font-size:22px;line-height:1;">{{ rankBadge(i).label }}</span>
+                  <component :is="rankBadge(i).icon" :size="22" v-if="rankBadge(i).icon" :color="rankBadge(i).color" /><span v-else style="font-size:22px;line-height:1;">{{ rankBadge(i).text }}</span>
                   <span style="font-size:13px;font-weight:600;color:var(--text-primary);text-align:center;">{{ row.display_name }}</span>
                   <span style="font-size:11px;color:var(--text-muted);">{{ row.class }}</span>
                   <span style="font-size:18px;font-weight:700;color:var(--accent);">{{ row.total > 0 ? '+' : '' }}{{ row.total }}</span>
@@ -239,8 +240,9 @@ onMounted(load)
                   style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;transition:background .15s;"
                   :style="{ background: i % 2 === 0 ? 'var(--surface-1)' : 'transparent' }"
                 >
-                  <span :style="{ width: 24, textAlign: 'center', fontWeight: i < 3 ? 600 : 400, color: rankBadge(i).color }">
-                    {{ rankBadge(i).label }}
+                  <span :style="{ width: 24, textAlign: 'center', fontWeight: i < 3 ? 600 : 400, color: rankBadge(i).color, display: 'flex', alignItems: 'center', justifyContent: 'center' }">
+                    <component :is="rankBadge(i).icon" :size="16" v-if="rankBadge(i).icon" />
+                    <span v-else>{{ rankBadge(i).text }}</span>
                   </span>
                   <span style="flex:1;color:var(--text-primary);font-weight:500;">{{ row.display_name }}</span>
                   <span style="color:var(--text-muted);font-size:12px;">{{ row.class }}</span>

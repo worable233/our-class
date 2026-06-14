@@ -777,7 +777,7 @@ onMounted(() => { load(); loadClasses(); loadTeachers() })
                       fontSize: '16px',
                     }"
                   >
-                    🏫
+                    <School :size="20" />
                   </n-avatar>
                 </div>
               </template>
